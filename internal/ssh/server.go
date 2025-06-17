@@ -160,11 +160,46 @@ func (s *Server) handleConnection(netConn net.Conn) {
 		clientIP = clientIP[:idx]
 	}
 	
+	// Vérifier si l'IP est bannie avant même d'essayer le handshake
+	if s.isIPBanned(clientIP) {
+		log.Printf("Blocked banned IP: %s", clientIP)
+		netConn.Close()
+		return
+	}
+	
+	// Vérifier si l'IP est dans la liste noire connue
+	if s.abuseMonitor.IsKnownMaliciousIP(clientIP) {
+		log.Printf("Blocked known malicious IP: %s", clientIP)
+		// Bannir immédiatement pour 24h
+		s.failedMutex.Lock()
+		s.bannedIPs[clientIP] = time.Now().Add(24 * time.Hour)
+		s.failedMutex.Unlock()
+		s.abuseMonitor.ReportAbuse("ssh-blacklist", clientIP, "Known malicious IP from blacklist")
+		netConn.Close()
+		return
+	}
+	
 	sshConn, chans, reqs, err := ssh.NewServerConn(netConn, s.config)
 	if err != nil {
 		// Incrémenter les tentatives échouées
 		s.recordFailedAttempt(clientIP)
-		log.Printf("Failed to handshake from %s: %v", clientIP, err)
+		
+		// Log détaillé pour différents types d'erreurs et détection de scans
+		if strings.Contains(err.Error(), "no auth passed yet") {
+			log.Printf("Auth failure from %s: No valid authentication", clientIP)
+			// Pattern de scan : connexion sans tentative d'auth
+			s.detectScanPattern(clientIP, "no_auth")
+		} else if strings.Contains(err.Error(), "reason 11") {
+			log.Printf("Scan attempt from %s: Client disconnected immediately", clientIP)
+			// Pattern de scan : connexion puis déconnexion immédiate
+			s.detectScanPattern(clientIP, "immediate_disconnect")
+		} else if strings.Contains(err.Error(), "EOF") {
+			log.Printf("Connection dropped from %s: EOF", clientIP)
+			// Pattern de scan : connexion puis abandon
+			s.detectScanPattern(clientIP, "connection_drop")
+		} else {
+			log.Printf("Failed handshake from %s: %v", clientIP, err)
+		}
 		return
 	}
 	
@@ -568,10 +603,26 @@ func (s *Server) recordFailedAttempt(ip string) {
 	defer s.failedMutex.Unlock()
 	
 	s.failedAttempts[ip]++
-	if s.failedAttempts[ip] >= maxFailedAttempts {
-		s.bannedIPs[ip] = time.Now()
+	attempts := s.failedAttempts[ip]
+	
+	// Bannissement progressif : 3 tentatives = 15min, 5 tentatives = 1h, 10+ tentatives = 24h
+	if attempts >= 3 {
+		banDuration := 15 * time.Minute
+		if attempts >= 5 {
+			banDuration = 1 * time.Hour
+		}
+		if attempts >= 10 {
+			banDuration = 24 * time.Hour
+		}
+		
+		s.bannedIPs[ip] = time.Now().Add(banDuration)
 		delete(s.failedAttempts, ip)
-		log.Printf("IP %s banned for %v after %d failed attempts", ip, banDuration, maxFailedAttempts)
+		log.Printf("IP %s banned for %v after %d failed attempts", ip, banDuration, attempts)
+		
+		// Reporter à l'AbuseMonitor pour tracking
+		s.abuseMonitor.ReportAbuse("ssh-bruteforce", ip, fmt.Sprintf("SSH bruteforce: %d attempts", attempts))
+	} else {
+		log.Printf("Failed attempt %d/3 from %s", attempts, ip)
 	}
 }
 
@@ -582,6 +633,28 @@ func (s *Server) resetFailedAttempts(ip string) {
 	delete(s.failedAttempts, ip)
 }
 
+func (s *Server) detectScanPattern(ip, pattern string) {
+	// Les patterns de scan automatique sont souvent identifiables
+	// et peuvent justifier un bannissement immédiat plus long
+	scanPatterns := []string{"no_auth", "immediate_disconnect", "connection_drop"}
+	
+	s.failedMutex.Lock()
+	defer s.failedMutex.Unlock()
+	
+	// Si c'est un pattern de scan connu, bannir immédiatement pour 6h
+	for _, scanPattern := range scanPatterns {
+		if pattern == scanPattern {
+			s.bannedIPs[ip] = time.Now().Add(6 * time.Hour)
+			delete(s.failedAttempts, ip)
+			log.Printf("IP %s auto-banned for 6h (scan pattern: %s)", ip, pattern)
+			
+			// Reporter comme tentative de scan
+			s.abuseMonitor.ReportAbuse("ssh-scan", ip, fmt.Sprintf("Automated scan detected: %s", pattern))
+			return
+		}
+	}
+}
+
 func (s *Server) cleanupBannedIPs() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
@@ -589,8 +662,8 @@ func (s *Server) cleanupBannedIPs() {
 	for range ticker.C {
 		s.failedMutex.Lock()
 		now := time.Now()
-		for ip, banTime := range s.bannedIPs {
-			if now.Sub(banTime) >= banDuration {
+		for ip, banUntil := range s.bannedIPs {
+			if now.After(banUntil) {
 				delete(s.bannedIPs, ip)
 				log.Printf("IP %s unbanned", ip)
 			}

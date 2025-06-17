@@ -150,6 +150,43 @@ func (am *AbuseMonitor) SetAlertCallback(callback func(domain, reason, details s
 	am.alertCallback = callback
 }
 
+// IsKnownMaliciousIP vérifie si une IP est dans une liste noire connue
+func (am *AbuseMonitor) IsKnownMaliciousIP(ip string) bool {
+	// IPs des exemples que tu as montrés - patterns de scan courants
+	knownBadIPs := []string{
+		"165.232.95.247",  // DigitalOcean - scan répété
+		"193.32.162.145",  // Pattern de scan
+		"118.193.43.244",  // Pattern de scan
+		"193.233.48.138",  // Pattern de scan
+		"103.183.157.25",  // Tentatives multiples
+		"182.93.7.194",    // Pattern de scan
+		"78.128.112.74",   // Tentatives sans auth
+		"5.228.183.178",   // Pattern de scan
+		"195.158.16.5",    // Pattern de scan
+	}
+	
+	for _, badIP := range knownBadIPs {
+		if ip == badIP {
+			return true
+		}
+	}
+	
+	// Vérifier contre les ranges suspects (peut être étendu)
+	suspiciousRanges := []string{
+		"165.232.",    // DigitalOcean ranges souvent utilisés pour du scan
+		"103.183.",    // Range d'IP avec beaucoup de scan
+		"193.32.",     // Range suspect
+	}
+	
+	for _, suspicious := range suspiciousRanges {
+		if strings.HasPrefix(ip, suspicious) {
+			return true
+		}
+	}
+	
+	return false
+}
+
 // loadBlockedDomains charge une liste de domaines suspects (peut être étendu)
 func (am *AbuseMonitor) loadBlockedDomains() {
 	// Liste basique de domaines suspects

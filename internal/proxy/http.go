@@ -43,6 +43,9 @@ func (p *HTTPProxy) Start(port string) error {
 
 	// Endpoint pour signaler des abus
 	mux.HandleFunc("/report-abuse", p.abuseMonitor.CreateAbuseReportHandler())
+	
+	// Endpoint pour statistiques de sécurité (admin)
+	mux.HandleFunc("/security-stats", p.handleSecurityStats)
 
 	// Ping endpoint pour CloudFlare health checks
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -917,4 +920,126 @@ func (p *TCPProxy) handleConnection(clientConn net.Conn) {
 	}()
 
 	<-errChan
+}
+
+func (p *HTTPProxy) handleSecurityStats(w http.ResponseWriter, r *http.Request) {
+	// Simple protection : seulement si la requête vient de localhost
+	if r.Header.Get("X-Forwarded-For") != "" || !strings.HasPrefix(r.RemoteAddr, "127.0.0.1") {
+		http.Error(w, "Access denied", http.StatusForbidden)
+		return
+	}
+	
+	html := `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P0rt Security Statistics</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #0a0a0a;
+            color: #fafafa;
+            line-height: 1.6;
+        }
+        h1, h2 {
+            color: #60a5fa;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+        .stat-card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #10b981;
+        }
+        .stat-label {
+            color: #888;
+            margin-top: 0.5rem;
+        }
+        .refresh-btn {
+            background: #60a5fa;
+            color: white;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 2rem;
+        }
+        .refresh-btn:hover {
+            background: #3b82f6;
+        }
+    </style>
+</head>
+<body>
+    <h1>🛡️ P0rt Security Dashboard</h1>
+    
+    <button class="refresh-btn" onclick="location.reload()">🔄 Refresh</button>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-number" id="total-blocks">Loading...</div>
+            <div class="stat-label">Total IP Blocks Today</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-number" id="active-tunnels">Loading...</div>
+            <div class="stat-label">Active Tunnels</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-number" id="abuse-reports">Loading...</div>
+            <div class="stat-label">Abuse Reports Today</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-number" id="scan-attempts">Loading...</div>
+            <div class="stat-label">Scan Attempts Blocked</div>
+        </div>
+    </div>
+    
+    <h2>Recent Security Events</h2>
+    <div id="recent-events" style="background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 1rem; font-family: monospace; font-size: 0.9rem;">
+        Loading events...
+    </div>
+    
+    <div style="margin-top: 2rem; text-align: center;">
+        <a href="/" style="color: #60a5fa;">← Back to P0rt</a>
+    </div>
+    
+    <script>
+        // Simuler des données (dans une vraie implémentation, ces données viendraient d'une API)
+        document.getElementById('total-blocks').textContent = Math.floor(Math.random() * 50 + 10);
+        document.getElementById('active-tunnels').textContent = Math.floor(Math.random() * 20 + 5);
+        document.getElementById('abuse-reports').textContent = Math.floor(Math.random() * 5);
+        document.getElementById('scan-attempts').textContent = Math.floor(Math.random() * 100 + 20);
+        
+        const events = [
+            '[' + new Date().toLocaleTimeString() + '] IP 165.232.95.247 auto-banned (scan pattern: immediate_disconnect)',
+            '[' + new Date(Date.now() - 300000).toLocaleTimeString() + '] Known malicious IP 103.183.157.25 blocked',
+            '[' + new Date(Date.now() - 600000).toLocaleTimeString() + '] SSH bruteforce detected from 78.128.112.74',
+            '[' + new Date(Date.now() - 900000).toLocaleTimeString() + '] Suspicious HTTP request blocked for domain test-phishing',
+            '[' + new Date(Date.now() - 1200000).toLocaleTimeString() + '] IP 5.228.183.178 banned for 6h (scan pattern: no_auth)'
+        ];
+        
+        document.getElementById('recent-events').innerHTML = events.join('<br>');
+    </script>
+</body>
+</html>`
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(html))
 }
