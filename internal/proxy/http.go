@@ -12,10 +12,12 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/p0rt/p0rt/internal/security"
 )
 
 type HTTPProxy struct {
-	sshServer SSHServer
+	sshServer    SSHServer
+	abuseMonitor *security.AbuseMonitor
 }
 
 type SSHServer interface {
@@ -29,7 +31,8 @@ type ClientWithPort interface {
 
 func NewHTTPProxy(sshServer SSHServer) *HTTPProxy {
 	return &HTTPProxy{
-		sshServer: sshServer,
+		sshServer:    sshServer,
+		abuseMonitor: security.NewAbuseMonitor(),
 	}
 }
 
@@ -37,6 +40,9 @@ func (p *HTTPProxy) Start(port string) error {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", p.handleRequest)
+
+	// Endpoint pour signaler des abus
+	mux.HandleFunc("/report-abuse", p.abuseMonitor.CreateAbuseReportHandler())
 
 	// Ping endpoint pour CloudFlare health checks
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -99,6 +105,16 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	domain := strings.Split(host, ".")[0]
+	
+	// Analyser la requête pour détecter des patterns suspects
+	userAgent := r.Header.Get("User-Agent")
+	referer := r.Header.Get("Referer")
+	if allowed, reason := p.abuseMonitor.AnalyzeHTTPRequest(domain, requestURL, userAgent, referer); !allowed {
+		log.Printf("Suspicious request blocked for domain %s: %s", domain, reason)
+		p.serveAbuseBlockedPage(w, r, domain, reason)
+		return
+	}
+	
 	p.sshServer.LogConnection(domain, clientIP, requestURL)
 
 	if r.Header.Get("Upgrade") == "websocket" {
@@ -211,6 +227,137 @@ func (p *HTTPProxy) testLocalConnection(port int) bool {
 	}
 	conn.Close()
 	return true
+}
+
+func (p *HTTPProxy) serveAbuseBlockedPage(w http.ResponseWriter, _ *http.Request, domain, reason string) {
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Access Blocked - P0rt Security</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #0a0a0a;
+            color: #fafafa;
+            text-align: center;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        h1 { 
+            font-size: 2.5rem; 
+            margin-bottom: 1rem;
+            color: #ef4444;
+        }
+        .subdomain {
+            font-size: 1.5rem;
+            color: #60a5fa;
+            margin-bottom: 2rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+        .message { 
+            color: #888; 
+            font-size: 1.125rem; 
+            margin-bottom: 3rem;
+            line-height: 1.6;
+        }
+        .reason {
+            background: #1a1a1a;
+            border: 1px solid #ef4444;
+            border-radius: 6px;
+            padding: 1rem;
+            margin: 2rem auto;
+            max-width: 600px;
+            color: #ef4444;
+        }
+        .help {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid #333;
+        }
+        .help h2 {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+        }
+        a { 
+            color: #60a5fa; 
+            text-decoration: none;
+        }
+        a:hover { 
+            text-decoration: underline;
+        }
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        .report-form {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 1.5rem;
+            margin: 2rem auto;
+            max-width: 500px;
+            text-align: left;
+        }
+        .report-form input, .report-form textarea, .report-form button {
+            width: 100%%;
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #0a0a0a;
+            color: #fafafa;
+        }
+        .report-form button {
+            background: #ef4444;
+            color: white;
+            cursor: pointer;
+        }
+        .report-form button:hover {
+            background: #dc2626;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <div class="icon">🛡️</div>
+        <h1>Access Blocked</h1>
+        <div class="subdomain">%s.p0rt.xyz</div>
+        <p class="message">
+            This tunnel has been temporarily blocked by our security system.
+        </p>
+        
+        <div class="reason">
+            Security Policy Violation: %s
+        </div>
+        
+        <div class="help">
+            <h2>What happened?</h2>
+            <p>Our automated security system detected patterns that may indicate malicious use such as phishing, spam, or scam activities. This is an automated security measure to protect users.</p>
+            
+            <h2>If this is a false positive:</h2>
+            <p>Contact us with details about your legitimate use case and we'll review the block.</p>
+            
+            <p style="margin-top: 2rem;">
+                <a href="https://p0rt.xyz">Back to P0rt →</a> |
+                <a href="mailto:security@p0rt.xyz">Contact Security Team</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>`, domain, reason)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("X-Block-Reason", "security-policy")
+	w.WriteHeader(http.StatusForbidden)
+	w.Write([]byte(html))
 }
 
 func (p *HTTPProxy) serveConnectionErrorPage(w http.ResponseWriter, _ *http.Request, host string, err error) {
@@ -686,6 +833,15 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
                     <p class="text-gray-600">
                         Connection logs appear directly in your SSH terminal in real-time. 
                         See visitor IPs, user agents, and timestamps without leaving your terminal.
+                    </p>
+                </div>
+                
+                <div class="bg-white p-6 rounded-lg shadow-sm">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-3">How do you prevent abuse?</h3>
+                    <p class="text-gray-600">
+                        P0rt includes automated security monitoring for phishing, spam, and scam patterns. 
+                        Suspicious domains are automatically blocked. Rate limiting prevents excessive use.
+                        <a href="/report-abuse" class="text-blue-600 hover:text-blue-800 ml-1">Report abuse here</a>.
                     </p>
                 </div>
             </div>

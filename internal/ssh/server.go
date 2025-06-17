@@ -3,6 +3,7 @@ package ssh
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"github.com/p0rt/p0rt/internal/security"
 )
 
 type Client struct {
@@ -37,6 +39,7 @@ type Server struct {
 	port            string
 	domainGenerator DomainGenerator
 	tcpManager      TCPManager
+	abuseMonitor    *security.AbuseMonitor
 	
 	// Protection anti-bruteforce
 	failedAttempts map[string]int
@@ -61,6 +64,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 		port:           port,
 		domainGenerator: domainGen,
 		tcpManager:     tcpManager,
+		abuseMonitor:   security.NewAbuseMonitor(),
 		failedAttempts: make(map[string]int),
 		bannedIPs:      make(map[string]time.Time),
 	}
@@ -79,9 +83,18 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 			}
 			
 			keyData := base64.StdEncoding.EncodeToString(key.Marshal())
+			
+			// Vérifier les limites de connexion pour cette clé SSH
+			keyHash := fmt.Sprintf("%x", sha256.Sum256(key.Marshal()))
+			if !server.abuseMonitor.CheckConnectionRate(keyHash) {
+				log.Printf("Connection rate limit exceeded for SSH key: %s", keyHash[:8])
+				return nil, fmt.Errorf("connection rate limit exceeded")
+			}
+			
 			return &ssh.Permissions{
 				Extensions: map[string]string{
 					"public-key": keyData,
+					"key-hash":   keyHash,
 				},
 			}, nil
 		},
@@ -323,6 +336,13 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 						domain = customDomain
 					} else {
 						domain = s.domainGenerator.Generate(client.Key)
+					}
+
+					// Vérifier si le domaine généré est suspect
+					if allowed, reason := s.abuseMonitor.CheckDomain(domain); !allowed {
+						log.Printf("Suspicious domain blocked: %s - %s", domain, reason)
+						channel.Write([]byte(fmt.Sprintf("Error: Domain blocked due to security policy: %s\r\n", reason)))
+						return
 					}
 
 					client.Domain = domain
