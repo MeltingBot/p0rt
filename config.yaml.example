@@ -1,0 +1,17 @@
+# P0rt Configuration File
+# Configuration for P0rt SSH tunneling service
+
+# Server Configuration
+server:
+  # SSH server configuration
+  ssh:
+    port: 22                      # Port for SSH server (prod: 22, dev: 2222)
+    host_key: ""                  # Path to SSH host key file (empty = auto-generate)
+    
+  # HTTP proxy configuration  
+  http:
+    port: 80                      # Port for HTTP proxy server
+
+# Domain Configuration
+domain:
+  base: "p0rt.xyz"                # Base domain for the service
