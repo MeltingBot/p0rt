@@ -600,7 +600,7 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
                     <p class="text-gray-300 mb-4">
                         See real-time connections directly in your SSH terminal. Know who's accessing your tunnel and when.
                     </p>
-                    <div class="bg-gray-900 rounded p-4 font-mono text-sm">
+                    <div class="bg-gray-900 rounded p-6 font-mono text-xs max-w-none text-left">
                         <div class="text-gray-400">[15:04:05] 192.168.1.100 /api/users</div>
                         <div class="text-gray-400">[15:04:12] 10.0.0.5 /dashboard</div>
                     </div>
@@ -611,16 +611,16 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
 
     <!-- How It Works Section -->
     <section class="bg-white py-16">
-        <div class="container mx-auto max-w-5xl px-4">
+        <div class="container mx-auto max-w-7xl px-4">
             <h2 class="text-4xl font-bold text-center text-gray-800 mb-16">
                 Get online in 3 steps
             </h2>
             
-            <div class="grid md:grid-cols-3 gap-8">
+            <div class="grid md:grid-cols-3 gap-12 max-w-7xl mx-auto">
                 <div class="text-center">
                     <div class="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-6">1</div>
                     <h3 class="text-xl font-bold text-gray-800 mb-4">Run SSH Command</h3>
-                    <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm mb-4">
+                    <div class="bg-gray-900 text-green-400 p-6 rounded-lg font-mono text-xs mb-4 max-w-none text-left">
                         ssh -R 443:localhost:3000 ssh.p0rt.xyz
                     </div>
                     <p class="text-gray-600">Point P0rt to your local development server</p>
@@ -639,7 +639,7 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
                 <div class="text-center">
                     <div class="w-16 h-16 bg-purple-500 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-6">3</div>
                     <h3 class="text-xl font-bold text-gray-800 mb-4">Share & Monitor</h3>
-                    <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm mb-4">
+                    <div class="bg-gray-900 text-green-400 p-6 rounded-lg font-mono text-xs mb-4 max-w-none text-left">
                         [15:04:05] 192.168.1.100 /api/users<br>[15:04:12] 10.0.0.5 /dashboard
                     </div>
                     <p class="text-gray-600">Watch real-time traffic in your terminal</p>
