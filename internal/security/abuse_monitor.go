@@ -120,12 +120,46 @@ func (am *AbuseMonitor) CheckConnectionRate(sshKeyHash string) bool {
 
 // AnalyzeHTTPRequest analyse une requête HTTP pour détecter des patterns suspects
 func (am *AbuseMonitor) AnalyzeHTTPRequest(domain, path, userAgent, referer string) (bool, string) {
+	// Être moins agressif - seulement analyser si plusieurs indicateurs suspects
 	content := strings.ToLower(path + " " + userAgent + " " + referer)
+	
+	// Ne pas analyser les requêtes normales (favicon, assets, etc.)
+	if strings.Contains(path, "favicon.ico") || 
+	   strings.Contains(path, ".css") || 
+	   strings.Contains(path, ".js") || 
+	   strings.Contains(path, ".png") || 
+	   strings.Contains(path, ".jpg") ||
+	   path == "/" {
+		return true, ""
+	}
 
-	// Vérifier contre les patterns suspects
+	suspiciousCount := 0
+	var matchedPatterns []string
+
+	// Vérifier contre les patterns suspects mais demander plusieurs matches
 	for _, pattern := range am.suspiciousPatterns {
 		if pattern.MatchString(content) {
-			reason := fmt.Sprintf("suspicious pattern detected: %s", pattern.String())
+			suspiciousCount++
+			matchedPatterns = append(matchedPatterns, pattern.String())
+		}
+	}
+
+	// Seulement bloquer si au moins 2 patterns suspects ou des patterns très spécifiques
+	if suspiciousCount >= 2 {
+		reason := fmt.Sprintf("multiple suspicious patterns detected: %v", matchedPatterns)
+		if am.alertCallback != nil {
+			am.alertCallback(domain, "suspicious_content", reason)
+		}
+		return false, reason
+	}
+	
+	// Bloquer immédiatement pour des patterns très spécifiques de phishing
+	for _, content := range []string{content} {
+		if strings.Contains(content, "verify") && strings.Contains(content, "account") ||
+		   strings.Contains(content, "suspend") && strings.Contains(content, "account") ||
+		   strings.Contains(content, "update") && strings.Contains(content, "payment") ||
+		   strings.Contains(content, "confirm") && strings.Contains(content, "identity") {
+			reason := "high-confidence phishing pattern detected"
 			if am.alertCallback != nil {
 				am.alertCallback(domain, "suspicious_content", reason)
 			}

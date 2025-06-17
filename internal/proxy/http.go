@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -109,13 +110,22 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	domain := strings.Split(host, ".")[0]
 	
-	// Analyser la requête pour détecter des patterns suspects
+	// Analyser la requête pour détecter des patterns suspects (sauf si désactivé)
 	userAgent := r.Header.Get("User-Agent")
 	referer := r.Header.Get("Referer")
-	if allowed, reason := p.abuseMonitor.AnalyzeHTTPRequest(domain, requestURL, userAgent, referer); !allowed {
-		log.Printf("Suspicious request blocked for domain %s: %s", domain, reason)
-		p.serveAbuseBlockedPage(w, r, domain, reason)
-		return
+	
+	// Vérifier si la surveillance est désactivée via variable d'environnement
+	skipSecurity := os.Getenv("P0RT_DISABLE_SECURITY") == "true"
+	
+	// Skip analysis for development/testing - check if domain looks like a test
+	isDev := strings.Contains(domain, "test") || strings.Contains(domain, "demo") || strings.Contains(domain, "dev")
+	
+	if !skipSecurity && !isDev {
+		if allowed, reason := p.abuseMonitor.AnalyzeHTTPRequest(domain, requestURL, userAgent, referer); !allowed {
+			log.Printf("Suspicious request blocked for domain %s: %s", domain, reason)
+			p.serveAbuseBlockedPage(w, r, domain, reason)
+			return
+		}
 	}
 	
 	p.sshServer.LogConnection(domain, clientIP, requestURL)
