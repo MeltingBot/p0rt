@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"github.com/p0rt/p0rt/internal/domain"
 	"github.com/p0rt/p0rt/internal/security"
 )
 
@@ -40,6 +41,8 @@ type Server struct {
 	domainGenerator DomainGenerator
 	tcpManager      TCPManager
 	abuseMonitor    *security.AbuseMonitor
+	customValidator *domain.CustomDomainValidator
+	baseDomain      string
 	
 	// Protection anti-bruteforce
 	failedAttempts map[string]int
@@ -57,7 +60,7 @@ type TCPManager interface {
 	Close(port int) error
 }
 
-func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManager TCPManager) (*Server, error) {
+func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManager TCPManager, baseDomain string) (*Server, error) {
 	server := &Server{
 		clients:        make(map[string]*Client),
 		clientOps:      make(chan func(), 100),
@@ -65,6 +68,8 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 		domainGenerator: domainGen,
 		tcpManager:     tcpManager,
 		abuseMonitor:   security.NewAbuseMonitor(),
+		customValidator: domain.NewCustomDomainValidator(baseDomain),
+		baseDomain:     baseDomain,
 		failedAttempts: make(map[string]int),
 		bannedIPs:      make(map[string]time.Time),
 	}
@@ -350,6 +355,9 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 			if err := ssh.Unmarshal(req.Payload, &env); err == nil {
 				if env.Name == "LC_DOMAIN" {
 					customDomain = env.Value
+				} else if env.Name == "LC_CUSTOM_DOMAIN" {
+					// For external custom domains with DNS validation
+					customDomain = env.Value
 				}
 			}
 			if req.WantReply {
@@ -364,16 +372,49 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 			if req.Type == "shell" {
 				// Assigner le domaine si pas encore fait
 				if client.Domain == "" {
-					// Priorité : CustomDomain (depuis -R) > customDomain (depuis LC_DOMAIN) > généré
-					if client.CustomDomain != "" {
-						domain = client.CustomDomain
-					} else if customDomain != "" {
+					// Check if it's an external custom domain
+					isExternalDomain := customDomain != "" && !strings.HasSuffix(customDomain, "."+s.baseDomain)
+					
+					if isExternalDomain {
+						// Validate external custom domain
+						// Parse the base64 encoded key
+						keyData, err := base64.StdEncoding.DecodeString(client.Key)
+						if err != nil {
+							log.Printf("Failed to decode SSH key: %v", err)
+							channel.Write([]byte(fmt.Sprintf("\r\n❌ Invalid SSH key format: %v\r\n", err)))
+							return
+						}
+						
+						pubKey, err := ssh.ParsePublicKey(keyData)
+						if err != nil {
+							log.Printf("Failed to parse SSH public key: %v", err)
+							channel.Write([]byte(fmt.Sprintf("\r\n❌ Failed to parse SSH key: %v\r\n", err)))
+							return
+						}
+						
+						keyFingerprint := ssh.FingerprintSHA256(pubKey)
+						cleanFingerprint := strings.TrimPrefix(keyFingerprint, "SHA256:")
+						
+						err = s.customValidator.ValidateCustomDomain(customDomain, cleanFingerprint)
+						if err != nil {
+							log.Printf("Custom domain validation failed for %s: %v", customDomain, err)
+							channel.Write([]byte(fmt.Sprintf("\r\n❌ Custom domain validation failed: %v\r\n", err)))
+							channel.Write([]byte(s.customValidator.GetCustomDomainInstructions(customDomain, cleanFingerprint)))
+							return
+						}
 						domain = customDomain
+						log.Printf("Custom domain %s validated successfully", customDomain)
 					} else {
-						domain = s.domainGenerator.Generate(client.Key)
+						// Use standard domain logic
+						// Priorité : CustomDomain (depuis -R) > customDomain (depuis LC_DOMAIN) > généré
+						if client.CustomDomain != "" {
+							domain = client.CustomDomain
+						} else if customDomain != "" {
+							domain = customDomain
+						} else {
+							domain = s.domainGenerator.Generate(client.Key)
+						}
 					}
-
-					// Note: Domain content filtering removed for privacy
 
 					client.Domain = domain
 					
@@ -394,7 +435,18 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 				// Message de bienvenue avec escape sequences pour forcer un formatage correct
 				channel.Write([]byte("\033[2J\033[H")) // Clear screen and move cursor to home
 				channel.Write([]byte("P0rt Tunnel Connected\r\n"))
-				channel.Write([]byte(fmt.Sprintf("Your tunnel: https://%s.p0rt.xyz\r\n", domain)))
+				
+				// Determine the full URL based on domain type
+				var tunnelURL string
+				if strings.Contains(domain, ".") {
+					// External custom domain
+					tunnelURL = fmt.Sprintf("https://%s", domain)
+				} else {
+					// Standard p0rt domain
+					tunnelURL = fmt.Sprintf("https://%s.%s", domain, s.baseDomain)
+				}
+				
+				channel.Write([]byte(fmt.Sprintf("Your tunnel: %s\r\n", tunnelURL)))
 				channel.Write([]byte(fmt.Sprintf("Local server: localhost:%d\r\n", client.Port)))
 				channel.Write([]byte("\r\nConnections:\r\n"))
 

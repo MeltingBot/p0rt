@@ -34,7 +34,7 @@ func main() {
 	
 	tcpManagerAdapter := &tcpManagerAdapter{manager: tcpManager}
 	
-	sshServer, err := ssh.NewServer(cfg.GetSSHPort(), cfg.GetSSHHostKey(), domainGen, tcpManagerAdapter)
+	sshServer, err := ssh.NewServer(cfg.GetSSHPort(), cfg.GetSSHHostKey(), domainGen, tcpManagerAdapter, cfg.GetDomainBase())
 	if err != nil {
 		log.Fatalf("Failed to create SSH server: %v", err)
 	}

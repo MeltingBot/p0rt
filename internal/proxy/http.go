@@ -81,7 +81,19 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// First try exact match for custom domains
 	client := p.sshServer.GetClient(host)
+	if client == nil {
+		// If not found, try to extract subdomain for p0rt.xyz domains
+		if strings.HasSuffix(host, ".p0rt.xyz") {
+			parts := strings.Split(host, ".")
+			if len(parts) >= 3 {
+				subdomain := parts[0]
+				client = p.sshServer.GetClient(subdomain)
+			}
+		}
+	}
+	
 	if client == nil {
 		p.serveErrorPage(w, r, host)
 		return
@@ -682,9 +694,16 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
                 
                 <div class="bg-white p-6 rounded-lg shadow-sm">
                     <h3 class="text-xl font-semibold text-gray-800 mb-3">Can I use custom domains?</h3>
+                    <p class="text-gray-600 mb-3">
+                        Yes! Two options available:
+                    </p>
+                    <p class="text-gray-600 mb-2">
+                        <strong>1. Subdomain:</strong> <code>LC_DOMAIN=myapp ssh -R 443:localhost:3000 ssh.p0rt.xyz</code> 
+                        → <strong>myapp.p0rt.xyz</strong>
+                    </p>
                     <p class="text-gray-600">
-                        Yes! Use <code>LC_DOMAIN=myapp ssh -R 443:localhost:3000 ssh.p0rt.xyz</code> 
-                        to get <strong>myapp.p0rt.xyz</strong> instead of the generated three-word domain.
+                        <strong>2. Your domain:</strong> <code>LC_CUSTOM_DOMAIN=dev.example.com ssh -R 443:localhost:3000 ssh.p0rt.xyz</code>
+                        <br>→ <strong>dev.example.com</strong> (requires DNS setup)
                     </p>
                 </div>
                 
@@ -711,6 +730,16 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
                         Suspicious domains are automatically blocked. Rate limiting prevents excessive use.
                         <a href="/report-abuse" class="text-blue-600 hover:text-blue-800 ml-1">Report abuse here</a>.
                     </p>
+                </div>
+                
+                <div class="bg-white p-6 rounded-lg shadow-sm">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-3">How to use my own domain?</h3>
+                    <div class="text-gray-600 text-sm">
+                        <p class="mb-2"><strong>1. Add CNAME:</strong> Point your domain to <code>p0rt.xyz</code></p>
+                        <p class="mb-2"><strong>2. Add TXT:</strong> Create <code>_p0rt-authkey.yourdomain.com</code> with value <code>p0rt-authkey=YOUR_SSH_FINGERPRINT</code></p>
+                        <p class="mb-2"><strong>3. Get fingerprint:</strong> <code>ssh-keygen -lf ~/.ssh/id_rsa.pub | awk '{print $2}' | sed 's/SHA256://'</code></p>
+                        <p><strong>4. Connect:</strong> <code>LC_CUSTOM_DOMAIN=yourdomain.com ssh -R 443:localhost:3000 ssh.p0rt.xyz</code></p>
+                    </div>
                 </div>
             </div>
         </div>
