@@ -372,8 +372,20 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 			if req.Type == "shell" {
 				// Assigner le domaine si pas encore fait
 				if client.Domain == "" {
-					// Check if it's an external custom domain
-					isExternalDomain := customDomain != "" && !strings.HasSuffix(customDomain, "."+s.baseDomain)
+					// Determine domain type and validate
+					isExternalDomain := false
+					
+					// Check if it's a custom domain (contains dots)
+					if customDomain != "" && strings.Contains(customDomain, ".") {
+						isExternalDomain = true
+						
+						// Block unauthorized p0rt.xyz subdomains
+						if strings.HasSuffix(customDomain, "."+s.baseDomain) {
+							channel.Write([]byte(fmt.Sprintf("\r\n❌ Error: Custom subdomains of %s are not allowed.\r\n", s.baseDomain)))
+							channel.Write([]byte("   Use generated domains or your own external domain.\r\n\r\n"))
+							return
+						}
+					}
 					
 					if isExternalDomain {
 						// Validate external custom domain
@@ -405,15 +417,8 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 						domain = customDomain
 						log.Printf("Custom domain %s validated successfully", customDomain)
 					} else {
-						// Use standard domain logic
-						// Priorité : CustomDomain (depuis -R) > customDomain (depuis LC_DOMAIN) > généré
-						if client.CustomDomain != "" {
-							domain = client.CustomDomain
-						} else if customDomain != "" {
-							domain = customDomain
-						} else {
-							domain = s.domainGenerator.Generate(client.Key)
-						}
+						// Use generated domain only
+						domain = s.domainGenerator.Generate(client.Key)
 					}
 
 					client.Domain = domain

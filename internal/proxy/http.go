@@ -695,15 +695,15 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
                 <div class="bg-white p-6 rounded-lg shadow-sm">
                     <h3 class="text-xl font-semibold text-gray-800 mb-3">Can I use custom domains?</h3>
                     <p class="text-gray-600 mb-3">
-                        Yes! Two options available:
-                    </p>
-                    <p class="text-gray-600 mb-2">
-                        <strong>1. Subdomain:</strong> <code>LC_DOMAIN=myapp ssh -R 443:localhost:3000 ssh.p0rt.xyz</code> 
-                        → <strong>myapp.p0rt.xyz</strong>
+                        Yes! You can use your own domain:
                     </p>
                     <p class="text-gray-600">
-                        <strong>2. Your domain:</strong> <code>LC_CUSTOM_DOMAIN=dev.example.com ssh -R 443:localhost:3000 ssh.p0rt.xyz</code>
+                        <code>LC_CUSTOM_DOMAIN=dev.example.com ssh -R 443:localhost:3000 ssh.p0rt.xyz</code>
                         <br>→ <strong>dev.example.com</strong> (requires DNS setup)
+                    </p>
+                    <p class="text-gray-600 text-sm mt-3">
+                        <em>Note: Custom p0rt.xyz subdomains (like api.p0rt.xyz) are not available. 
+                        Use the generated three-word domains or your own external domain.</em>
                     </p>
                 </div>
                 

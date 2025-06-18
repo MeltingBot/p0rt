@@ -121,14 +121,14 @@ ssh -R 443:localhost:3000 ssh.p0rt.xyz -o "SetEnv LC_CUSTOM_DOMAIN=dev.project.i
 - The domain must resolve to `p0rt.xyz` via CNAME
 - Wildcard domains are not supported (each subdomain needs its own records)
 
-## Regular P0rt Subdomains
+## P0rt Subdomains Policy
 
-If you don't need a custom domain, you can still use:
+P0rt only provides automatically generated three-word subdomains (e.g., `whale-guitar-fox.p0rt.xyz`). Custom subdomains of p0rt.xyz (like `api.p0rt.xyz` or `dev.p0rt.xyz`) are **not available**.
 
-```bash
-# Generated domain (e.g., whale-guitar-fox.p0rt.xyz)
-ssh -R 443:localhost:3000 ssh.p0rt.xyz
+This ensures:
+- Fair access to namespace for all users
+- Prevents subdomain squatting
+- Maintains consistent three-word pattern
+- Encourages use of your own domains for branding
 
-# Custom subdomain (e.g., myapp.p0rt.xyz)
-LC_DOMAIN=myapp ssh -R 443:localhost:3000 ssh.p0rt.xyz
-```
+If you need a specific domain name, please use your own domain with the DNS validation method described above.
