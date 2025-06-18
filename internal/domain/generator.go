@@ -10,20 +10,57 @@ import (
 
 type Generator struct {
 	words []string
+	store *DomainStore
 }
 
-func NewGenerator() *Generator {
+func NewGenerator(dataDir string) (*Generator, error) {
+	store, err := NewDomainStore(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	
 	return &Generator{
 		words: wordsList,
-	}
+		store: store,
+	}, nil
 }
 
 func (g *Generator) Generate(key string) string {
+	// Calculate SSH key hash
 	hash := sha256.Sum256([]byte(key))
-	hashHex := hex.EncodeToString(hash[:])
+	keyHash := hex.EncodeToString(hash[:])
 	
+	// Check if we already have a domain for this key
+	if domain, exists := g.store.GetDomain(keyHash); exists {
+		// Update last seen time
+		g.store.SetDomain(keyHash, domain)
+		return domain
+	}
+	
+	// Generate new domain
+	domain := g.generateNewDomain(keyHash)
+	
+	// Check for collisions (very rare but possible)
+	maxAttempts := 10
+	for i := 0; i < maxAttempts; i++ {
+		if taken, _ := g.store.IsDomainTaken(domain); !taken {
+			// Store the new domain
+			g.store.SetDomain(keyHash, domain)
+			return domain
+		}
+		// Collision detected, generate a different domain
+		domain = g.generateNewDomainWithSalt(keyHash, i)
+	}
+	
+	// Fallback: use random domain if all attempts fail
+	domain = g.GenerateRandom()
+	g.store.SetDomain(keyHash, domain)
+	return domain
+}
+
+func (g *Generator) generateNewDomain(keyHash string) string {
 	hashInt := new(big.Int)
-	hashInt.SetString(hashHex, 16)
+	hashInt.SetString(keyHash, 16)
 	
 	wordsCount := big.NewInt(int64(len(g.words)))
 	
@@ -48,12 +85,28 @@ func (g *Generator) Generate(key string) string {
 	return word1 + "-" + word2 + "-" + word3
 }
 
+func (g *Generator) generateNewDomainWithSalt(keyHash string, salt int) string {
+	// Add salt to hash to generate different domain
+	saltedHash := sha256.Sum256([]byte(keyHash + string(salt)))
+	return g.generateNewDomain(hex.EncodeToString(saltedHash[:]))
+}
+
 func (g *Generator) GenerateRandom() string {
 	rand.Seed(time.Now().UnixNano())
 	word1 := g.words[rand.Intn(len(g.words))]
 	word2 := g.words[rand.Intn(len(g.words))]
 	word3 := g.words[rand.Intn(len(g.words))]
 	return word1 + "-" + word2 + "-" + word3
+}
+
+// GetStats returns domain storage statistics
+func (g *Generator) GetStats() map[string]interface{} {
+	return g.store.GetStats()
+}
+
+// CleanupOldDomains removes domains not used in the specified duration
+func (g *Generator) CleanupOldDomains(maxAge time.Duration) int {
+	return g.store.Cleanup(maxAge)
 }
 
 var wordsList = []string{

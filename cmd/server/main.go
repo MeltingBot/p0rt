@@ -29,7 +29,12 @@ func main() {
 	log.Printf("HTTP Port: %s", cfg.GetHTTPPort())
 	log.Printf("Domain Base: %s", cfg.GetDomainBase())
 	
-	domainGen := domain.NewGenerator()
+	// Create data directory for persistence
+	dataDir := "./data"
+	domainGen, err := domain.NewGenerator(dataDir)
+	if err != nil {
+		log.Fatalf("Failed to create domain generator: %v", err)
+	}
 	tcpManager := tcp.NewManager()
 	
 	tcpManagerAdapter := &tcpManagerAdapter{manager: tcpManager}
@@ -39,7 +44,7 @@ func main() {
 		log.Fatalf("Failed to create SSH server: %v", err)
 	}
 	
-	sshServerAdapter := &sshServerAdapter{server: sshServer}
+	sshServerAdapter := &sshServerAdapter{server: sshServer, domainGen: domainGen}
 	httpProxy := proxy.NewHTTPProxy(sshServerAdapter)
 	
 	errChan := make(chan error, 2)
@@ -90,7 +95,8 @@ func (c *clientAdapterForTCP) Conn() cryptossh.Conn {
 }
 
 type sshServerAdapter struct {
-	server *ssh.Server
+	server    *ssh.Server
+	domainGen *domain.Generator
 }
 
 func (s *sshServerAdapter) GetClient(domain string) proxy.ClientWithPort {
@@ -103,6 +109,10 @@ func (s *sshServerAdapter) GetClient(domain string) proxy.ClientWithPort {
 
 func (s *sshServerAdapter) LogConnection(domain, clientIP, requestURL string) {
 	s.server.LogConnection(domain, clientIP, requestURL)
+}
+
+func (s *sshServerAdapter) GetDomainStats() map[string]interface{} {
+	return s.domainGen.GetStats()
 }
 
 type clientPortAdapter struct {

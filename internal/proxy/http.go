@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -23,6 +24,7 @@ type HTTPProxy struct {
 type SSHServer interface {
 	GetClient(domain string) ClientWithPort
 	LogConnection(domain, clientIP, requestURL string)
+	GetDomainStats() map[string]interface{}
 }
 
 type ClientWithPort interface {
@@ -46,6 +48,9 @@ func (p *HTTPProxy) Start(port string) error {
 	
 	// Endpoint pour statistiques de sécurité (admin)
 	mux.HandleFunc("/security-stats", p.handleSecurityStats)
+	
+	// Endpoint pour statistiques de domaines (admin)
+	mux.HandleFunc("/domain-stats", p.handleDomainStats)
 
 	// Ping endpoint pour CloudFlare health checks
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -936,4 +941,27 @@ func (p *HTTPProxy) handleSecurityStats(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(html))
+}
+
+func (p *HTTPProxy) handleDomainStats(w http.ResponseWriter, r *http.Request) {
+	// Simple protection : seulement si la requête vient de localhost
+	if r.Header.Get("X-Forwarded-For") != "" || !strings.HasPrefix(r.RemoteAddr, "127.0.0.1") {
+		http.Error(w, "Access denied", http.StatusForbidden)
+		return
+	}
+
+	stats := p.sshServer.GetDomainStats()
+	
+	// Convert to JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	
+	response := map[string]interface{}{
+		"status":     "success",
+		"timestamp":  time.Now().Format(time.RFC3339),
+		"domain_stats": stats,
+	}
+	
+	json, _ := json.Marshal(response)
+	w.Write(json)
 }

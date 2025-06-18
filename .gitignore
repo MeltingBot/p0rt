@@ -27,6 +27,9 @@ stats.json
 # SSH host key
 ssh_host_key
 
+# Domain persistence data
+data/
+
 # IDE specific files
 .idea/
 .vscode/
