@@ -1,98 +1,92 @@
 # P0rt Security Features
 
-This document outlines the security measures implemented in P0rt to prevent abuse and protect users.
+This document outlines the security measures implemented in P0rt focusing on connection-level protections while respecting user privacy.
+
+## Security Philosophy
+
+P0rt prioritizes **user privacy** and **connection security** over content monitoring:
+- **No HTTP content inspection** - We don't analyze what you're serving
+- **No domain filtering** - All domain names are allowed
+- **SSH-level protection only** - Focus on preventing infrastructure abuse
 
 ## Automated Security Monitoring
 
-P0rt includes several automated security features:
+P0rt includes connection-level security features:
 
-### 1. Domain Monitoring
-- **Keyword Filtering**: Domains containing suspicious keywords like "phishing", "malware", "spam", "scam", etc. are automatically blocked
-- **Pattern Detection**: Domains that match known malicious patterns are rejected during generation
-
-### 2. Connection Rate Limiting
+### 1. SSH Connection Rate Limiting
 - **Per SSH Key**: Maximum 100 connections per hour per SSH key
 - **Auto-Block**: Keys exceeding the limit are blocked for 24 hours
-- **IP-based Bruteforce Protection**: Already implemented to prevent SSH bruteforce attacks
+- **Progressive Banning**: 3 attempts=15min, 5=1h, 10+=24h
 
-### 3. HTTP Request Analysis
-- **Content Scanning**: Real-time analysis of HTTP requests for suspicious patterns
-- **Phishing Detection**: Automatic detection of common phishing keywords and URLs
-- **Spam/Scam Patterns**: Identification of spam and scam-related content
+### 2. SSH Scan Detection
+- **Pattern Recognition**: Automatic detection of SSH scanning patterns
+- **Immediate Blocking**: Known malicious IPs blocked for 24h
+- **Scan Pattern Bans**: 6h automatic bans for scan-like behavior
 
-### 4. Abuse Reporting System
-- **Public Endpoint**: `/report-abuse` endpoint for reporting malicious tunnels
-- **Automated Alerts**: Real-time notifications for security incidents
-- **Investigation Tools**: Logging and tracking of reported abuse cases
+### 3. Abuse Reporting System
+- **Public Endpoint**: `/report-abuse` endpoint for reporting infrastructure abuse
+- **Manual Review**: Human review of reported cases
+- **SSH-level Actions**: Actions taken at connection level, not content level
 
-## Security Patterns Detected
+## SSH Scan Patterns Detected
 
-### Phishing Indicators
-- Login/signin pages mimicking legitimate services
-- Account verification/suspension messages
-- Password/credit card collection forms
-- Fake bank/payment service pages
+### Automated Scanner Behavior
+- Immediate disconnection after connection (reason 11)
+- Connection attempts without authentication
+- Rapid connection/disconnection cycles
+- EOF connections (dropped connections)
 
-### Spam Indicators
-- Casino/lottery/prize claiming sites
-- Pharmaceutical advertisements
-- Cryptocurrency investment schemes
-- Get-rich-quick schemes
+### Response to SSH Abuse
 
-### Scam Indicators
-- Urgent action required messages
-- Nigerian prince/inheritance scams
-- Wire transfer requests
-- Too-good-to-be-true offers
+When SSH-level abuse is detected:
 
-## Response to Security Incidents
+1. **IP Blocking**: The source IP is blocked at connection level
+2. **Progressive Bans**: Increasing ban duration for repeat offenders
+3. **Logging**: All SSH abuse attempts are logged
+4. **No Content Inspection**: Actions are based on connection patterns only
 
-When suspicious activity is detected:
+## Privacy-First Approach
 
-1. **Immediate Block**: The tunnel is immediately blocked from serving requests
-2. **Security Page**: Visitors see a security warning instead of the malicious content
-3. **Logging**: All incidents are logged for analysis
-4. **Investigation**: Security team reviews the case
-5. **Action**: Appropriate action taken (temporary/permanent block, contact authorities if needed)
+P0rt follows a privacy-first security model:
 
-## False Positives
-
-If your legitimate service is incorrectly blocked:
-
-1. **Contact**: Email security@p0rt.xyz with details
-2. **Review**: Security team reviews the case manually
-3. **Whitelist**: Legitimate services are whitelisted
-4. **Pattern Update**: Security patterns are refined to reduce false positives
+- **No HTTP Monitoring**: We don't inspect HTTP traffic content
+- **No Domain Restrictions**: All domain names are allowed
+- **No Content Filtering**: You can serve any content you want
+- **SSH-Only Protection**: Security measures only apply to SSH connection patterns
 
 ## Best Practices for Users
 
-To avoid triggering security measures:
+To avoid triggering SSH-level security measures:
 
-- **Avoid Suspicious Keywords**: Don't use words like "login", "verify", "urgent" in your app content unnecessarily
-- **Clear Documentation**: Provide clear information about what your service does
-- **Reasonable Use**: Don't create excessive connections or tunnel high-traffic production services
-- **Report Issues**: If blocked incorrectly, contact us promptly
+- **Reasonable Connections**: Don't create excessive SSH connections
+- **Proper SSH Clients**: Use legitimate SSH clients, not automated scanners
+- **Report Issues**: If your IP is blocked incorrectly, contact us
 
 ## Rate Limits
 
 Current rate limits:
 - **SSH Connections**: 100 per hour per SSH key
-- **HTTP Requests**: No hard limit, but monitored for abuse patterns
+- **HTTP Requests**: No limits - privacy-first approach
 - **Abuse Reports**: 10 per hour per IP address
 
 ## Technical Implementation
 
-Security features are implemented in:
-- `internal/security/abuse_monitor.go`: Core security monitoring
-- `internal/ssh/server.go`: SSH connection security checks
-- `internal/proxy/http.go`: HTTP request analysis and blocking
+Privacy-focused security features are implemented in:
+- `internal/security/abuse_monitor.go`: SSH connection rate limiting
+- `internal/ssh/server.go`: SSH scan detection and IP blocking
+- `internal/proxy/http.go`: No content inspection, connection logging only
 
-## Continuous Improvement
+## What We Don't Do
 
-P0rt's security system continuously evolves:
-- **Pattern Updates**: Regular updates to detection patterns
-- **Machine Learning**: Future implementation of ML-based detection
-- **Community Reports**: User reports help improve detection accuracy
-- **Threat Intelligence**: Integration with security threat feeds
+For privacy reasons, P0rt **does not**:
+- Inspect HTTP request content
+- Filter domain names based on keywords
+- Analyze website content for malicious patterns
+- Block tunnels based on what you're serving
+- Store or analyze user-generated content
 
-For security inquiries, contact: security@p0rt.xyz
+## Contact
+
+For security inquiries about SSH-level issues only: security@p0rt.xyz
+
+**Note**: We cannot and will not take action based on website content - only SSH abuse patterns.

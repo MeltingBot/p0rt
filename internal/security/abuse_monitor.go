@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -16,9 +15,8 @@ type AbuseMonitor struct {
 	limitMutex       sync.RWMutex
 
 	// Patterns suspects
-	suspiciousPatterns []*regexp.Regexp
-	blockedDomains     map[string]bool
-	blockedKeywords    []string
+	// Note: HTTP content analysis patterns removed for privacy
+	// Only connection-level monitoring remains
 
 	// Alertes
 	alertCallback func(domain, reason, details string)
@@ -34,46 +32,15 @@ type ConnectionLimit struct {
 func NewAbuseMonitor() *AbuseMonitor {
 	monitor := &AbuseMonitor{
 		connectionLimits: make(map[string]*ConnectionLimit),
-		blockedDomains:   make(map[string]bool),
-		suspiciousPatterns: []*regexp.Regexp{
-			// Patterns de phishing
-			regexp.MustCompile(`(?i)(login|signin|account|bank|paypal|amazon|google|microsoft|apple)`),
-			regexp.MustCompile(`(?i)(verify|suspend|update|confirm|security)`),
-			regexp.MustCompile(`(?i)(password|credit.*card|social.*security)`),
-			
-			// Patterns de spam
-			regexp.MustCompile(`(?i)(casino|lottery|winner|prize|claim|free.*money)`),
-			regexp.MustCompile(`(?i)(viagra|pharmacy|crypto|investment)`),
-			
-			// Patterns de scam
-			regexp.MustCompile(`(?i)(urgent|limited.*time|act.*now|congratulations)`),
-			regexp.MustCompile(`(?i)(nigerian|prince|inheritance|wire.*transfer)`),
-		},
-		blockedKeywords: []string{
-			"phishing", "malware", "virus", "trojan", "ransomware",
-			"spam", "scam", "fraud", "fake", "counterfeit",
-		},
+		// Note: Content analysis removed for privacy - only connection monitoring
 	}
-
-	// Charger les domaines bloqués depuis des listes publiques
-	monitor.loadBlockedDomains()
 
 	return monitor
 }
 
-// CheckDomain vérifie si un domaine généré est suspect
+// CheckDomain - domain filtering disabled for privacy
 func (am *AbuseMonitor) CheckDomain(domain string) (bool, string) {
-	am.limitMutex.RLock()
-	defer am.limitMutex.RUnlock()
-
-	// Vérifier contre les mots-clés bloqués
-	domainLower := strings.ToLower(domain)
-	for _, keyword := range am.blockedKeywords {
-		if strings.Contains(domainLower, keyword) {
-			return false, fmt.Sprintf("domain contains blocked keyword: %s", keyword)
-		}
-	}
-
+	// All domains allowed - no content filtering for privacy
 	return true, ""
 }
 
@@ -118,55 +85,9 @@ func (am *AbuseMonitor) CheckConnectionRate(sshKeyHash string) bool {
 	return true
 }
 
-// AnalyzeHTTPRequest analyse une requête HTTP pour détecter des patterns suspects
+// AnalyzeHTTPRequest - HTTP content analysis disabled for privacy
 func (am *AbuseMonitor) AnalyzeHTTPRequest(domain, path, userAgent, referer string) (bool, string) {
-	// Être moins agressif - seulement analyser si plusieurs indicateurs suspects
-	content := strings.ToLower(path + " " + userAgent + " " + referer)
-	
-	// Ne pas analyser les requêtes normales (favicon, assets, etc.)
-	if strings.Contains(path, "favicon.ico") || 
-	   strings.Contains(path, ".css") || 
-	   strings.Contains(path, ".js") || 
-	   strings.Contains(path, ".png") || 
-	   strings.Contains(path, ".jpg") ||
-	   path == "/" {
-		return true, ""
-	}
-
-	suspiciousCount := 0
-	var matchedPatterns []string
-
-	// Vérifier contre les patterns suspects mais demander plusieurs matches
-	for _, pattern := range am.suspiciousPatterns {
-		if pattern.MatchString(content) {
-			suspiciousCount++
-			matchedPatterns = append(matchedPatterns, pattern.String())
-		}
-	}
-
-	// Seulement bloquer si au moins 2 patterns suspects ou des patterns très spécifiques
-	if suspiciousCount >= 2 {
-		reason := fmt.Sprintf("multiple suspicious patterns detected: %v", matchedPatterns)
-		if am.alertCallback != nil {
-			am.alertCallback(domain, "suspicious_content", reason)
-		}
-		return false, reason
-	}
-	
-	// Bloquer immédiatement pour des patterns très spécifiques de phishing
-	for _, content := range []string{content} {
-		if strings.Contains(content, "verify") && strings.Contains(content, "account") ||
-		   strings.Contains(content, "suspend") && strings.Contains(content, "account") ||
-		   strings.Contains(content, "update") && strings.Contains(content, "payment") ||
-		   strings.Contains(content, "confirm") && strings.Contains(content, "identity") {
-			reason := "high-confidence phishing pattern detected"
-			if am.alertCallback != nil {
-				am.alertCallback(domain, "suspicious_content", reason)
-			}
-			return false, reason
-		}
-	}
-
+	// All HTTP requests allowed - no content inspection for privacy
 	return true, ""
 }
 
@@ -221,18 +142,9 @@ func (am *AbuseMonitor) IsKnownMaliciousIP(ip string) bool {
 	return false
 }
 
-// loadBlockedDomains charge une liste de domaines suspects (peut être étendu)
+// loadBlockedDomains - disabled for privacy
 func (am *AbuseMonitor) loadBlockedDomains() {
-	// Liste basique de domaines suspects
-	suspiciousDomains := []string{
-		"phishing.example",
-		"malware.example", 
-		"spam.example",
-	}
-
-	for _, domain := range suspiciousDomains {
-		am.blockedDomains[domain] = true
-	}
+	// Domain blocking disabled for privacy
 }
 
 // GetConnectionStats retourne les statistiques de connexion

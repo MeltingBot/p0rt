@@ -373,12 +373,7 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 						domain = s.domainGenerator.Generate(client.Key)
 					}
 
-					// Vérifier si le domaine généré est suspect
-					if allowed, reason := s.abuseMonitor.CheckDomain(domain); !allowed {
-						log.Printf("Suspicious domain blocked: %s - %s", domain, reason)
-						channel.Write([]byte(fmt.Sprintf("Error: Domain blocked due to security policy: %s\r\n", reason)))
-						return
-					}
+					// Note: Domain content filtering removed for privacy
 
 					client.Domain = domain
 					
