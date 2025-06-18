@@ -2,13 +2,14 @@ package config
 
 import (
 	"fmt"
-	"os"
 	"gopkg.in/yaml.v3"
+	"os"
 )
 
 type Config struct {
-	Server ServerConfig `yaml:"server"`
-	Domain DomainConfig `yaml:"domain"`
+	Server  ServerConfig  `yaml:"server"`
+	Domain  DomainConfig  `yaml:"domain"`
+	Storage StorageConfig `yaml:"storage"`
 }
 
 type ServerConfig struct {
@@ -29,10 +30,18 @@ type DomainConfig struct {
 	Base string `yaml:"base"`
 }
 
+type StorageConfig struct {
+	Type          string `yaml:"type"`      // "json" or "redis"
+	DataDir       string `yaml:"data_dir"`  // For JSON store
+	RedisURL      string `yaml:"redis_url"` // For Redis store
+	RedisPassword string `yaml:"redis_password"`
+	RedisDB       int    `yaml:"redis_db"`
+}
+
 // Load loads configuration from YAML file and environment variables
 func Load() (*Config, error) {
 	config := &Config{}
-	
+
 	// Load from YAML file if it exists
 	configPath := getEnv("CONFIG_FILE", "config.yaml")
 	if _, err := os.Stat(configPath); err == nil {
@@ -40,7 +49,7 @@ func Load() (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to read config file: %w", err)
 		}
-		
+
 		if err := yaml.Unmarshal(data, config); err != nil {
 			return nil, fmt.Errorf("failed to parse config file: %w", err)
 		}
@@ -48,10 +57,10 @@ func Load() (*Config, error) {
 		// Set defaults if no config file
 		config = getDefaultConfig()
 	}
-	
+
 	// Override with environment variables
 	overrideWithEnv(config)
-	
+
 	return config, nil
 }
 
@@ -76,6 +85,10 @@ func getDefaultConfig() *Config {
 		Domain: DomainConfig{
 			Base: "p0rt.xyz",
 		},
+		Storage: StorageConfig{
+			Type:    "json",
+			DataDir: "./data",
+		},
 	}
 }
 
@@ -96,6 +109,25 @@ func overrideWithEnv(config *Config) {
 	if domain := getEnv("DOMAIN_BASE", ""); domain != "" {
 		config.Domain.Base = domain
 	}
+
+	// Storage configuration
+	if storageType := getEnv("STORAGE_TYPE", ""); storageType != "" {
+		config.Storage.Type = storageType
+	}
+	if dataDir := getEnv("STORAGE_DATA_DIR", ""); dataDir != "" {
+		config.Storage.DataDir = dataDir
+	}
+	if redisURL := getEnv("REDIS_URL", ""); redisURL != "" {
+		config.Storage.RedisURL = redisURL
+	}
+	if redisPassword := getEnv("REDIS_PASSWORD", ""); redisPassword != "" {
+		config.Storage.RedisPassword = redisPassword
+	}
+	if redisDB := getEnv("REDIS_DB", ""); redisDB != "" {
+		if db := parseInt(redisDB, 0); db >= 0 {
+			config.Storage.RedisDB = db
+		}
+	}
 }
 
 // Helper methods for backward compatibility
@@ -113,6 +145,10 @@ func (c *Config) GetSSHHostKey() string {
 
 func (c *Config) GetDomainBase() string {
 	return c.Domain.Base
+}
+
+func (c *Config) GetStorageConfig() StorageConfig {
+	return c.Storage
 }
 
 func getEnv(key, defaultValue string) string {

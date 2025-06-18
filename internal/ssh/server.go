@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/crypto/ssh"
 	"github.com/p0rt/p0rt/internal/domain"
 	"github.com/p0rt/p0rt/internal/security"
+	"golang.org/x/crypto/ssh"
 )
 
 type Client struct {
@@ -36,14 +36,14 @@ type Client struct {
 type Server struct {
 	config          *ssh.ServerConfig
 	clients         map[string]*Client
-	clientOps       chan func()   // Canal pour opérations thread-safe sur clients
+	clientOps       chan func() // Canal pour opérations thread-safe sur clients
 	port            string
 	domainGenerator DomainGenerator
 	tcpManager      TCPManager
 	abuseMonitor    *security.AbuseMonitor
 	customValidator *domain.CustomDomainValidator
 	baseDomain      string
-	
+
 	// Protection anti-bruteforce
 	failedAttempts map[string]int
 	failedMutex    sync.RWMutex
@@ -62,40 +62,40 @@ type TCPManager interface {
 
 func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManager TCPManager, baseDomain string) (*Server, error) {
 	server := &Server{
-		clients:        make(map[string]*Client),
-		clientOps:      make(chan func(), 100),
-		port:           port,
+		clients:         make(map[string]*Client),
+		clientOps:       make(chan func(), 100),
+		port:            port,
 		domainGenerator: domainGen,
-		tcpManager:     tcpManager,
-		abuseMonitor:   security.NewAbuseMonitor(),
+		tcpManager:      tcpManager,
+		abuseMonitor:    security.NewAbuseMonitor(),
 		customValidator: domain.NewCustomDomainValidator(baseDomain),
-		baseDomain:     baseDomain,
-		failedAttempts: make(map[string]int),
-		bannedIPs:      make(map[string]time.Time),
+		baseDomain:      baseDomain,
+		failedAttempts:  make(map[string]int),
+		bannedIPs:       make(map[string]time.Time),
 	}
-	
+
 	config := &ssh.ServerConfig{
 		PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 			clientIP := conn.RemoteAddr().String()
 			if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
 				clientIP = clientIP[:idx]
 			}
-			
+
 			// Vérifier si l'IP est bannie
 			if server.isIPBanned(clientIP) {
 				log.Printf("Banned IP attempted connection: %s", clientIP)
 				return nil, fmt.Errorf("IP banned")
 			}
-			
+
 			keyData := base64.StdEncoding.EncodeToString(key.Marshal())
-			
+
 			// Vérifier les limites de connexion pour cette clé SSH
 			keyHash := fmt.Sprintf("%x", sha256.Sum256(key.Marshal()))
 			if !server.abuseMonitor.CheckConnectionRate(keyHash) {
 				log.Printf("Connection rate limit exceeded for SSH key: %s", keyHash[:8])
 				return nil, fmt.Errorf("connection rate limit exceeded")
 			}
-			
+
 			return &ssh.Permissions{
 				Extensions: map[string]string{
 					"public-key": keyData,
@@ -122,16 +122,15 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 
 	config.AddHostKey(signer)
 	server.config = config
-	
+
 	// Démarrer le gestionnaire d'opérations clients
 	go server.handleClientOps()
-	
+
 	// Démarrer le nettoyage périodique des IPs bannies
 	go server.cleanupBannedIPs()
-	
+
 	return server, nil
 }
-
 
 func (s *Server) handleClientOps() {
 	for op := range s.clientOps {
@@ -164,14 +163,14 @@ func (s *Server) handleConnection(netConn net.Conn) {
 	if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
 		clientIP = clientIP[:idx]
 	}
-	
+
 	// Vérifier si l'IP est bannie avant même d'essayer le handshake
 	if s.isIPBanned(clientIP) {
 		log.Printf("Blocked banned IP: %s", clientIP)
 		netConn.Close()
 		return
 	}
-	
+
 	// Vérifier si l'IP est dans la liste noire connue
 	if s.abuseMonitor.IsKnownMaliciousIP(clientIP) {
 		log.Printf("Blocked known malicious IP: %s", clientIP)
@@ -183,12 +182,12 @@ func (s *Server) handleConnection(netConn net.Conn) {
 		netConn.Close()
 		return
 	}
-	
+
 	sshConn, chans, reqs, err := ssh.NewServerConn(netConn, s.config)
 	if err != nil {
 		// Incrémenter les tentatives échouées
 		s.recordFailedAttempt(clientIP)
-		
+
 		// Log détaillé pour différents types d'erreurs et détection de scans
 		if strings.Contains(err.Error(), "no auth passed yet") {
 			log.Printf("Auth failure from %s: No valid authentication", clientIP)
@@ -207,12 +206,12 @@ func (s *Server) handleConnection(netConn net.Conn) {
 		}
 		return
 	}
-	
+
 	// Réinitialiser les tentatives échouées en cas de succès
 	s.resetFailedAttempts(clientIP)
-	
+
 	publicKey := sshConn.Permissions.Extensions["public-key"]
-	
+
 	client := &Client{
 		Conn:       sshConn,
 		Channels:   chans,
@@ -220,7 +219,7 @@ func (s *Server) handleConnection(netConn net.Conn) {
 		Key:        publicKey,
 		LogChannel: make(chan string, 100),
 	}
-	
+
 	// S'assurer que le client est supprimé à la déconnexion
 	defer func() {
 		sshConn.Close()
@@ -277,7 +276,7 @@ func (s *Server) handleTCPForward(client *Client, req *ssh.Request) {
 	// Format: "subdomain:port" ou juste "port" pour 443
 	var customDomain string
 	bindAddr := forward.BindAddr
-	
+
 	// Si l'adresse n'est pas vide et ne ressemble pas à une IP/hostname standard
 	if bindAddr != "" && bindAddr != "0.0.0.0" && bindAddr != "localhost" && bindAddr != "127.0.0.1" {
 		// Diviser sur ':' pour extraire le sous-domaine potentiel
@@ -306,7 +305,7 @@ func (s *Server) handleTCPForward(client *Client, req *ssh.Request) {
 	}
 
 	client.Port = localPort
-	
+
 	// Stocker le domaine personnalisé si fourni
 	if customDomain != "" {
 		client.CustomDomain = customDomain
@@ -315,7 +314,7 @@ func (s *Server) handleTCPForward(client *Client, req *ssh.Request) {
 	type forwardResponse struct {
 		BoundPort uint32
 	}
-	
+
 	response := forwardResponse{BoundPort: uint32(localPort)}
 	req.Reply(true, ssh.Marshal(&response))
 }
@@ -374,11 +373,11 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 				if client.Domain == "" {
 					// Determine domain type and validate
 					isExternalDomain := false
-					
+
 					// Check if it's a custom domain (contains dots)
 					if customDomain != "" && strings.Contains(customDomain, ".") {
 						isExternalDomain = true
-						
+
 						// Block unauthorized p0rt.xyz subdomains
 						if strings.HasSuffix(customDomain, "."+s.baseDomain) {
 							channel.Write([]byte(fmt.Sprintf("\r\n❌ Error: Custom subdomains of %s are not allowed.\r\n", s.baseDomain)))
@@ -386,7 +385,7 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 							return
 						}
 					}
-					
+
 					if isExternalDomain {
 						// Validate external custom domain
 						// Parse the base64 encoded key
@@ -396,17 +395,17 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 							channel.Write([]byte(fmt.Sprintf("\r\n❌ Invalid SSH key format: %v\r\n", err)))
 							return
 						}
-						
+
 						pubKey, err := ssh.ParsePublicKey(keyData)
 						if err != nil {
 							log.Printf("Failed to parse SSH public key: %v", err)
 							channel.Write([]byte(fmt.Sprintf("\r\n❌ Failed to parse SSH key: %v\r\n", err)))
 							return
 						}
-						
+
 						keyFingerprint := ssh.FingerprintSHA256(pubKey)
 						cleanFingerprint := strings.TrimPrefix(keyFingerprint, "SHA256:")
-						
+
 						err = s.customValidator.ValidateCustomDomain(customDomain, cleanFingerprint)
 						if err != nil {
 							log.Printf("Custom domain validation failed for %s: %v", customDomain, err)
@@ -422,7 +421,7 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 					}
 
 					client.Domain = domain
-					
+
 					// Ajout via canal (lock-free)
 					done := make(chan bool)
 					s.clientOps <- func() {
@@ -440,7 +439,7 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 				// Message de bienvenue avec escape sequences pour forcer un formatage correct
 				channel.Write([]byte("\033[2J\033[H")) // Clear screen and move cursor to home
 				channel.Write([]byte("P0rt Tunnel Connected\r\n"))
-				
+
 				// Determine the full URL based on domain type
 				var tunnelURL string
 				if strings.Contains(domain, ".") {
@@ -450,14 +449,14 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 					// Standard p0rt domain
 					tunnelURL = fmt.Sprintf("https://%s.%s", domain, s.baseDomain)
 				}
-				
+
 				channel.Write([]byte(fmt.Sprintf("Your tunnel: %s\r\n", tunnelURL)))
 				channel.Write([]byte(fmt.Sprintf("Local server: localhost:%d\r\n", client.Port)))
 				channel.Write([]byte("\r\nConnections:\r\n"))
 
 				// Démarrer le monitoring des connexions
 				go s.monitorConnections(client, channel)
-				
+
 				// Garder le canal ouvert et détecter la fermeture
 				go func() {
 					io.Copy(io.Discard, channel)
@@ -515,15 +514,15 @@ func (s *Server) GetClient(domain string) *Client {
 	if len(parts) == 0 {
 		return nil
 	}
-	
+
 	subdomain := parts[0]
 	resultChan := make(chan *Client)
-	
+
 	s.clientOps <- func() {
 		client := s.clients[subdomain]
 		resultChan <- client
 	}
-	
+
 	return <-resultChan
 }
 
@@ -531,9 +530,9 @@ func (s *Server) removeClient(domain string) {
 	if domain == "" {
 		return
 	}
-	
+
 	done := make(chan bool)
-	
+
 	s.clientOps <- func() {
 		if client, exists := s.clients[domain]; exists {
 			if client.Port > 0 {
@@ -546,18 +545,18 @@ func (s *Server) removeClient(domain string) {
 		}
 		done <- true
 	}
-	
+
 	<-done
 	s.updateStats()
 }
 
 func (s *Server) updateStats() {
 	countChan := make(chan int)
-	
+
 	s.clientOps <- func() {
 		countChan <- len(s.clients)
 	}
-	
+
 	count := <-countChan
 	stats := fmt.Sprintf(`{"connected_clients": %d}`, count)
 	os.WriteFile("stats.json", []byte(stats), 0644)
@@ -589,7 +588,7 @@ func loadOrGenerateHostKey() (ssh.Signer, error) {
 	}
 
 	keyData := pem.EncodeToMemory(privateKeyPEM)
-	
+
 	// Sauvegarder la clé
 	if err := os.WriteFile(hostKeyFile, keyData, 0600); err != nil {
 		log.Printf("Warning: Failed to save host key to %s: %v", hostKeyFile, err)
@@ -611,12 +610,12 @@ func (s *Server) monitorConnections(client *Client, channel ssh.Channel) {
 // LogConnection envoie un log de connexion au client SSH
 func (s *Server) LogConnection(domain, clientIP, requestURL string) {
 	clientChan := make(chan *Client)
-	
+
 	s.clientOps <- func() {
 		client := s.clients[domain]
 		clientChan <- client
 	}
-	
+
 	client := <-clientChan
 	if client != nil && client.LogChannel != nil {
 		logMsg := fmt.Sprintf("%s %s", clientIP, requestURL)
@@ -628,18 +627,16 @@ func (s *Server) LogConnection(domain, clientIP, requestURL string) {
 	}
 }
 
-
-
 // Protection anti-bruteforce
 const (
 	maxFailedAttempts = 5
-	banDuration = 15 * time.Minute
+	banDuration       = 15 * time.Minute
 )
 
 func (s *Server) isIPBanned(ip string) bool {
 	s.failedMutex.RLock()
 	defer s.failedMutex.RUnlock()
-	
+
 	if banTime, exists := s.bannedIPs[ip]; exists {
 		if time.Since(banTime) < banDuration {
 			return true
@@ -653,10 +650,10 @@ func (s *Server) isIPBanned(ip string) bool {
 func (s *Server) recordFailedAttempt(ip string) {
 	s.failedMutex.Lock()
 	defer s.failedMutex.Unlock()
-	
+
 	s.failedAttempts[ip]++
 	attempts := s.failedAttempts[ip]
-	
+
 	// Bannissement progressif : 3 tentatives = 15min, 5 tentatives = 1h, 10+ tentatives = 24h
 	if attempts >= 3 {
 		banDuration := 15 * time.Minute
@@ -666,11 +663,11 @@ func (s *Server) recordFailedAttempt(ip string) {
 		if attempts >= 10 {
 			banDuration = 24 * time.Hour
 		}
-		
+
 		s.bannedIPs[ip] = time.Now().Add(banDuration)
 		delete(s.failedAttempts, ip)
 		log.Printf("IP %s banned for %v after %d failed attempts", ip, banDuration, attempts)
-		
+
 		// Reporter à l'AbuseMonitor pour tracking
 		s.abuseMonitor.ReportAbuse("ssh-bruteforce", ip, fmt.Sprintf("SSH bruteforce: %d attempts", attempts))
 	} else {
@@ -681,7 +678,7 @@ func (s *Server) recordFailedAttempt(ip string) {
 func (s *Server) resetFailedAttempts(ip string) {
 	s.failedMutex.Lock()
 	defer s.failedMutex.Unlock()
-	
+
 	delete(s.failedAttempts, ip)
 }
 
@@ -689,17 +686,17 @@ func (s *Server) detectScanPattern(ip, pattern string) {
 	// Les patterns de scan automatique sont souvent identifiables
 	// et peuvent justifier un bannissement immédiat plus long
 	scanPatterns := []string{"no_auth", "immediate_disconnect", "connection_drop"}
-	
+
 	s.failedMutex.Lock()
 	defer s.failedMutex.Unlock()
-	
+
 	// Si c'est un pattern de scan connu, bannir immédiatement pour 6h
 	for _, scanPattern := range scanPatterns {
 		if pattern == scanPattern {
 			s.bannedIPs[ip] = time.Now().Add(6 * time.Hour)
 			delete(s.failedAttempts, ip)
 			log.Printf("IP %s auto-banned for 6h (scan pattern: %s)", ip, pattern)
-			
+
 			// Reporter comme tentative de scan
 			s.abuseMonitor.ReportAbuse("ssh-scan", ip, fmt.Sprintf("Automated scan detected: %s", pattern))
 			return
@@ -710,7 +707,7 @@ func (s *Server) detectScanPattern(ip, pattern string) {
 func (s *Server) cleanupBannedIPs() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		s.failedMutex.Lock()
 		now := time.Now()

@@ -45,10 +45,10 @@ func (p *HTTPProxy) Start(port string) error {
 
 	// Endpoint pour signaler des abus
 	mux.HandleFunc("/report-abuse", p.abuseMonitor.CreateAbuseReportHandler())
-	
+
 	// Endpoint pour statistiques de sécurité (admin)
 	mux.HandleFunc("/security-stats", p.handleSecurityStats)
-	
+
 	// Endpoint pour statistiques de domaines (admin)
 	mux.HandleFunc("/domain-stats", p.handleDomainStats)
 
@@ -98,7 +98,7 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	
+
 	if client == nil {
 		p.serveErrorPage(w, r, host)
 		return
@@ -125,10 +125,10 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	domain := strings.Split(host, ".")[0]
-	
+
 	// Note: HTTP content analysis removed for privacy reasons
 	// Only SSH-level protections (bruteforce, scans) remain active
-	
+
 	p.sshServer.LogConnection(domain, clientIP, requestURL)
 
 	if r.Header.Get("Upgrade") == "websocket" {
@@ -827,7 +827,7 @@ func (p *HTTPProxy) handleSecurityStats(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Access denied", http.StatusForbidden)
 		return
 	}
-	
+
 	html := `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -951,17 +951,17 @@ func (p *HTTPProxy) handleDomainStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stats := p.sshServer.GetDomainStats()
-	
+
 	// Convert to JSON
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	
+
 	response := map[string]interface{}{
-		"status":     "success",
-		"timestamp":  time.Now().Format(time.RFC3339),
+		"status":       "success",
+		"timestamp":    time.Now().Format(time.RFC3339),
 		"domain_stats": stats,
 	}
-	
+
 	json, _ := json.Marshal(response)
 	w.Write(json)
 }

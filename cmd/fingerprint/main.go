@@ -37,7 +37,7 @@ func main() {
 
 	var keyData []byte
 	var keyPath string
-	
+
 	// Try to read the first available key
 	for _, path := range keyPaths {
 		data, err := ioutil.ReadFile(path)
@@ -70,7 +70,7 @@ func main() {
 
 	fmt.Println("SSH Key Fingerprint (SHA256):")
 	fmt.Printf("  %s\n\n", cleanFingerprint)
-	
+
 	fmt.Println("To use a custom domain with P0rt:")
 	fmt.Println("1. Add CNAME record:")
 	fmt.Println("   Host: yourdomain.com")

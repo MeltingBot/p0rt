@@ -65,7 +65,7 @@ func (v *CustomDomainValidator) validateTXTRecord(domain, expectedFingerprint st
 	for _, record := range txtRecords {
 		// Clean up the record (remove quotes, spaces)
 		cleanRecord := strings.TrimSpace(strings.Trim(record, "\""))
-		
+
 		// Check if this is our auth key
 		if strings.HasPrefix(cleanRecord, "p0rt-authkey=") {
 			fingerprint := strings.TrimPrefix(cleanRecord, "p0rt-authkey=")

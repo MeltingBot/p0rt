@@ -23,9 +23,9 @@ type AbuseMonitor struct {
 }
 
 type ConnectionLimit struct {
-	Connections int
-	LastReset   time.Time
-	Blocked     bool
+	Connections  int
+	LastReset    time.Time
+	Blocked      bool
 	BlockedUntil time.Time
 }
 
@@ -51,7 +51,7 @@ func (am *AbuseMonitor) CheckConnectionRate(sshKeyHash string) bool {
 
 	now := time.Now()
 	limit, exists := am.connectionLimits[sshKeyHash]
-	
+
 	if !exists {
 		am.connectionLimits[sshKeyHash] = &ConnectionLimit{
 			Connections: 1,
@@ -94,7 +94,7 @@ func (am *AbuseMonitor) AnalyzeHTTPRequest(domain, path, userAgent, referer stri
 // ReportAbuse permet de signaler un abus
 func (am *AbuseMonitor) ReportAbuse(domain, reporterIP, reason string) {
 	log.Printf("Abuse reported for domain %s by %s: %s", domain, reporterIP, reason)
-	
+
 	if am.alertCallback != nil {
 		am.alertCallback(domain, "abuse_report", fmt.Sprintf("reported by %s: %s", reporterIP, reason))
 	}
@@ -109,36 +109,36 @@ func (am *AbuseMonitor) SetAlertCallback(callback func(domain, reason, details s
 func (am *AbuseMonitor) IsKnownMaliciousIP(ip string) bool {
 	// IPs des exemples que tu as montrés - patterns de scan courants
 	knownBadIPs := []string{
-		"165.232.95.247",  // DigitalOcean - scan répété
-		"193.32.162.145",  // Pattern de scan
-		"118.193.43.244",  // Pattern de scan
-		"193.233.48.138",  // Pattern de scan
-		"103.183.157.25",  // Tentatives multiples
-		"182.93.7.194",    // Pattern de scan
-		"78.128.112.74",   // Tentatives sans auth
-		"5.228.183.178",   // Pattern de scan
-		"195.158.16.5",    // Pattern de scan
+		"165.232.95.247", // DigitalOcean - scan répété
+		"193.32.162.145", // Pattern de scan
+		"118.193.43.244", // Pattern de scan
+		"193.233.48.138", // Pattern de scan
+		"103.183.157.25", // Tentatives multiples
+		"182.93.7.194",   // Pattern de scan
+		"78.128.112.74",  // Tentatives sans auth
+		"5.228.183.178",  // Pattern de scan
+		"195.158.16.5",   // Pattern de scan
 	}
-	
+
 	for _, badIP := range knownBadIPs {
 		if ip == badIP {
 			return true
 		}
 	}
-	
+
 	// Vérifier contre les ranges suspects (peut être étendu)
 	suspiciousRanges := []string{
-		"165.232.",    // DigitalOcean ranges souvent utilisés pour du scan
-		"103.183.",    // Range d'IP avec beaucoup de scan
-		"193.32.",     // Range suspect
+		"165.232.", // DigitalOcean ranges souvent utilisés pour du scan
+		"103.183.", // Range d'IP avec beaucoup de scan
+		"193.32.",  // Range suspect
 	}
-	
+
 	for _, suspicious := range suspiciousRanges {
 		if strings.HasPrefix(ip, suspicious) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -166,7 +166,7 @@ func (am *AbuseMonitor) CreateAbuseReportHandler() http.HandlerFunc {
 			am.serveReportForm(w, r)
 			return
 		}
-		
+
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -176,7 +176,7 @@ func (am *AbuseMonitor) CreateAbuseReportHandler() http.HandlerFunc {
 		reason := r.FormValue("reason")
 		details := r.FormValue("details")
 		contact := r.FormValue("contact")
-		
+
 		if domain == "" || reason == "" {
 			http.Error(w, "Missing domain or reason", http.StatusBadRequest)
 			return
@@ -200,9 +200,9 @@ func (am *AbuseMonitor) CreateAbuseReportHandler() http.HandlerFunc {
 		if contact != "" {
 			fullReason += " (Contact: " + contact + ")"
 		}
-		
+
 		am.ReportAbuse(domain, clientIP, fullReason)
-		
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, `{"status":"reported","message":"Thank you for reporting. We will investigate."}`)

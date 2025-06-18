@@ -19,11 +19,11 @@ type DomainStore struct {
 
 // DomainRecord stores information about a domain assignment
 type DomainRecord struct {
-	Domain      string    `json:"domain"`
-	SSHKeyHash  string    `json:"ssh_key_hash"`
-	FirstSeen   time.Time `json:"first_seen"`
-	LastSeen    time.Time `json:"last_seen"`
-	UseCount    int       `json:"use_count"`
+	Domain     string    `json:"domain"`
+	SSHKeyHash string    `json:"ssh_key_hash"`
+	FirstSeen  time.Time `json:"first_seen"`
+	LastSeen   time.Time `json:"last_seen"`
+	UseCount   int       `json:"use_count"`
 }
 
 // NewDomainStore creates a new domain store
@@ -72,7 +72,7 @@ func (ds *DomainStore) SetDomain(sshKeyHash, domain string) error {
 	defer ds.mutex.Unlock()
 
 	now := time.Now()
-	
+
 	if record, exists := ds.data[sshKeyHash]; exists {
 		// Update existing record
 		record.LastSeen = now
@@ -115,7 +115,7 @@ func (ds *DomainStore) GetStats() map[string]interface{} {
 	totalDomains := len(ds.data)
 	var activeLast24h int
 	var activeLast7d int
-	
+
 	now := time.Now()
 	for _, record := range ds.data {
 		if now.Sub(record.LastSeen) < 24*time.Hour {
@@ -127,10 +127,10 @@ func (ds *DomainStore) GetStats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"total_domains":     totalDomains,
-		"active_last_24h":   activeLast24h,
-		"active_last_7d":    activeLast7d,
-		"storage_file":      ds.filePath,
+		"total_domains":   totalDomains,
+		"active_last_24h": activeLast24h,
+		"active_last_7d":  activeLast7d,
+		"storage_file":    ds.filePath,
 	}
 }
 
