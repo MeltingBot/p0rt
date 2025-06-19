@@ -19,6 +19,7 @@ import (
 
 	"github.com/p0rt/p0rt/internal/domain"
 	"github.com/p0rt/p0rt/internal/security"
+	"github.com/p0rt/p0rt/internal/stats"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -43,8 +44,10 @@ type Server struct {
 	abuseMonitor    *security.AbuseMonitor
 	customValidator *domain.CustomDomainValidator
 	baseDomain      string
+	statsManager    *stats.Manager
+	securityTracker *security.SecurityTracker
 
-	// Protection anti-bruteforce
+	// Protection anti-bruteforce (legacy - will be replaced by SecurityTracker)
 	failedAttempts map[string]int
 	failedMutex    sync.RWMutex
 	bannedIPs      map[string]time.Time
@@ -70,6 +73,8 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 		abuseMonitor:    security.NewAbuseMonitor(),
 		customValidator: domain.NewCustomDomainValidator(baseDomain),
 		baseDomain:      baseDomain,
+		statsManager:    stats.NewManager(),
+		securityTracker: security.NewSecurityTracker("./data/security"),
 		failedAttempts:  make(map[string]int),
 		bannedIPs:       make(map[string]time.Time),
 	}
@@ -81,8 +86,12 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 				clientIP = clientIP[:idx]
 			}
 
-			// Vérifier si l'IP est bannie
-			if server.isIPBanned(clientIP) {
+			// Check if IP is banned using SecurityTracker
+			if server.securityTracker.IsBanned(clientIP) {
+				server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
+					"reason": "banned_ip_attempt",
+					"user":   conn.User(),
+				})
 				log.Printf("Banned IP attempted connection: %s", clientIP)
 				return nil, fmt.Errorf("IP banned")
 			}
@@ -92,8 +101,17 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 			// Vérifier les limites de connexion pour cette clé SSH
 			keyHash := fmt.Sprintf("%x", sha256.Sum256(key.Marshal()))
 			if !server.abuseMonitor.CheckConnectionRate(keyHash) {
+				server.securityTracker.RecordEvent(security.EventRateLimitHit, clientIP, map[string]string{
+					"reason":  "connection_rate_limit",
+					"key_hash": keyHash[:8],
+				})
 				log.Printf("Connection rate limit exceeded for SSH key: %s", keyHash[:8])
 				return nil, fmt.Errorf("connection rate limit exceeded")
+			}
+
+			// Log successful authentication (we could add a success event type if needed)
+			if os.Getenv("P0RT_VERBOSE") == "true" {
+				log.Printf("Successful SSH authentication from %s (key: %s)", clientIP, keyHash[:8])
 			}
 
 			return &ssh.Permissions{
@@ -102,6 +120,20 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 					"key-hash":   keyHash,
 				},
 			}, nil
+		},
+		// Track authentication failures
+		NoClientAuthCallback: func(conn ssh.ConnMetadata) (*ssh.Permissions, error) {
+			clientIP := conn.RemoteAddr().String()
+			if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
+				clientIP = clientIP[:idx]
+			}
+			
+			server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
+				"reason": "no_public_key",
+				"user":   conn.User(),
+			})
+			
+			return nil, fmt.Errorf("public key authentication required")
 		},
 	}
 
@@ -165,8 +197,11 @@ func (s *Server) handleConnection(netConn net.Conn) {
 	}
 
 	// Vérifier si l'IP est bannie avant même d'essayer le handshake
-	if s.isIPBanned(clientIP) {
+	if s.isIPBanned(clientIP) || s.securityTracker.IsBanned(clientIP) {
 		log.Printf("Blocked banned IP: %s", clientIP)
+		s.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
+			"reason": "banned_ip_connection_attempt",
+		})
 		netConn.Close()
 		return
 	}
@@ -179,6 +214,14 @@ func (s *Server) handleConnection(netConn net.Conn) {
 		s.bannedIPs[clientIP] = time.Now().Add(24 * time.Hour)
 		s.failedMutex.Unlock()
 		s.abuseMonitor.ReportAbuse("ssh-blacklist", clientIP, "Known malicious IP from blacklist")
+		
+		// Record in SecurityTracker
+		s.securityTracker.RecordEvent(security.EventAbuseReport, clientIP, map[string]string{
+			"reason":  "known_malicious_ip",
+			"action":  "blocked_and_banned_24h",
+			"type":    "blacklist",
+		})
+		
 		netConn.Close()
 		return
 	}
@@ -193,16 +236,31 @@ func (s *Server) handleConnection(netConn net.Conn) {
 			log.Printf("Auth failure from %s: No valid authentication", clientIP)
 			// Pattern de scan : connexion sans tentative d'auth
 			s.detectScanPattern(clientIP, "no_auth")
+			s.securityTracker.RecordEvent(security.EventPortScanning, clientIP, map[string]string{
+				"pattern": "no_auth",
+				"error":   err.Error(),
+			})
 		} else if strings.Contains(err.Error(), "reason 11") {
 			log.Printf("Scan attempt from %s: Client disconnected immediately", clientIP)
 			// Pattern de scan : connexion puis déconnexion immédiate
 			s.detectScanPattern(clientIP, "immediate_disconnect")
+			s.securityTracker.RecordEvent(security.EventPortScanning, clientIP, map[string]string{
+				"pattern": "immediate_disconnect",
+				"error":   err.Error(),
+			})
 		} else if strings.Contains(err.Error(), "EOF") {
 			log.Printf("Connection dropped from %s: EOF", clientIP)
 			// Pattern de scan : connexion puis abandon
 			s.detectScanPattern(clientIP, "connection_drop")
+			s.securityTracker.RecordEvent(security.EventPortScanning, clientIP, map[string]string{
+				"pattern": "connection_drop",
+				"error":   "EOF",
+			})
 		} else {
 			log.Printf("Failed handshake from %s: %v", clientIP, err)
+			s.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
+				"error": err.Error(),
+			})
 		}
 		return
 	}
@@ -430,6 +488,9 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 					}
 					<-done
 
+					// Record tunnel connection statistics
+					s.statsManager.TunnelConnected(domain)
+
 					log.Printf("Client connected: %s -> https://%s.p0rt.xyz", domain, domain)
 					s.updateStats()
 				} else {
@@ -541,6 +602,10 @@ func (s *Server) removeClient(domain string) {
 				}
 			}
 			delete(s.clients, domain)
+			
+			// Record tunnel disconnection statistics
+			s.statsManager.TunnelDisconnected(domain)
+			
 			log.Printf("Client disconnected: %s", domain)
 		}
 		done <- true
@@ -627,6 +692,21 @@ func (s *Server) LogConnection(domain, clientIP, requestURL string) {
 	}
 }
 
+// GetStats returns the statistics manager
+func (s *Server) GetStats() *stats.Manager {
+	return s.statsManager
+}
+
+// RecordHTTPRequest records HTTP request statistics
+func (s *Server) RecordHTTPRequest(domain string, bytesIn, bytesOut int64) {
+	s.statsManager.HTTPRequest(domain, bytesIn, bytesOut)
+}
+
+// RecordWebSocketUpgrade records WebSocket upgrade statistics
+func (s *Server) RecordWebSocketUpgrade(domain string) {
+	s.statsManager.WebSocketUpgrade(domain)
+}
+
 // Protection anti-bruteforce
 const (
 	maxFailedAttempts = 5
@@ -670,6 +750,13 @@ func (s *Server) recordFailedAttempt(ip string) {
 
 		// Reporter à l'AbuseMonitor pour tracking
 		s.abuseMonitor.ReportAbuse("ssh-bruteforce", ip, fmt.Sprintf("SSH bruteforce: %d attempts", attempts))
+		
+		// Also report to SecurityTracker for unified tracking
+		s.securityTracker.RecordEvent(security.EventBruteForce, ip, map[string]string{
+			"attempts": fmt.Sprintf("%d", attempts),
+			"action":   "banned",
+			"duration": banDuration.String(),
+		})
 	} else {
 		log.Printf("Failed attempt %d/3 from %s", attempts, ip)
 	}
@@ -699,6 +786,13 @@ func (s *Server) detectScanPattern(ip, pattern string) {
 
 			// Reporter comme tentative de scan
 			s.abuseMonitor.ReportAbuse("ssh-scan", ip, fmt.Sprintf("Automated scan detected: %s", pattern))
+			
+			// Also report to SecurityTracker with abuse report
+			s.securityTracker.RecordEvent(security.EventAbuseReport, ip, map[string]string{
+				"pattern":  pattern,
+				"action":   "auto_banned_6h",
+				"type":     "ssh_scan",
+			})
 			return
 		}
 	}
@@ -746,4 +840,29 @@ func (s *Server) ForwardConnection(client *Client, srcAddr string, srcPort uint3
 	go io.Copy(channel, conn)
 	io.Copy(conn, channel)
 	return nil
+}
+
+// GetSecurityStats returns security statistics from the tracker
+func (s *Server) GetSecurityStats() security.SecurityStats {
+	return s.securityTracker.GetSecurityStats()
+}
+
+// GetBannedIPs returns all currently banned IP addresses
+func (s *Server) GetBannedIPs() []security.BannedIP {
+	return s.securityTracker.GetBannedIPs()
+}
+
+// BanIP manually bans an IP address
+func (s *Server) BanIP(ip, reason string, duration time.Duration) {
+	s.securityTracker.BanIP(ip, reason, duration)
+}
+
+// UnbanIP removes a ban on an IP address
+func (s *Server) UnbanIP(ip string) {
+	s.securityTracker.UnbanIP(ip)
+}
+
+// RecordSecurityEvent records a security event
+func (s *Server) RecordSecurityEvent(eventType security.EventType, ip string, details map[string]string) {
+	s.securityTracker.RecordEvent(eventType, ip, details)
 }

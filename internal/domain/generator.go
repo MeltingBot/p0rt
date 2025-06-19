@@ -9,9 +9,21 @@ import (
 	"time"
 )
 
+// ReservationManagerInterface defines the interface for domain reservations
+type ReservationManagerInterface interface {
+	IsReserved(domain string) (bool, string)
+	GetReservedDomain(fingerprint string) (string, bool)
+	AddReservation(domain, fingerprint, comment string) error
+	RemoveReservation(domain string) error
+	RemoveReservationByFingerprint(fingerprint string) error
+	ListReservations() []Reservation
+	GetStats() map[string]interface{}
+}
+
 type Generator struct {
-	words []string
-	store Store
+	words              []string
+	store              Store
+	reservationManager ReservationManagerInterface
 }
 
 func NewGenerator(config storageConfig) (*Generator, error) {
@@ -26,6 +38,25 @@ func NewGenerator(config storageConfig) (*Generator, error) {
 	}, nil
 }
 
+// NewGeneratorWithReservations creates a generator with reservation support
+func NewGeneratorWithReservations(config storageConfig, reservationManager ReservationManagerInterface) (*Generator, error) {
+	store, err := NewStore(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Generator{
+		words:              wordsList,
+		store:              store,
+		reservationManager: reservationManager,
+	}, nil
+}
+
+// GetReservationManager returns the reservation manager
+func (g *Generator) GetReservationManager() ReservationManagerInterface {
+	return g.reservationManager
+}
+
 // NewGeneratorWithDataDir creates a generator with JSON storage (backwards compatibility)
 func NewGeneratorWithDataDir(dataDir string) (*Generator, error) {
 	return NewGenerator(storageConfig{
@@ -36,19 +67,50 @@ func NewGeneratorWithDataDir(dataDir string) (*Generator, error) {
 
 // NewGeneratorFromConfig creates a generator from config package type
 func NewGeneratorFromConfig(configType, dataDir, redisURL, redisPassword string, redisDB int) (*Generator, error) {
-	return NewGenerator(storageConfig{
+	// Create reservation manager based on storage type
+	var reservationManager ReservationManagerInterface
+	var err error
+
+	switch configType {
+	case "redis":
+		reservationManager, err = NewRedisReservationManager(redisURL, redisPassword, redisDB)
+	case "json", "":
+		reservationManager, err = NewReservationManager(dataDir)
+	default:
+		return nil, fmt.Errorf("unsupported storage type: %s", configType)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create reservation manager: %w", err)
+	}
+
+	return NewGeneratorWithReservations(storageConfig{
 		Type:          configType,
 		DataDir:       dataDir,
 		RedisURL:      redisURL,
 		RedisPassword: redisPassword,
 		RedisDB:       redisDB,
-	})
+	}, reservationManager)
 }
 
 func (g *Generator) Generate(key string) string {
+	return g.GenerateWithFingerprint(key, "")
+}
+
+// GenerateWithFingerprint generates a domain for an SSH key with optional fingerprint for reservations
+func (g *Generator) GenerateWithFingerprint(key, fingerprint string) string {
 	// Calculate SSH key hash
 	hash := sha256.Sum256([]byte(key))
 	keyHash := hex.EncodeToString(hash[:])
+
+	// Check for reserved domain if reservation manager is available and fingerprint is provided
+	if g.reservationManager != nil && fingerprint != "" {
+		if reservedDomain, exists := g.reservationManager.GetReservedDomain(fingerprint); exists {
+			// Update last seen time in storage
+			g.store.SetDomain(keyHash, reservedDomain)
+			return reservedDomain
+		}
+	}
 
 	// Check if we already have a domain for this key
 	if domain, exists := g.store.GetDomain(keyHash); exists {
@@ -60,16 +122,30 @@ func (g *Generator) Generate(key string) string {
 	// Generate new domain
 	domain := g.generateNewDomain(keyHash)
 
-	// Check for collisions (very rare but possible)
+	// Check for collisions and reservations
 	maxAttempts := 10
 	for i := 0; i < maxAttempts; i++ {
-		if taken, _ := g.store.IsDomainTaken(domain); !taken {
-			// Store the new domain
-			g.store.SetDomain(keyHash, domain)
-			return domain
+		// Check if domain is taken in storage
+		if taken, _ := g.store.IsDomainTaken(domain); taken {
+			domain = g.generateNewDomainWithSalt(keyHash, i)
+			continue
 		}
-		// Collision detected, generate a different domain
-		domain = g.generateNewDomainWithSalt(keyHash, i)
+
+		// Check if domain is reserved (if reservation manager is available)
+		if g.reservationManager != nil {
+			if reserved, reservedFingerprint := g.reservationManager.IsReserved(domain); reserved {
+				// Domain is reserved for another key, generate a different one
+				if fingerprint == "" || reservedFingerprint != fingerprint {
+					domain = g.generateNewDomainWithSalt(keyHash, i)
+					continue
+				}
+				// Domain is reserved for this key, we can use it
+			}
+		}
+
+		// Domain is available, store it and return
+		g.store.SetDomain(keyHash, domain)
+		return domain
 	}
 
 	// Fallback: use random domain if all attempts fail

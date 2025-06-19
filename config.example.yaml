@@ -7,6 +7,7 @@ server:
 
 domain:
   base: "p0rt.xyz"
+  reservations_enabled: false  # Enable domain reservations for specific SSH keys
 
 storage:
   type: "json"        # "json" or "redis"

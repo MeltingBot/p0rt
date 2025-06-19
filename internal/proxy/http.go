@@ -13,22 +13,42 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/p0rt/p0rt/internal/api"
+	"github.com/p0rt/p0rt/internal/domain"
 	"github.com/p0rt/p0rt/internal/security"
+	"github.com/p0rt/p0rt/internal/stats"
 )
 
 type HTTPProxy struct {
-	sshServer    SSHServer
-	abuseMonitor *security.AbuseMonitor
+	sshServer          SSHServer
+	abuseMonitor       *security.AbuseMonitor
+	apiHandler         *api.Handler
+	reservationManager domain.ReservationManagerInterface
+	statsManager       *stats.Manager
 }
 
 type SSHServer interface {
 	GetClient(domain string) ClientWithPort
 	LogConnection(domain, clientIP, requestURL string)
 	GetDomainStats() map[string]interface{}
+	RecordHTTPRequest(domain string, bytesIn, bytesOut int64)
+	RecordWebSocketUpgrade(domain string)
 }
 
 type ClientWithPort interface {
 	GetPort() int
+}
+
+// statsResponseWriter wraps http.ResponseWriter to capture bytes written
+type statsResponseWriter struct {
+	http.ResponseWriter
+	bytesWritten int64
+}
+
+func (w *statsResponseWriter) Write(b []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(b)
+	w.bytesWritten += int64(n)
+	return n, err
 }
 
 func NewHTTPProxy(sshServer SSHServer) *HTTPProxy {
@@ -38,10 +58,34 @@ func NewHTTPProxy(sshServer SSHServer) *HTTPProxy {
 	}
 }
 
+// NewHTTPProxyWithAPI creates a new HTTP proxy with API support
+func NewHTTPProxyWithAPI(sshServer SSHServer, reservationManager domain.ReservationManagerInterface, statsManager *stats.Manager, apiKey string) *HTTPProxy {
+	proxy := &HTTPProxy{
+		sshServer:          sshServer,
+		abuseMonitor:       security.NewAbuseMonitor(),
+		reservationManager: reservationManager,
+		statsManager:       statsManager,
+	}
+	
+	if reservationManager != nil {
+		// Check if sshServer implements SecurityProvider interface
+		if securityProvider, ok := sshServer.(api.SecurityProvider); ok {
+			proxy.apiHandler = api.NewHandlerWithSecurity(reservationManager, statsManager, securityProvider, apiKey)
+		} else {
+			proxy.apiHandler = api.NewHandler(reservationManager, statsManager, apiKey)
+		}
+	}
+	
+	return proxy
+}
+
 func (p *HTTPProxy) Start(port string) error {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/", p.handleRequest)
+	// Register API routes FIRST (more specific routes)
+	if p.apiHandler != nil {
+		p.apiHandler.RegisterRoutes(mux)
+	}
 
 	// Endpoint pour signaler des abus
 	mux.HandleFunc("/report-abuse", p.abuseMonitor.CreateAbuseReportHandler())
@@ -59,6 +103,9 @@ func (p *HTTPProxy) Start(port string) error {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
+
+	// Catch-all route for tunnel proxying (MUST BE LAST)
+	mux.HandleFunc("/", p.handleRequest)
 
 	server := &http.Server{
 		Addr:         ":" + port,
@@ -129,9 +176,42 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 	// Note: HTTP content analysis removed for privacy reasons
 	// Only SSH-level protections (bruteforce, scans) remain active
 
+	// Check for suspicious connection patterns
+	if securityProvider, ok := p.sshServer.(interface {
+		RecordSecurityEvent(eventType security.EventType, ip string, details map[string]string)
+	}); ok {
+		// Look for scanning attempts
+		if strings.Contains(requestURL, "/.env") || 
+		   strings.Contains(requestURL, "/wp-admin") ||
+		   strings.Contains(requestURL, "/admin") ||
+		   strings.Contains(requestURL, "/phpmyadmin") ||
+		   strings.Contains(requestURL, "/config") ||
+		   strings.Contains(requestURL, "..") {
+			securityProvider.RecordSecurityEvent(security.EventPortScanning, clientIP, map[string]string{
+				"url":    requestURL,
+				"domain": domain,
+				"type":   "web_scan",
+			})
+		}
+		
+		// Check user agent for bots/scanners
+		userAgent := r.Header.Get("User-Agent")
+		if strings.Contains(strings.ToLower(userAgent), "bot") ||
+		   strings.Contains(strings.ToLower(userAgent), "scanner") ||
+		   strings.Contains(strings.ToLower(userAgent), "crawler") ||
+		   userAgent == "" {
+			securityProvider.RecordSecurityEvent(security.EventSuspiciousConn, clientIP, map[string]string{
+				"user_agent": userAgent,
+				"domain":     domain,
+				"url":        requestURL,
+			})
+		}
+	}
+
 	p.sshServer.LogConnection(domain, clientIP, requestURL)
 
 	if r.Header.Get("Upgrade") == "websocket" {
+		p.sshServer.RecordWebSocketUpgrade(domain)
 		p.handleWebSocket(w, r, client.GetPort())
 		return
 	}
@@ -162,7 +242,17 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	proxy.ServeHTTP(w, r)
+	// Create a response writer wrapper to capture traffic statistics
+	bytesIn := r.ContentLength
+	if bytesIn < 0 {
+		bytesIn = 0
+	}
+	
+	statsWriter := &statsResponseWriter{ResponseWriter: w}
+	proxy.ServeHTTP(statsWriter, r)
+	
+	// Record HTTP request statistics
+	p.sshServer.RecordHTTPRequest(domain, bytesIn, statsWriter.bytesWritten)
 }
 
 func (p *HTTPProxy) handleWebSocket(w http.ResponseWriter, r *http.Request, targetPort int) {

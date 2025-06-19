@@ -27,7 +27,8 @@ type HTTPServerConfig struct {
 }
 
 type DomainConfig struct {
-	Base string `yaml:"base"`
+	Base               string `yaml:"base"`
+	ReservationsEnabled bool   `yaml:"reservations_enabled"`
 }
 
 type StorageConfig struct {
@@ -55,7 +56,7 @@ func Load() (*Config, error) {
 		}
 	} else {
 		// Set defaults if no config file
-		config = getDefaultConfig()
+		config = GetDefaultConfig()
 	}
 
 	// Override with environment variables
@@ -66,12 +67,12 @@ func Load() (*Config, error) {
 
 // LoadDefault loads default configuration without YAML file
 func LoadDefault() *Config {
-	config := getDefaultConfig()
+	config := GetDefaultConfig()
 	overrideWithEnv(config)
 	return config
 }
 
-func getDefaultConfig() *Config {
+func GetDefaultConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
 			SSH: SSHServerConfig{
@@ -108,6 +109,9 @@ func overrideWithEnv(config *Config) {
 	}
 	if domain := getEnv("DOMAIN_BASE", ""); domain != "" {
 		config.Domain.Base = domain
+	}
+	if reservations := getEnv("DOMAIN_RESERVATIONS_ENABLED", ""); reservations != "" {
+		config.Domain.ReservationsEnabled = reservations == "true" || reservations == "1"
 	}
 
 	// Storage configuration
