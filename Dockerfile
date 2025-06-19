@@ -1,19 +1,66 @@
-FROM golang:1.21-alpine AS builder
+# Multi-stage Dockerfile pour p0rt
+FROM golang:1.24-alpine AS builder
+
+# Installer les dépendances nécessaires
+RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /app
+
+# Copier les fichiers go mod
 COPY go.mod go.sum ./
 RUN go mod download
 
+# Copier le code source
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o p0rt ./cmd/server
 
-FROM alpine:latest
+# Construire l'application avec la nouvelle structure
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o p0rt cmd/main/main.go
 
-RUN apk --no-cache add ca-certificates
-WORKDIR /root/
+# Image de production
+FROM alpine:latest AS production
 
+RUN apk --no-cache add ca-certificates curl tzdata && \
+    addgroup -g 1001 -S p0rt && \
+    adduser -u 1001 -D -S -G p0rt p0rt
+
+WORKDIR /app
+
+# Copier l'exécutable
 COPY --from=builder /app/p0rt .
 
+# Créer les répertoires nécessaires
+RUN mkdir -p data/security data/reservations && \
+    chown -R p0rt:p0rt /app
+
+# Copier les fichiers de configuration par défaut
+COPY config.yaml ./
+COPY --chown=p0rt:p0rt config.yaml ./
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:80/health || exit 1
+
+# Exposer les ports
 EXPOSE 22 80
 
-CMD ["./p0rt"]
+# Utiliser l'utilisateur non-root
+USER p0rt
+
+# Commande par défaut
+CMD ["./p0rt", "server", "start"]
+
+# Image de développement
+FROM builder AS development
+
+RUN apk add --no-cache bash openssh-client
+
+WORKDIR /app
+
+# Installer air pour le hot reload
+RUN go install github.com/air-verse/air@latest
+
+# Exposer les ports de dev
+EXPOSE 2222 8080
+
+# Mode développement avec hot reload
+CMD ["air", "-c", ".air.toml"]

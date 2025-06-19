@@ -109,6 +109,11 @@ func (st *SecurityTracker) RecordEvent(eventType EventType, ip string, details m
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	
+	// Skip recording events for private/local IPs
+	if st.isPrivateIP(ip) {
+		return
+	}
+	
 	event := SecurityEvent{
 		ID:        fmt.Sprintf("%d-%s", time.Now().UnixNano(), ip),
 		Timestamp: time.Now(),
@@ -141,6 +146,11 @@ func (st *SecurityTracker) IsBanned(ip string) bool {
 	st.mu.RLock()
 	defer st.mu.RUnlock()
 	
+	// Never consider private IPs as banned
+	if st.isPrivateIP(ip) {
+		return false
+	}
+	
 	bannedIP, exists := st.bannedIPs[ip]
 	if !exists {
 		return false
@@ -161,6 +171,12 @@ func (st *SecurityTracker) IsBanned(ip string) bool {
 func (st *SecurityTracker) BanIP(ip, reason string, duration time.Duration) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	
+	// Don't ban private IPs
+	if st.isPrivateIP(ip) {
+		log.Printf("Skipped banning private IP: %s", ip)
+		return
+	}
 	
 	st.bannedIPs[ip] = &BannedIP{
 		IP:        ip,

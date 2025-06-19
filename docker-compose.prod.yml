@@ -1,0 +1,54 @@
+# Docker Compose pour la production
+# Utilisez: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+version: '3.8'
+
+services:
+  p0rt:
+    image: p0rt:latest
+    build:
+      context: .
+      target: production
+    ports:
+      - "22:22"
+      - "80:80"
+    environment:
+      - P0RT_VERBOSE=false
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-p0rt_redis_pass}
+    volumes:
+      - p0rt-data:/app/data
+      - ./config.prod.yaml:/app/config.yaml:ro
+      - ./ssh_host_key.prod:/app/ssh_host_key:ro
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.5'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  redis:
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis-prod-data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+volumes:
+  p0rt-data:
+    driver: local
+  redis-prod-data:
+    driver: local

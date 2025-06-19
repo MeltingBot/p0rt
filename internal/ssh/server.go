@@ -86,8 +86,8 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 				clientIP = clientIP[:idx]
 			}
 
-			// Check if IP is banned using SecurityTracker
-			if server.securityTracker.IsBanned(clientIP) {
+			// Check if IP is banned using SecurityTracker (skip for private IPs)
+			if !server.isPrivateIP(clientIP) && server.securityTracker.IsBanned(clientIP) {
 				server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
 					"reason": "banned_ip_attempt",
 					"user":   conn.User(),
@@ -98,13 +98,15 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 
 			keyData := base64.StdEncoding.EncodeToString(key.Marshal())
 
-			// Vérifier les limites de connexion pour cette clé SSH
+			// Vérifier les limites de connexion pour cette clé SSH (skip for private IPs)
 			keyHash := fmt.Sprintf("%x", sha256.Sum256(key.Marshal()))
 			if !server.abuseMonitor.CheckConnectionRate(keyHash) {
-				server.securityTracker.RecordEvent(security.EventRateLimitHit, clientIP, map[string]string{
-					"reason":  "connection_rate_limit",
-					"key_hash": keyHash[:8],
-				})
+				if !server.isPrivateIP(clientIP) {
+					server.securityTracker.RecordEvent(security.EventRateLimitHit, clientIP, map[string]string{
+						"reason":  "connection_rate_limit",
+						"key_hash": keyHash[:8],
+					})
+				}
 				log.Printf("Connection rate limit exceeded for SSH key: %s", keyHash[:8])
 				return nil, fmt.Errorf("connection rate limit exceeded")
 			}
@@ -128,10 +130,13 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 				clientIP = clientIP[:idx]
 			}
 			
-			server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
-				"reason": "no_public_key",
-				"user":   conn.User(),
-			})
+			// Skip tracking for private IPs
+			if !server.isPrivateIP(clientIP) {
+				server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
+					"reason": "no_public_key",
+					"user":   conn.User(),
+				})
+			}
 			
 			return nil, fmt.Errorf("public key authentication required")
 		},
@@ -196,18 +201,23 @@ func (s *Server) handleConnection(netConn net.Conn) {
 		clientIP = clientIP[:idx]
 	}
 
-	// Vérifier si l'IP est bannie avant même d'essayer le handshake
-	if s.isIPBanned(clientIP) || s.securityTracker.IsBanned(clientIP) {
-		log.Printf("Blocked banned IP: %s", clientIP)
-		s.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
-			"reason": "banned_ip_connection_attempt",
-		})
-		netConn.Close()
-		return
+	// Skip security checks for private IPs (Docker internal, localhost, etc.)
+	if s.isPrivateIP(clientIP) {
+		// Private IPs are allowed without security tracking
+	} else {
+		// Vérifier si l'IP est bannie avant même d'essayer le handshake
+		if s.isIPBanned(clientIP) || s.securityTracker.IsBanned(clientIP) {
+			log.Printf("Blocked banned IP: %s", clientIP)
+			s.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
+				"reason": "banned_ip_connection_attempt",
+			})
+			netConn.Close()
+			return
+		}
 	}
 
-	// Vérifier si l'IP est dans la liste noire connue
-	if s.abuseMonitor.IsKnownMaliciousIP(clientIP) {
+	// Vérifier si l'IP est dans la liste noire connue (skip for private IPs)
+	if !s.isPrivateIP(clientIP) && s.abuseMonitor.IsKnownMaliciousIP(clientIP) {
 		log.Printf("Blocked known malicious IP: %s", clientIP)
 		// Bannir immédiatement pour 24h
 		s.failedMutex.Lock()
@@ -228,39 +238,42 @@ func (s *Server) handleConnection(netConn net.Conn) {
 
 	sshConn, chans, reqs, err := ssh.NewServerConn(netConn, s.config)
 	if err != nil {
-		// Incrémenter les tentatives échouées
-		s.recordFailedAttempt(clientIP)
+		// Skip error tracking for private IPs
+		if !s.isPrivateIP(clientIP) {
+			// Incrémenter les tentatives échouées
+			s.recordFailedAttempt(clientIP)
 
-		// Log détaillé pour différents types d'erreurs et détection de scans
-		if strings.Contains(err.Error(), "no auth passed yet") {
-			log.Printf("Auth failure from %s: No valid authentication", clientIP)
-			// Pattern de scan : connexion sans tentative d'auth
-			s.detectScanPattern(clientIP, "no_auth")
-			s.securityTracker.RecordEvent(security.EventPortScanning, clientIP, map[string]string{
-				"pattern": "no_auth",
-				"error":   err.Error(),
-			})
-		} else if strings.Contains(err.Error(), "reason 11") {
-			log.Printf("Scan attempt from %s: Client disconnected immediately", clientIP)
-			// Pattern de scan : connexion puis déconnexion immédiate
-			s.detectScanPattern(clientIP, "immediate_disconnect")
-			s.securityTracker.RecordEvent(security.EventPortScanning, clientIP, map[string]string{
-				"pattern": "immediate_disconnect",
-				"error":   err.Error(),
-			})
-		} else if strings.Contains(err.Error(), "EOF") {
-			log.Printf("Connection dropped from %s: EOF", clientIP)
-			// Pattern de scan : connexion puis abandon
-			s.detectScanPattern(clientIP, "connection_drop")
-			s.securityTracker.RecordEvent(security.EventPortScanning, clientIP, map[string]string{
-				"pattern": "connection_drop",
-				"error":   "EOF",
-			})
-		} else {
-			log.Printf("Failed handshake from %s: %v", clientIP, err)
-			s.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
-				"error": err.Error(),
-			})
+			// Log détaillé pour différents types d'erreurs et détection de scans
+			if strings.Contains(err.Error(), "no auth passed yet") {
+				log.Printf("Auth failure from %s: No valid authentication", clientIP)
+				// Pattern de scan : connexion sans tentative d'auth
+				s.detectScanPattern(clientIP, "no_auth")
+				s.securityTracker.RecordEvent(security.EventPortScanning, clientIP, map[string]string{
+					"pattern": "no_auth",
+					"error":   err.Error(),
+				})
+			} else if strings.Contains(err.Error(), "reason 11") {
+				log.Printf("Scan attempt from %s: Client disconnected immediately", clientIP)
+				// Pattern de scan : connexion puis déconnexion immédiate
+				s.detectScanPattern(clientIP, "immediate_disconnect")
+				s.securityTracker.RecordEvent(security.EventPortScanning, clientIP, map[string]string{
+					"pattern": "immediate_disconnect",
+					"error":   err.Error(),
+				})
+			} else if strings.Contains(err.Error(), "EOF") {
+				log.Printf("Connection dropped from %s: EOF", clientIP)
+				// Pattern de scan : connexion puis abandon
+				s.detectScanPattern(clientIP, "connection_drop")
+				s.securityTracker.RecordEvent(security.EventPortScanning, clientIP, map[string]string{
+					"pattern": "connection_drop",
+					"error":   "EOF",
+				})
+			} else {
+				log.Printf("Failed handshake from %s: %v", clientIP, err)
+				s.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
+					"error": err.Error(),
+				})
+			}
 		}
 		return
 	}
@@ -728,6 +741,11 @@ func (s *Server) isIPBanned(ip string) bool {
 }
 
 func (s *Server) recordFailedAttempt(ip string) {
+	// Skip tracking for private IPs
+	if s.isPrivateIP(ip) {
+		return
+	}
+
 	s.failedMutex.Lock()
 	defer s.failedMutex.Unlock()
 
@@ -770,6 +788,11 @@ func (s *Server) resetFailedAttempts(ip string) {
 }
 
 func (s *Server) detectScanPattern(ip, pattern string) {
+	// Skip scan detection for private IPs
+	if s.isPrivateIP(ip) {
+		return
+	}
+
 	// Les patterns de scan automatique sont souvent identifiables
 	// et peuvent justifier un bannissement immédiat plus long
 	scanPatterns := []string{"no_auth", "immediate_disconnect", "connection_drop"}
@@ -865,4 +888,14 @@ func (s *Server) UnbanIP(ip string) {
 // RecordSecurityEvent records a security event
 func (s *Server) RecordSecurityEvent(eventType security.EventType, ip string, details map[string]string) {
 	s.securityTracker.RecordEvent(eventType, ip, details)
+}
+
+// isPrivateIP checks if an IP is private/local (Docker, localhost, RFC1918)
+func (s *Server) isPrivateIP(ip string) bool {
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return false
+	}
+	
+	return parsedIP.IsLoopback() || parsedIP.IsPrivate()
 }
