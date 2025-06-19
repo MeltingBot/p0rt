@@ -686,7 +686,7 @@ func (s *Server) monitorConnections(client *Client, channel ssh.Channel) {
 }
 
 // LogConnection envoie un log de connexion au client SSH
-func (s *Server) LogConnection(domain, clientIP, requestURL string) {
+func (s *Server) LogConnection(domain, clientIP, method, requestURL string) {
 	clientChan := make(chan *Client)
 
 	s.clientOps <- func() {
@@ -696,7 +696,9 @@ func (s *Server) LogConnection(domain, clientIP, requestURL string) {
 
 	client := <-clientChan
 	if client != nil && client.LogChannel != nil {
-		logMsg := fmt.Sprintf("%s %s", clientIP, requestURL)
+		// Create structured log with UTC timestamp, source IP, HTTP method, and path
+		timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+		logMsg := fmt.Sprintf("%s %s %s %s", timestamp, clientIP, method, requestURL)
 		select {
 		case client.LogChannel <- logMsg:
 		default:

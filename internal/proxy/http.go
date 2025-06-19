@@ -29,7 +29,7 @@ type HTTPProxy struct {
 
 type SSHServer interface {
 	GetClient(domain string) ClientWithPort
-	LogConnection(domain, clientIP, requestURL string)
+	LogConnection(domain, clientIP, method, requestURL string)
 	GetDomainStats() map[string]interface{}
 	RecordHTTPRequest(domain string, bytesIn, bytesOut int64)
 	RecordWebSocketUpgrade(domain string)
@@ -49,6 +49,30 @@ func (w *statsResponseWriter) Write(b []byte) (int, error) {
 	n, err := w.ResponseWriter.Write(b)
 	w.bytesWritten += int64(n)
 	return n, err
+}
+
+// extractClientIP extracts the real client IP from request headers
+func extractClientIP(r *http.Request) string {
+	clientIP := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		clientIP = forwarded
+	}
+	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
+		clientIP = realIP
+	}
+	// Remove port if present
+	if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
+		clientIP = clientIP[:idx]
+	}
+	return clientIP
+}
+
+// logStructured creates a structured log with timestamp, IP, method, path and message
+func logStructured(r *http.Request, message string, args ...interface{}) {
+	clientIP := extractClientIP(r)
+	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	formattedMessage := fmt.Sprintf(message, args...)
+	log.Printf("%s %s %s %s - %s", timestamp, clientIP, r.Method, r.URL.Path, formattedMessage)
 }
 
 func NewHTTPProxy(sshServer SSHServer) *HTTPProxy {
@@ -152,18 +176,7 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Logger la connexion pour le client SSH
-	clientIP := r.RemoteAddr
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		clientIP = forwarded
-	}
-	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-		clientIP = realIP
-	}
-
-	// Extraire juste l'IP sans le port
-	if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
-		clientIP = clientIP[:idx]
-	}
+	clientIP := extractClientIP(r)
 
 	// Construire l'URL de la requête
 	requestURL := r.URL.Path
@@ -208,7 +221,7 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	p.sshServer.LogConnection(domain, clientIP, requestURL)
+	p.sshServer.LogConnection(domain, clientIP, r.Method, requestURL)
 
 	if r.Header.Get("Upgrade") == "websocket" {
 		p.sshServer.RecordWebSocketUpgrade(domain)
@@ -225,7 +238,7 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Améliorer la gestion d'erreur pour éviter 521
 	proxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
-		log.Printf("Proxy error for %s: %v", host, err)
+		logStructured(req, "Proxy error: %v", err)
 		// Au lieu de retourner une erreur qui cause 521, servir notre page
 		p.serveConnectionErrorPage(rw, req, host, err)
 	}
@@ -264,7 +277,7 @@ func (p *HTTPProxy) handleWebSocket(w http.ResponseWriter, r *http.Request, targ
 
 	clientConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
+		logStructured(r, "WebSocket upgrade failed: %v", err)
 		return
 	}
 	defer clientConn.Close()
@@ -286,7 +299,7 @@ func (p *HTTPProxy) handleWebSocket(w http.ResponseWriter, r *http.Request, targ
 
 	targetConn, _, err := dialer.Dial(targetURL.String(), headers)
 	if err != nil {
-		log.Printf("Failed to connect to target WebSocket: %v", err)
+		logStructured(r, "Failed to connect to target WebSocket: %v", err)
 		return
 	}
 	defer targetConn.Close()

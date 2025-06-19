@@ -213,8 +213,8 @@ func (s *sshServerAdapter) GetClient(domain string) proxy.ClientWithPort {
 	return newClientPortAdapter(client)
 }
 
-func (s *sshServerAdapter) LogConnection(domain, clientIP, requestURL string) {
-	s.server.LogConnection(domain, clientIP, requestURL)
+func (s *sshServerAdapter) LogConnection(domain, clientIP, method, requestURL string) {
+	s.server.LogConnection(domain, clientIP, method, requestURL)
 }
 
 func (s *sshServerAdapter) GetDomainStats() map[string]interface{} {
