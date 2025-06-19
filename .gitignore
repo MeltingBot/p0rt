@@ -4,7 +4,16 @@
 *.dll
 *.so
 *.dylib
+
+# Build directory - all binaries should go here
+build/
+bin/
+
+# Binary files (in case they're not in build/)
 p0rt
+p0rt-*
+skytunnel
+skytunnel-*
 
 # Test binary, built with `go test -c`
 *.test
