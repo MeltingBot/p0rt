@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Documentation
+*.md
+docs/
+
+# Development
+.env
+.env.*
+.air.toml
+tmp/
+
+# Testing
+*_test.go
+testdata/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+
+# Build artifacts
+p0rt
+p0rt-*
+*.exe
+
+# Node modules (if any)
+node_modules/
+
+# Security keys (keep only in runtime)
+ssh_host_key*
+ssl/

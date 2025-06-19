@@ -39,6 +39,13 @@ ssh_host_key
 # Domain persistence data
 data/
 
+# Development tools config
+.air.toml
+
+# Local/production overrides
+docker-compose.override.yml
+config.prod.yaml
+
 # IDE specific files
 .idea/
 .vscode/
