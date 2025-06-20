@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/p0rt/p0rt/internal/api"
 	"github.com/p0rt/p0rt/internal/config"
 	"github.com/p0rt/p0rt/internal/domain"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -50,7 +50,7 @@ var reservationListCmd = &cobra.Command{
 	Long:    `Display all current domain reservations with their details.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
-		
+
 		if remoteURL != "" {
 			// Use remote API
 			listRemoteReservations(remoteURL, apiKey)
@@ -87,7 +87,7 @@ You can provide arguments either as positional parameters or using flags.`,
 	Args: cobra.MaximumNArgs(3),
 	Run: func(cmd *cobra.Command, args []string) {
 		var domain, fingerprint, comment string
-		
+
 		// Start with positional arguments
 		if len(args) >= 1 {
 			domain = args[0]
@@ -98,7 +98,7 @@ You can provide arguments either as positional parameters or using flags.`,
 		if len(args) >= 3 {
 			comment = args[2]
 		}
-		
+
 		// Override with flags if provided (flags take precedence)
 		if cmd.Flags().Changed("domain") {
 			domain = domainName
@@ -123,7 +123,7 @@ You can provide arguments either as positional parameters or using flags.`,
 		}
 
 		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
-		
+
 		if remoteURL != "" {
 			// Use remote API
 			addRemoteReservation(remoteURL, apiKey, domain, fingerprint, comment)
@@ -147,14 +147,14 @@ var reservationRemoveCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		domain := args[0]
-		
+
 		// Override with flag if provided
 		if domainName != "" {
 			domain = domainName
 		}
 
 		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
-		
+
 		if remoteURL != "" {
 			// Use remote API
 			removeRemoteReservation(remoteURL, apiKey, domain)
@@ -171,7 +171,7 @@ var reservationStatsCmd = &cobra.Command{
 	Long:  `Display statistics about domain reservations.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
-		
+
 		if remoteURL != "" {
 			// Use remote API
 			showRemoteReservationStats(remoteURL, apiKey)
@@ -184,7 +184,7 @@ var reservationStatsCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(reservationCmd)
-	
+
 	// Add subcommands
 	reservationCmd.AddCommand(reservationListCmd)
 	reservationCmd.AddCommand(reservationAddCmd)
@@ -297,7 +297,7 @@ func showLocalReservationStats() {
 // Remote reservation functions
 func listRemoteReservations(serverURL, apiKey string) {
 	client := api.NewClient(serverURL, apiKey)
-	
+
 	if err := client.Ping(); err != nil {
 		fmt.Printf("Error: Failed to connect to remote server at %s: %v\n", serverURL, err)
 		return
@@ -329,7 +329,7 @@ func listRemoteReservations(serverURL, apiKey string) {
 
 func addRemoteReservation(serverURL, apiKey, domain, fingerprint, comment string) {
 	client := api.NewClient(serverURL, apiKey)
-	
+
 	if err := client.Ping(); err != nil {
 		fmt.Printf("Error: Failed to connect to remote server at %s: %v\n", serverURL, err)
 		return
@@ -348,7 +348,7 @@ func addRemoteReservation(serverURL, apiKey, domain, fingerprint, comment string
 
 func removeRemoteReservation(serverURL, apiKey, domain string) {
 	client := api.NewClient(serverURL, apiKey)
-	
+
 	if err := client.Ping(); err != nil {
 		fmt.Printf("Error: Failed to connect to remote server at %s: %v\n", serverURL, err)
 		return
@@ -364,7 +364,7 @@ func removeRemoteReservation(serverURL, apiKey, domain string) {
 
 func showRemoteReservationStats(serverURL, apiKey string) {
 	client := api.NewClient(serverURL, apiKey)
-	
+
 	if err := client.Ping(); err != nil {
 		fmt.Printf("Error: Failed to connect to remote server at %s: %v\n", serverURL, err)
 		return
@@ -387,7 +387,7 @@ func showRemoteReservationStats(serverURL, apiKey string) {
 // Helper function to create local reservation manager
 func createLocalReservationManager(cfg *config.Config) (domain.ReservationManagerInterface, error) {
 	storageConfig := cfg.GetStorageConfig()
-	
+
 	switch storageConfig.Type {
 	case "redis":
 		return domain.NewRedisReservationManager(

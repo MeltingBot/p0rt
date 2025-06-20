@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # P0rt server in restricted mode (beta)
+  p0rt-restricted:
+    build: .
+    container_name: p0rt-restricted
+    environment:
+      - SSH_SERVER_PORT=2222
+      - HTTP_PORT=8080
+      - P0RT_AUTHORIZED_KEYS=/data/beta_keys.json
+      - P0RT_OPEN_ACCESS=false
+      - P0RT_VERBOSE=true
+    ports:
+      - "2222:2222"
+      - "8080:8080"
+    volumes:
+      - ./test_data:/data
+    networks:
+      - p0rt-test
+
+  # P0rt server in open mode
+  p0rt-open:
+    build: .
+    container_name: p0rt-open
+    environment:
+      - SSH_SERVER_PORT=2223
+      - HTTP_PORT=8081
+      - P0RT_OPEN_ACCESS=true
+      - P0RT_VERBOSE=true
+    ports:
+      - "2223:2223"
+      - "8081:8081"
+    networks:
+      - p0rt-test
+
+  # Test client with authorized key
+  test-client-authorized:
+    image: alpine:latest
+    container_name: test-authorized
+    command: |
+      sh -c "
+      apk add --no-cache openssh-client python3 &&
+      ssh-keygen -t rsa -b 2048 -f /root/.ssh/id_rsa -N '' -C 'authorized@test.com' &&
+      echo 'Authorized key fingerprint:' &&
+      ssh-keygen -lf /root/.ssh/id_rsa.pub &&
+      echo 'Waiting for servers to start...' &&
+      sleep 10 &&
+      echo 'Testing connection to RESTRICTED server (should succeed after key is added)...' &&
+      python3 -m http.server 8000 &
+      ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -R 443:localhost:8000 p0rt-restricted -p 2222 || echo 'Connection failed as expected - key not yet authorized'
+      "
+    volumes:
+      - ./test_data:/data
+    networks:
+      - p0rt-test
+    depends_on:
+      - p0rt-restricted
+
+  # Test client with unauthorized key
+  test-client-unauthorized:
+    image: alpine:latest
+    container_name: test-unauthorized
+    command: |
+      sh -c "
+      apk add --no-cache openssh-client &&
+      ssh-keygen -t rsa -b 2048 -f /root/.ssh/id_rsa -N '' -C 'unauthorized@test.com' &&
+      echo 'Unauthorized key fingerprint:' &&
+      ssh-keygen -lf /root/.ssh/id_rsa.pub &&
+      echo 'Waiting for servers to start...' &&
+      sleep 10 &&
+      echo 'Testing connection to RESTRICTED server (should fail)...' &&
+      ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -R 443:localhost:8000 p0rt-restricted -p 2222 || echo 'Connection failed as expected - unauthorized key' &&
+      echo 'Testing connection to OPEN server (should succeed)...' &&
+      ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -R 443:localhost:8000 p0rt-open -p 2223 || echo 'Unexpected failure on open server'
+      "
+    networks:
+      - p0rt-test
+    depends_on:
+      - p0rt-restricted
+      - p0rt-open
+
+networks:
+  p0rt-test:
+    driver: bridge

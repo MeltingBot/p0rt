@@ -34,7 +34,7 @@ func main() {
 		interactive       = flag.Bool("cli", false, "Start interactive CLI mode")
 		remoteURL         = flag.String("remote", "", "Remote server URL for API access (e.g., http://localhost:80)")
 		apiKey            = flag.String("api-key", "", "API key for remote server authentication")
-		
+
 		// Short form aliases for common options
 		serverShort      = flag.String("s", "", "Short form of -server")
 		reservationShort = flag.String("r", "", "Short form of -reservation")
@@ -359,7 +359,7 @@ func startServer(cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to create domain generator: %w", err)
 	}
-	
+
 	tcpManager := tcp.NewManager()
 
 	tcpManagerAdapter := &tcpManagerAdapter{manager: tcpManager}
@@ -370,7 +370,7 @@ func startServer(cfg *config.Config) error {
 	}
 
 	sshServerAdapter := &sshServerAdapter{server: sshServer, domainGen: domainGen}
-	
+
 	// Create HTTP proxy with API support
 	apiKey := os.Getenv("P0RT_API_KEY") // Optional API key from environment
 	if apiKey != "" {

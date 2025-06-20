@@ -82,32 +82,32 @@ func (c *Client) makeRequest(method, path string, body interface{}) ([]byte, err
 
 // APIReservationsResponse represents the response from the reservations API
 type APIReservationsResponse struct {
-	Success      bool                   `json:"success"`
-	Reservations []domain.Reservation   `json:"reservations"`
-	Count        int                    `json:"count"`
-	Timestamp    string                 `json:"timestamp"`
+	Success      bool                 `json:"success"`
+	Reservations []domain.Reservation `json:"reservations"`
+	Count        int                  `json:"count"`
+	Timestamp    string               `json:"timestamp"`
 }
 
 // APIReservationResponse represents the response from a single reservation API
 type APIReservationResponse struct {
-	Success     bool                 `json:"success"`
-	Reservation *domain.Reservation  `json:"reservation"`
-	Timestamp   string               `json:"timestamp"`
+	Success     bool                `json:"success"`
+	Reservation *domain.Reservation `json:"reservation"`
+	Timestamp   string              `json:"timestamp"`
 }
 
 // APIStatsResponse represents the response from the stats API
 type APIStatsResponse struct {
-	Success           bool                   `json:"success"`
-	GlobalStats       *stats.GlobalStats     `json:"global_stats"`
-	ReservationStats  map[string]interface{} `json:"reservation_stats"`
-	Timestamp         string                 `json:"timestamp"`
+	Success          bool                   `json:"success"`
+	GlobalStats      *stats.GlobalStats     `json:"global_stats"`
+	ReservationStats map[string]interface{} `json:"reservation_stats"`
+	Timestamp        string                 `json:"timestamp"`
 }
 
 // APITunnelStatsResponse represents the response from the tunnel stats API
 type APITunnelStatsResponse struct {
-	Success     bool                `json:"success"`
-	TunnelStats *stats.TunnelStats  `json:"tunnel_stats"`
-	Timestamp   string              `json:"timestamp"`
+	Success     bool               `json:"success"`
+	TunnelStats *stats.TunnelStats `json:"tunnel_stats"`
+	Timestamp   string             `json:"timestamp"`
 }
 
 // APIStatusResponse represents the response from the status API

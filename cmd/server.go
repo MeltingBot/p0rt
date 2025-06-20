@@ -8,13 +8,13 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/spf13/cobra"
 	"github.com/p0rt/p0rt/internal/config"
 	"github.com/p0rt/p0rt/internal/domain"
 	"github.com/p0rt/p0rt/internal/proxy"
 	"github.com/p0rt/p0rt/internal/security"
 	"github.com/p0rt/p0rt/internal/ssh"
 	"github.com/p0rt/p0rt/internal/tcp"
+	"github.com/spf13/cobra"
 
 	cryptossh "golang.org/x/crypto/ssh"
 )
@@ -74,14 +74,14 @@ var serverStatusCmd = &cobra.Command{
 		fmt.Printf("  Domain Base: %s\n", cfg.GetDomainBase())
 		fmt.Printf("  Storage Type: %s\n", cfg.Storage.Type)
 		fmt.Printf("  Reservations Enabled: %t\n", cfg.Domain.ReservationsEnabled)
-		
+
 		// Test if ports are available
 		if testPort(cfg.GetSSHPort()) {
 			fmt.Printf("  SSH Port Status: ✓ Available\n")
 		} else {
 			fmt.Printf("  SSH Port Status: ✗ In use\n")
 		}
-		
+
 		if testPort(cfg.GetHTTPPort()) {
 			fmt.Printf("  HTTP Port Status: ✓ Available\n")
 		} else {
@@ -101,7 +101,7 @@ var serverStopCmd = &cobra.Command{
 }
 
 var serverRestartCmd = &cobra.Command{
-	Use:   "restart", 
+	Use:   "restart",
 	Short: "Restart the P0rt server",
 	Long:  `Restart the P0rt server (not yet implemented).`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -111,7 +111,7 @@ var serverRestartCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(serverCmd)
-	
+
 	// Add subcommands
 	serverCmd.AddCommand(serverStartCmd)
 	serverCmd.AddCommand(serverStatusCmd)
@@ -210,13 +210,13 @@ func startServer(cfg *config.Config) error {
 
 	if !quiet {
 		fmt.Printf("Starting P0rt server...\n")
-		fmt.Printf("SSH: %s | HTTP: %s | Domain: %s\n", 
+		fmt.Printf("SSH: %s | HTTP: %s | Domain: %s\n",
 			cfg.GetSSHPort(), cfg.GetHTTPPort(), cfg.GetDomainBase())
 	}
 
 	// Create domain generator with storage configuration
 	storageConfig := cfg.GetStorageConfig()
-	
+
 	if verbose {
 		log.Printf("Storage Type: %s", storageConfig.Type)
 		if storageConfig.Type == "redis" {
@@ -236,7 +236,7 @@ func startServer(cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to create domain generator: %w", err)
 	}
-	
+
 	tcpManager := tcp.NewManager()
 	tcpManagerAdapter := &tcpManagerAdapter{manager: tcpManager}
 
@@ -246,7 +246,7 @@ func startServer(cfg *config.Config) error {
 	}
 
 	sshServerAdapter := &sshServerAdapter{server: sshServer, domainGen: domainGen}
-	
+
 	// Create HTTP proxy with API support
 	apiKey := os.Getenv("P0RT_API_KEY") // Optional API key from environment
 	if verbose {

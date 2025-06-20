@@ -71,7 +71,7 @@ func init() {
 		if configFile != "" {
 			os.Setenv("CONFIG_FILE", configFile)
 		}
-		
+
 		// Configure logging based on verbosity flags
 		setupLogging()
 	}

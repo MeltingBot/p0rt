@@ -20,10 +20,10 @@ type CLI struct {
 	config             *config.Config
 	reservationManager domain.ReservationManagerInterface
 	rl                 *readline.Instance
-	serverStartFunc    func() error // Function to start the server
+	serverStartFunc    func() error   // Function to start the server
 	statsManager       *stats.Manager // For displaying runtime stats when server is running
-	apiClient          *api.Client // For remote API access
-	useRemoteAPI       bool        // Whether to use remote API instead of local storage
+	apiClient          *api.Client    // For remote API access
+	useRemoteAPI       bool           // Whether to use remote API instead of local storage
 }
 
 // Command represents a CLI command
@@ -42,7 +42,7 @@ func NewCLI(cfg *config.Config) (*CLI, error) {
 // NewCLIWithRemoteAPI creates a new interactive CLI that uses remote API
 func NewCLIWithRemoteAPI(cfg *config.Config, serverURL, apiKey string) (*CLI, error) {
 	apiClient := api.NewClient(serverURL, apiKey)
-	
+
 	// Test connection
 	if err := apiClient.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to connect to remote API at %s: %v", serverURL, err)
@@ -58,11 +58,11 @@ func NewCLIWithRemoteAPI(cfg *config.Config, serverURL, apiKey string) (*CLI, er
 	// Setup readline with autocomplete
 	completer := cli.createCompleter()
 	rl, err := readline.NewEx(&readline.Config{
-		Prompt:          "p0rt> ",
-		HistoryFile:     "/tmp/p0rt_history",
-		AutoComplete:    completer,
-		InterruptPrompt: "^C",
-		EOFPrompt:       "exit",
+		Prompt:            "p0rt> ",
+		HistoryFile:       "/tmp/p0rt_history",
+		AutoComplete:      completer,
+		InterruptPrompt:   "^C",
+		EOFPrompt:         "exit",
 		HistorySearchFold: true,
 	})
 	if err != nil {
@@ -106,11 +106,11 @@ func NewCLIWithServerFunc(cfg *config.Config, serverStartFunc func() error) (*CL
 	// Setup readline with autocomplete
 	completer := cli.createCompleter()
 	rl, err := readline.NewEx(&readline.Config{
-		Prompt:          "p0rt> ",
-		HistoryFile:     "/tmp/p0rt_history",
-		AutoComplete:    completer,
-		InterruptPrompt: "^C",
-		EOFPrompt:       "exit",
+		Prompt:            "p0rt> ",
+		HistoryFile:       "/tmp/p0rt_history",
+		AutoComplete:      completer,
+		InterruptPrompt:   "^C",
+		EOFPrompt:         "exit",
 		HistorySearchFold: true,
 	})
 	if err != nil {
@@ -372,7 +372,7 @@ func (c *CLI) showReservationStats() error {
 func (c *CLI) showStats() error {
 	fmt.Println("=== P0rt System Statistics ===")
 	fmt.Println()
-	
+
 	if c.useRemoteAPI {
 		// Get stats from remote API
 		statsResponse, err := c.apiClient.GetStats()
@@ -405,7 +405,7 @@ func (c *CLI) showStats() error {
 					if i >= 5 { // Limit to top 5
 						break
 					}
-					fmt.Printf("  %d. %s - %d requests (%s in, %s out)\n", 
+					fmt.Printf("  %d. %s - %d requests (%s in, %s out)\n",
 						i+1, domain.Domain, domain.TotalRequests,
 						stats.FormatBytes(domain.BytesIn), stats.FormatBytes(domain.BytesOut))
 				}
@@ -444,7 +444,7 @@ func (c *CLI) showStats() error {
 	// Runtime Statistics (only if server is running and statsManager is available)
 	if c.statsManager != nil {
 		globalStats := c.statsManager.GetGlobalStats()
-		
+
 		fmt.Println("Server Statistics:")
 		fmt.Printf("  Uptime: %s\n", globalStats.Uptime)
 		fmt.Printf("  Active Tunnels: %d\n", globalStats.ActiveTunnels)
@@ -462,7 +462,7 @@ func (c *CLI) showStats() error {
 				if i >= 5 { // Limit to top 5
 					break
 				}
-				fmt.Printf("  %d. %s - %d requests (%s in, %s out)\n", 
+				fmt.Printf("  %d. %s - %d requests (%s in, %s out)\n",
 					i+1, domain.Domain, domain.TotalRequests,
 					stats.FormatBytes(domain.BytesIn), stats.FormatBytes(domain.BytesOut))
 			}

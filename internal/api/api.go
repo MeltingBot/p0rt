@@ -66,7 +66,7 @@ func (h *Handler) authenticateRequest(r *http.Request) bool {
 	}
 
 	providedKey := ""
-	
+
 	// Check API key in header
 	if headerKey := r.Header.Get("X-API-Key"); headerKey != "" {
 		providedKey = headerKey
@@ -85,10 +85,10 @@ func (h *Handler) authenticateRequest(r *http.Request) bool {
 
 	// Log authentication failure only in verbose mode
 	if os.Getenv("P0RT_VERBOSE") == "true" {
-		log.Printf("API Authentication failed: expected=%s, provided=%s, from=%s", 
+		log.Printf("API Authentication failed: expected=%s, provided=%s, from=%s",
 			h.apiKey, providedKey, r.RemoteAddr)
 	}
-	
+
 	return false
 }
 
@@ -150,10 +150,10 @@ func (h *Handler) handleReservations(w http.ResponseWriter, r *http.Request) {
 		}
 
 		writeJSON(w, http.StatusCreated, map[string]interface{}{
-			"success":    true,
-			"message":    fmt.Sprintf("Reservation created for domain %s", req.Domain),
-			"domain":     req.Domain,
-			"timestamp":  time.Now().Format(time.RFC3339),
+			"success":   true,
+			"message":   fmt.Sprintf("Reservation created for domain %s", req.Domain),
+			"domain":    req.Domain,
+			"timestamp": time.Now().Format(time.RFC3339),
 		})
 
 	default:
@@ -285,10 +285,10 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	status := map[string]interface{}{
-		"success":    true,
-		"service":    "p0rt",
-		"version":    "1.0.0",
-		"timestamp":  time.Now().Format(time.RFC3339),
+		"success":     true,
+		"service":     "p0rt",
+		"version":     "1.0.0",
+		"timestamp":   time.Now().Format(time.RFC3339),
 		"api_version": "v1",
 	}
 
@@ -328,9 +328,9 @@ func (h *Handler) handleSecurityStats(w http.ResponseWriter, r *http.Request) {
 			"authentication_failures": 0,
 			"blocked_ips_count":       0,
 			"scanning_attempts":       0,
-			"abuse_reports":          0,
-			"last_24h_failures":      0,
-			"geographic_blocks":      map[string]int{},
+			"abuse_reports":           0,
+			"last_24h_failures":       0,
+			"geographic_blocks":       map[string]int{},
 			"ban_reasons": map[string]int{
 				"brute_force": 0,
 				"scanning":    0,
@@ -341,9 +341,9 @@ func (h *Handler) handleSecurityStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success":         true,
-		"security_stats":  securityStats,
-		"timestamp":       time.Now().Format(time.RFC3339),
+		"success":        true,
+		"security_stats": securityStats,
+		"timestamp":      time.Now().Format(time.RFC3339),
 		"note":           note,
 	})
 }
@@ -383,10 +383,10 @@ func (h *Handler) handleSecurityBans(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success":     true,
-		"banned_ips":  bannedIPs,
-		"total_bans":  banCount,
-		"timestamp":   time.Now().Format(time.RFC3339),
+		"success":    true,
+		"banned_ips": bannedIPs,
+		"total_bans": banCount,
+		"timestamp":  time.Now().Format(time.RFC3339),
 		"note":       note,
 	})
 }

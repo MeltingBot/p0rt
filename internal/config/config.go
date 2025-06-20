@@ -27,7 +27,7 @@ type HTTPServerConfig struct {
 }
 
 type DomainConfig struct {
-	Base               string `yaml:"base"`
+	Base                string `yaml:"base"`
 	ReservationsEnabled bool   `yaml:"reservations_enabled"`
 }
 

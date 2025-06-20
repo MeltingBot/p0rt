@@ -16,10 +16,10 @@ func TestCheckDomain(t *testing.T) {
 	}{
 		{"whale-guitar-fox", true, ""},
 		{"phishing-test-site", true, ""},  // Content filtering disabled
-		{"virus-download-site", true, ""},  // Content filtering disabled
+		{"virus-download-site", true, ""}, // Content filtering disabled
 		{"legitimate-domain", true, ""},
-		{"malware-central", true, ""},      // Content filtering disabled
-		{"spam-generator", true, ""},       // Content filtering disabled
+		{"malware-central", true, ""}, // Content filtering disabled
+		{"spam-generator", true, ""},  // Content filtering disabled
 		{"normal-app-demo", true, ""},
 	}
 
@@ -46,9 +46,9 @@ func TestAnalyzeHTTPRequest(t *testing.T) {
 		expected  bool
 	}{
 		{"test", "/api/users", "Mozilla/5.0", "", true},
-		{"test", "/login", "Mozilla/5.0", "", true},          // Content filtering disabled
+		{"test", "/login", "Mozilla/5.0", "", true}, // Content filtering disabled
 		{"test", "/", "Mozilla/5.0", "", true},
-		{"test", "/verify-account", "Bot", "", true},         // Content filtering disabled
+		{"test", "/verify-account", "Bot", "", true},        // Content filtering disabled
 		{"test", "/casino-winner", "Mozilla/5.0", "", true}, // Content filtering disabled
 		{"test", "/dashboard", "Normal browser", "", true},
 	}

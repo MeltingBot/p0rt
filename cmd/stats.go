@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/p0rt/p0rt/internal/api"
 	"github.com/p0rt/p0rt/internal/config"
 	"github.com/p0rt/p0rt/internal/stats"
+	"github.com/spf13/cobra"
 )
 
 // statsCmd represents the stats command
@@ -32,7 +32,7 @@ If a domain is specified, shows detailed statistics for that specific tunnel.`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
-		
+
 		var domain string
 		if len(args) > 0 {
 			domain = args[0]
@@ -70,7 +70,7 @@ func showLocalStats() {
 
 	fmt.Println("=== P0rt System Statistics ===")
 	fmt.Println()
-	
+
 	// Configuration Statistics
 	fmt.Println("Configuration:")
 	fmt.Printf("  Storage Type: %s\n", cfg.Storage.Type)
@@ -98,7 +98,7 @@ func showLocalStats() {
 
 func showRemoteStats(serverURL, apiKey string) {
 	client := api.NewClient(serverURL, apiKey)
-	
+
 	if err := client.Ping(); err != nil {
 		fmt.Printf("Error: Failed to connect to remote server at %s: %v\n", serverURL, err)
 		return
@@ -137,7 +137,7 @@ func showRemoteStats(serverURL, apiKey string) {
 				if i >= 5 { // Limit to top 5
 					break
 				}
-				fmt.Printf("  %d. %s - %d requests (%s in, %s out)\n", 
+				fmt.Printf("  %d. %s - %d requests (%s in, %s out)\n",
 					i+1, domain.Domain, domain.TotalRequests,
 					stats.FormatBytes(domain.BytesIn), stats.FormatBytes(domain.BytesOut))
 			}
@@ -159,7 +159,7 @@ func showRemoteStats(serverURL, apiKey string) {
 
 func showRemoteDomainStats(serverURL, apiKey, domain string) {
 	client := api.NewClient(serverURL, apiKey)
-	
+
 	if err := client.Ping(); err != nil {
 		fmt.Printf("Error: Failed to connect to remote server at %s: %v\n", serverURL, err)
 		return

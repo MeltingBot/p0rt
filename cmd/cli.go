@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/spf13/cobra"
 	"github.com/p0rt/p0rt/internal/cli"
 	"github.com/p0rt/p0rt/internal/config"
+	"github.com/spf13/cobra"
 )
 
 // cliCmd represents the cli command

@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/p0rt/p0rt/internal/auth"
 	"github.com/p0rt/p0rt/internal/domain"
 	"github.com/p0rt/p0rt/internal/security"
 	"github.com/p0rt/p0rt/internal/stats"
@@ -32,6 +33,7 @@ type Client struct {
 	Requests     <-chan *ssh.Request
 	Key          string
 	LogChannel   chan string
+	KeyAccess    *auth.KeyAccess // Store key access info
 }
 
 type Server struct {
@@ -46,6 +48,7 @@ type Server struct {
 	baseDomain      string
 	statsManager    *stats.Manager
 	securityTracker *security.SecurityTracker
+	keyStore        *auth.KeyStore // SSH key allowlist
 
 	// Protection anti-bruteforce (legacy - will be replaced by SecurityTracker)
 	failedAttempts map[string]int
@@ -64,6 +67,22 @@ type TCPManager interface {
 }
 
 func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManager TCPManager, baseDomain string) (*Server, error) {
+	// Load key store
+	keysFile := os.Getenv("P0RT_AUTHORIZED_KEYS")
+	if keysFile == "" {
+		keysFile = "authorized_keys.json"
+	}
+
+	statsManager := stats.NewManager()
+	keyStore := auth.NewKeyStore(keysFile)
+	
+	// Set access mode in stats based on key store configuration
+	if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
+		statsManager.SetAccessMode("open")
+	} else {
+		statsManager.SetAccessMode("restricted")
+	}
+
 	server := &Server{
 		clients:         make(map[string]*Client),
 		clientOps:       make(chan func(), 100),
@@ -73,8 +92,9 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 		abuseMonitor:    security.NewAbuseMonitor(),
 		customValidator: domain.NewCustomDomainValidator(baseDomain),
 		baseDomain:      baseDomain,
-		statsManager:    stats.NewManager(),
+		statsManager:    statsManager,
 		securityTracker: security.NewSecurityTracker("./data/security"),
+		keyStore:        keyStore,
 		failedAttempts:  make(map[string]int),
 		bannedIPs:       make(map[string]time.Time),
 	}
@@ -96,6 +116,20 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 				return nil, fmt.Errorf("IP banned")
 			}
 
+			// Check if key is in allowlist
+			allowed, keyAccess := server.keyStore.IsKeyAllowed(key)
+			if !allowed {
+				fingerprint := ssh.FingerprintSHA256(key)
+				log.Printf("Unauthorized key attempted connection: %s from %s", fingerprint, clientIP)
+				if !server.isPrivateIP(clientIP) {
+					server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
+						"reason":      "unauthorized_key",
+						"fingerprint": fingerprint,
+					})
+				}
+				return nil, fmt.Errorf("unauthorized key")
+			}
+
 			keyData := base64.StdEncoding.EncodeToString(key.Marshal())
 
 			// Vérifier les limites de connexion pour cette clé SSH (skip for private IPs)
@@ -103,7 +137,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 			if !server.abuseMonitor.CheckConnectionRate(keyHash) {
 				if !server.isPrivateIP(clientIP) {
 					server.securityTracker.RecordEvent(security.EventRateLimitHit, clientIP, map[string]string{
-						"reason":  "connection_rate_limit",
+						"reason":   "connection_rate_limit",
 						"key_hash": keyHash[:8],
 					})
 				}
@@ -111,17 +145,29 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 				return nil, fmt.Errorf("connection rate limit exceeded")
 			}
 
-			// Log successful authentication (we could add a success event type if needed)
+			// Log successful authentication with tier info
+			tierInfo := "open"
+			if keyAccess != nil {
+				tierInfo = keyAccess.Tier
+			}
 			if os.Getenv("P0RT_VERBOSE") == "true" {
-				log.Printf("Successful SSH authentication from %s (key: %s)", clientIP, keyHash[:8])
+				log.Printf("Successful SSH authentication from %s (key: %s, tier: %s)", clientIP, keyHash[:8], tierInfo)
 			}
 
-			return &ssh.Permissions{
+			permissions := &ssh.Permissions{
 				Extensions: map[string]string{
 					"public-key": keyData,
 					"key-hash":   keyHash,
 				},
-			}, nil
+			}
+
+			// Store tier info in permissions for later use
+			if keyAccess != nil {
+				permissions.Extensions["tier"] = keyAccess.Tier
+				permissions.Extensions["key-comment"] = keyAccess.Comment
+			}
+
+			return permissions, nil
 		},
 		// Track authentication failures
 		NoClientAuthCallback: func(conn ssh.ConnMetadata) (*ssh.Permissions, error) {
@@ -129,7 +175,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 			if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
 				clientIP = clientIP[:idx]
 			}
-			
+
 			// Skip tracking for private IPs
 			if !server.isPrivateIP(clientIP) {
 				server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
@@ -137,7 +183,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 					"user":   conn.User(),
 				})
 			}
-			
+
 			return nil, fmt.Errorf("public key authentication required")
 		},
 	}
@@ -224,14 +270,14 @@ func (s *Server) handleConnection(netConn net.Conn) {
 		s.bannedIPs[clientIP] = time.Now().Add(24 * time.Hour)
 		s.failedMutex.Unlock()
 		s.abuseMonitor.ReportAbuse("ssh-blacklist", clientIP, "Known malicious IP from blacklist")
-		
+
 		// Record in SecurityTracker
 		s.securityTracker.RecordEvent(security.EventAbuseReport, clientIP, map[string]string{
-			"reason":  "known_malicious_ip",
-			"action":  "blocked_and_banned_24h",
-			"type":    "blacklist",
+			"reason": "known_malicious_ip",
+			"action": "blocked_and_banned_24h",
+			"type":   "blacklist",
 		})
-		
+
 		netConn.Close()
 		return
 	}
@@ -283,12 +329,32 @@ func (s *Server) handleConnection(netConn net.Conn) {
 
 	publicKey := sshConn.Permissions.Extensions["public-key"]
 
+	// Create client with key access info
 	client := &Client{
 		Conn:       sshConn,
 		Channels:   chans,
 		Requests:   reqs,
 		Key:        publicKey,
 		LogChannel: make(chan string, 100),
+	}
+
+	// Get key access info from permissions
+	if _, ok := sshConn.Permissions.Extensions["tier"]; ok {
+		// Parse the public key to get fingerprint
+		keyData, err := base64.StdEncoding.DecodeString(publicKey)
+		if err == nil {
+			pubKey, err := ssh.ParsePublicKey(keyData)
+			if err == nil {
+				fingerprint := ssh.FingerprintSHA256(pubKey)
+				keys := s.keyStore.ListKeys()
+				for _, access := range keys {
+					if access.Fingerprint == fingerprint {
+						client.KeyAccess = access
+						break
+					}
+				}
+			}
+		}
 	}
 
 	// S'assurer que le client est supprimé à la déconnexion
@@ -514,6 +580,15 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 				channel.Write([]byte("\033[2J\033[H")) // Clear screen and move cursor to home
 				channel.Write([]byte("P0rt Tunnel Connected\r\n"))
 
+				// Show tier information if available
+				if client.KeyAccess != nil {
+					tierMsg := fmt.Sprintf("Access Tier: %s", strings.ToUpper(client.KeyAccess.Tier))
+					if client.KeyAccess.Comment != "" {
+						tierMsg += fmt.Sprintf(" (%s)", client.KeyAccess.Comment)
+					}
+					channel.Write([]byte(fmt.Sprintf("%s\r\n", tierMsg)))
+				}
+
 				// Determine the full URL based on domain type
 				var tunnelURL string
 				if strings.Contains(domain, ".") {
@@ -615,10 +690,10 @@ func (s *Server) removeClient(domain string) {
 				}
 			}
 			delete(s.clients, domain)
-			
+
 			// Record tunnel disconnection statistics
 			s.statsManager.TunnelDisconnected(domain)
-			
+
 			log.Printf("Client disconnected: %s", domain)
 		}
 		done <- true
@@ -770,7 +845,7 @@ func (s *Server) recordFailedAttempt(ip string) {
 
 		// Reporter à l'AbuseMonitor pour tracking
 		s.abuseMonitor.ReportAbuse("ssh-bruteforce", ip, fmt.Sprintf("SSH bruteforce: %d attempts", attempts))
-		
+
 		// Also report to SecurityTracker for unified tracking
 		s.securityTracker.RecordEvent(security.EventBruteForce, ip, map[string]string{
 			"attempts": fmt.Sprintf("%d", attempts),
@@ -811,12 +886,12 @@ func (s *Server) detectScanPattern(ip, pattern string) {
 
 			// Reporter comme tentative de scan
 			s.abuseMonitor.ReportAbuse("ssh-scan", ip, fmt.Sprintf("Automated scan detected: %s", pattern))
-			
+
 			// Also report to SecurityTracker with abuse report
 			s.securityTracker.RecordEvent(security.EventAbuseReport, ip, map[string]string{
-				"pattern":  pattern,
-				"action":   "auto_banned_6h",
-				"type":     "ssh_scan",
+				"pattern": pattern,
+				"action":  "auto_banned_6h",
+				"type":    "ssh_scan",
 			})
 			return
 		}
@@ -898,6 +973,6 @@ func (s *Server) isPrivateIP(ip string) bool {
 	if parsedIP == nil {
 		return false
 	}
-	
+
 	return parsedIP.IsLoopback() || parsedIP.IsPrivate()
 }

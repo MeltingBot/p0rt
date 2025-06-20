@@ -28,9 +28,14 @@ type DomainRecord struct {
 
 // NewDomainStore creates a new domain store
 func NewDomainStore(dataDir string) (*DomainStore, error) {
+	// Use default data directory if empty
+	if dataDir == "" {
+		dataDir = "./data"
+	}
+	
 	// Ensure data directory exists
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create data directory: %w", err)
+		return nil, fmt.Errorf("failed to create data directory '%s': %w", dataDir, err)
 	}
 
 	filePath := filepath.Join(dataDir, "domains.json")

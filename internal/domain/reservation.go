@@ -29,8 +29,13 @@ type Reservation struct {
 
 // NewReservationManager creates a new reservation manager
 func NewReservationManager(dataDir string) (*ReservationManager, error) {
+	// Use default data directory if empty
+	if dataDir == "" {
+		dataDir = "./data"
+	}
+	
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create data directory: %w", err)
+		return nil, fmt.Errorf("failed to create data directory '%s': %w", dataDir, err)
 	}
 
 	rm := &ReservationManager{

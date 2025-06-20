@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # Construire l'application avec la nouvelle structure
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o p0rt cmd/main/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o p0rt cmd/server/main.go
 
 # Image de production
 FROM alpine:latest AS production
@@ -47,7 +47,7 @@ EXPOSE 22 80
 USER p0rt
 
 # Commande par défaut
-CMD ["./p0rt", "server", "start"]
+CMD ["./p0rt", "-server", "start"]
 
 # Image de développement
 FROM builder AS development

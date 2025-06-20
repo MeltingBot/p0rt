@@ -8,7 +8,7 @@ import (
 
 // Manager handles statistics collection and reporting
 type Manager struct {
-	mu                    sync.RWMutex
+	mu                   sync.RWMutex
 	startTime            time.Time
 	activeTunnels        int
 	totalTunnels         int64
@@ -17,31 +17,33 @@ type Manager struct {
 	httpRequests         int64
 	websocketConnections int64
 	tunnelDomains        map[string]*TunnelStats
+	accessMode           string // "open" or "restricted"
 }
 
 // TunnelStats represents statistics for a specific tunnel/domain
 type TunnelStats struct {
-	Domain               string    `json:"domain"`
-	CreatedAt           time.Time `json:"created_at"`
-	LastActivity        time.Time `json:"last_activity"`
-	TotalRequests       int64     `json:"total_requests"`
-	BytesIn             int64     `json:"bytes_in"`
-	BytesOut            int64     `json:"bytes_out"`
-	WebSocketUpgrades   int64     `json:"websocket_upgrades"`
-	ActiveConnections   int       `json:"active_connections"`
+	Domain            string    `json:"domain"`
+	CreatedAt         time.Time `json:"created_at"`
+	LastActivity      time.Time `json:"last_activity"`
+	TotalRequests     int64     `json:"total_requests"`
+	BytesIn           int64     `json:"bytes_in"`
+	BytesOut          int64     `json:"bytes_out"`
+	WebSocketUpgrades int64     `json:"websocket_upgrades"`
+	ActiveConnections int       `json:"active_connections"`
 }
 
 // GlobalStats represents overall system statistics
 type GlobalStats struct {
-	Uptime               string            `json:"uptime"`
-	ActiveTunnels        int               `json:"active_tunnels"`
-	TotalTunnels         int64             `json:"total_tunnels"`
-	TotalConnections     int64             `json:"total_connections"`
-	BytesTransferred     int64             `json:"bytes_transferred"`
-	HTTPRequests         int64             `json:"http_requests"`
-	WebSocketConnections int64             `json:"websocket_connections"`
-	TopDomains           []*TunnelStats    `json:"top_domains"`
-	RecentActivity       []ActivityEntry   `json:"recent_activity"`
+	Uptime               string          `json:"uptime"`
+	ActiveTunnels        int             `json:"active_tunnels"`
+	TotalTunnels         int64           `json:"total_tunnels"`
+	TotalConnections     int64           `json:"total_connections"`
+	BytesTransferred     int64           `json:"bytes_transferred"`
+	HTTPRequests         int64           `json:"http_requests"`
+	WebSocketConnections int64           `json:"websocket_connections"`
+	TopDomains           []*TunnelStats  `json:"top_domains"`
+	RecentActivity       []ActivityEntry `json:"recent_activity"`
+	AccessMode           string          `json:"access_mode"` // "open" or "restricted"
 }
 
 // ActivityEntry represents a recent activity log entry
@@ -57,7 +59,15 @@ func NewManager() *Manager {
 	return &Manager{
 		startTime:     time.Now(),
 		tunnelDomains: make(map[string]*TunnelStats),
+		accessMode:    "restricted", // Default, will be updated by server
 	}
+}
+
+// SetAccessMode sets the access mode (open or restricted)
+func (m *Manager) SetAccessMode(mode string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.accessMode = mode
 }
 
 // TunnelConnected records a new tunnel connection
@@ -181,6 +191,7 @@ func (m *Manager) GetGlobalStats() *GlobalStats {
 		HTTPRequests:         m.httpRequests,
 		WebSocketConnections: m.websocketConnections,
 		TopDomains:           topDomains,
+		AccessMode:           m.accessMode,
 	}
 }
 
@@ -192,14 +203,14 @@ func (m *Manager) GetTunnelStats(domain string) *TunnelStats {
 	if stats, exists := m.tunnelDomains[domain]; exists {
 		// Return a copy to avoid data races
 		return &TunnelStats{
-			Domain:              stats.Domain,
-			CreatedAt:          stats.CreatedAt,
-			LastActivity:       stats.LastActivity,
-			TotalRequests:      stats.TotalRequests,
-			BytesIn:            stats.BytesIn,
-			BytesOut:           stats.BytesOut,
-			WebSocketUpgrades:  stats.WebSocketUpgrades,
-			ActiveConnections:  stats.ActiveConnections,
+			Domain:            stats.Domain,
+			CreatedAt:         stats.CreatedAt,
+			LastActivity:      stats.LastActivity,
+			TotalRequests:     stats.TotalRequests,
+			BytesIn:           stats.BytesIn,
+			BytesOut:          stats.BytesOut,
+			WebSocketUpgrades: stats.WebSocketUpgrades,
+			ActiveConnections: stats.ActiveConnections,
 		}
 	}
 	return nil

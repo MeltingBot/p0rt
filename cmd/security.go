@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/spf13/cobra"
 	"github.com/p0rt/p0rt/internal/api"
+	"github.com/spf13/cobra"
 )
 
 // securityCmd represents the security command
@@ -34,7 +34,7 @@ var securityStatsCmd = &cobra.Command{
 	Long:  `Display security statistics including authentication failures, blocked IPs, and abuse reports.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
-		
+
 		if remoteURL != "" {
 			showRemoteSecurityStats(remoteURL, apiKey)
 		} else {
@@ -51,7 +51,7 @@ var securityBansCmd = &cobra.Command{
 	Long:  `Display currently banned IP addresses and blocking statistics.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
-		
+
 		if remoteURL != "" {
 			showRemoteBanInfo(remoteURL, apiKey)
 		} else {
@@ -64,7 +64,7 @@ var securityBansCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(securityCmd)
-	
+
 	// Add subcommands
 	securityCmd.AddCommand(securityStatsCmd)
 	securityCmd.AddCommand(securityBansCmd)
@@ -72,7 +72,7 @@ func init() {
 
 func showRemoteSecurityStats(serverURL, apiKey string) {
 	client := api.NewClient(serverURL, apiKey)
-	
+
 	if err := client.Ping(); err != nil {
 		fmt.Printf("Error: Failed to connect to remote server at %s: %v\n", serverURL, err)
 		return
@@ -135,7 +135,7 @@ func showRemoteSecurityStats(serverURL, apiKey string) {
 
 func showRemoteBanInfo(serverURL, apiKey string) {
 	client := api.NewClient(serverURL, apiKey)
-	
+
 	if err := client.Ping(); err != nil {
 		fmt.Printf("Error: Failed to connect to remote server at %s: %v\n", serverURL, err)
 		return
@@ -162,13 +162,13 @@ func showRemoteBanInfo(serverURL, apiKey string) {
 	} else {
 		fmt.Printf("Banned IPs: %d total\n", len(bannedIPs))
 		fmt.Println()
-		
+
 		for i, banInfo := range bannedIPs {
 			if i >= 10 { // Limit display to 10 most recent
 				fmt.Printf("... and %d more banned IPs\n", len(bannedIPs)-10)
 				break
 			}
-			
+
 			if ip, ok := banInfo["ip"].(string); ok {
 				fmt.Printf("  %s", ip)
 				if reason, ok := banInfo["reason"].(string); ok {
@@ -181,7 +181,7 @@ func showRemoteBanInfo(serverURL, apiKey string) {
 			}
 		}
 	}
-	
+
 	fmt.Println()
 	fmt.Println("💡 Note: Ban tracking is basic. Enhanced security monitoring")
 	fmt.Println("   can be implemented in the SSH server for automatic blocking.")
