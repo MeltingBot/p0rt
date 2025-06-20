@@ -756,11 +756,11 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
                     </p>
                     <div class="flex gap-6 text-gray-400">
                         <div>
-                            <div class="text-2xl text-cyan-400 font-bold">< 50ms</div>
+                            <div class="text-2xl text-cyan-400 font-bold">&lt; 50ms</div>
                             <div class="text-sm">Latency</div>
                         </div>
                         <div>
-                            <div class="text-2xl text-cyan-400 font-bold">99.9%</div>
+                            <div class="text-2xl text-cyan-400 font-bold">99.9%%</div>
                             <div class="text-sm">Uptime</div>
                         </div>
                     </div>
