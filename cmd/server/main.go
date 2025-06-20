@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"log"
@@ -8,8 +9,10 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/p0rt/p0rt/internal/api"
+	"github.com/p0rt/p0rt/internal/auth"
 	"github.com/p0rt/p0rt/internal/cli"
 	"github.com/p0rt/p0rt/internal/config"
 	"github.com/p0rt/p0rt/internal/domain"
@@ -27,6 +30,7 @@ func main() {
 	var (
 		serverAction      = flag.String("server", "", "Server action: start, stop, restart, status")
 		reservationAction = flag.String("reservation", "", "Reservation action: add, remove, list, stats")
+		keyAction         = flag.String("key", "", "SSH key management: add, remove, list, import, activate, deactivate")
 		domainName        = flag.String("domain", "", "Domain name for reservation operations")
 		fingerprint       = flag.String("fingerprint", "", "SSH key fingerprint for reservations")
 		comment           = flag.String("comment", "", "Comment for reservation")
@@ -34,10 +38,20 @@ func main() {
 		interactive       = flag.Bool("cli", false, "Start interactive CLI mode")
 		remoteURL         = flag.String("remote", "", "Remote server URL for API access (e.g., http://localhost:80)")
 		apiKey            = flag.String("api-key", "", "API key for remote server authentication")
+		
+		// SSH key management specific flags
+		keyFile           = flag.String("key-file", "", "SSH public key file to add")
+		keyString         = flag.String("key-string", "", "SSH public key string")
+		keyFingerprint    = flag.String("key-fingerprint", "", "SSH key fingerprint to add (simpler than key file)")
+		tier              = flag.String("tier", "free", "Access tier: beta, free, premium, vip")
+		importFile        = flag.String("import-file", "", "File to import keys from (authorized_keys format)")
+		expires           = flag.String("expires", "", "Expiration date (RFC3339 format)")
+		keysFile          = flag.String("keys-file", "", "Path to authorized keys file")
 
 		// Short form aliases for common options
 		serverShort      = flag.String("s", "", "Short form of -server")
 		reservationShort = flag.String("r", "", "Short form of -reservation")
+		keyShort         = flag.String("K", "", "Short form of -key")
 		domainShort      = flag.String("d", "", "Short form of -domain")
 		fingerprintShort = flag.String("f", "", "Short form of -fingerprint")
 		commentShort     = flag.String("c", "", "Short form of -comment")
@@ -54,6 +68,9 @@ func main() {
 	}
 	if *reservationShort != "" {
 		*reservationAction = *reservationShort
+	}
+	if *keyShort != "" {
+		*keyAction = *keyShort
 	}
 	if *domainShort != "" {
 		*domainName = *domainShort
@@ -138,6 +155,12 @@ func main() {
 		return
 	}
 
+	// Handle SSH key commands
+	if *keyAction != "" {
+		handleKeyCommand(*keyAction, *keyFile, *keyString, *keyFingerprint, *comment, *tier, *fingerprint, *importFile, *expires, *keysFile)
+		return
+	}
+
 	// Default action: show help
 	showHelp()
 }
@@ -152,13 +175,23 @@ func showHelp() {
 	fmt.Println("Options:")
 	fmt.Println("  -s, -server <action>        Server management (start, stop, restart, status)")
 	fmt.Println("  -r, -reservation <action>   Domain reservation management (add, remove, list, stats)")
+	fmt.Println("  -K, -key <action>           SSH key management (add, remove, list, import, activate, deactivate)")
 	fmt.Println("  -d, -domain <name>          Domain name for reservation operations")
-	fmt.Println("  -f, -fingerprint <fp>       SSH key fingerprint for reservations")
-	fmt.Println("  -c, -comment <text>         Comment for reservation")
+	fmt.Println("  -f, -fingerprint <fp>       SSH key fingerprint for reservations/keys")
+	fmt.Println("  -c, -comment <text>         Comment for reservation/key")
 	fmt.Println("  -C, -config <file>          Path to configuration file")
 	fmt.Println("  -i, -cli                    Start interactive CLI mode")
 	fmt.Println("  -R, -remote <url>           Remote server URL for API access")
 	fmt.Println("  -k, -api-key <key>          API key for remote server authentication")
+	fmt.Println()
+	fmt.Println("SSH Key Management Options:")
+	fmt.Println("  --key-file <file>           SSH public key file to add")
+	fmt.Println("  --key-string <key>          SSH public key string")
+	fmt.Println("  --key-fingerprint <fp>      SSH key fingerprint to add (simpler)")
+	fmt.Println("  --tier <tier>               Access tier (beta, free, premium, vip)")
+	fmt.Println("  --import-file <file>        File to import keys from (authorized_keys format)")
+	fmt.Println("  --expires <date>            Expiration date (RFC3339 format)")
+	fmt.Println("  --keys-file <file>          Path to authorized keys file")
 	fmt.Println()
 	fmt.Println("Local Examples:")
 	fmt.Println("  p0rt -s start                           # Start the server")
@@ -166,6 +199,10 @@ func showHelp() {
 	fmt.Println("  p0rt -i                                 # Interactive mode (local)")
 	fmt.Println("  p0rt -r list                            # List domain reservations (local)")
 	fmt.Println("  p0rt -r add -d happy-cat-jump -f SHA256:abc123...")
+	fmt.Println("  p0rt -K add --key-file ~/.ssh/id_rsa.pub --tier beta")
+	fmt.Println("  p0rt -K add --key-fingerprint SHA256:abc123... --tier beta  # Simpler")
+	fmt.Println("  p0rt -K list                            # List authorized SSH keys")
+	fmt.Println("  p0rt -K import --import-file keys.txt --tier free")
 	fmt.Println()
 	fmt.Println("Remote Examples:")
 	fmt.Println("  p0rt -i -R http://localhost:80                      # Interactive mode (remote)")
@@ -516,4 +553,219 @@ func handleRemoteReservationCommand(serverURL, apiKey, action, domainName, finge
 		fmt.Printf("  p0rt -remote %s -reservation stats\n", serverURL)
 		os.Exit(1)
 	}
+}
+
+// handleKeyCommand handles SSH key management commands
+func handleKeyCommand(action, keyFile, keyString, keyFingerprint, comment, tier, fingerprint, importFile, expiresStr, keysFile string) {
+	// Use default keys file if not specified
+	if keysFile == "" {
+		keysFile = "authorized_keys.json"
+	}
+	
+	keyStore := auth.NewKeyStore(keysFile)
+	
+	switch action {
+	case "add":
+		if err := addKey(keyStore, keyFile, keyString, keyFingerprint, comment, tier, expiresStr); err != nil {
+			fmt.Fprintf(os.Stderr, "Error adding key: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✅ Key added successfully")
+		
+	case "remove":
+		if fingerprint == "" {
+			fmt.Fprintln(os.Stderr, "Fingerprint required for remove action")
+			fmt.Println("Usage: p0rt -key remove -fingerprint SHA256:xxxxx")
+			os.Exit(1)
+		}
+		if err := keyStore.RemoveKey(fingerprint); err != nil {
+			fmt.Fprintf(os.Stderr, "Error removing key: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✅ Key removed successfully")
+		
+	case "activate":
+		if fingerprint == "" {
+			fmt.Fprintln(os.Stderr, "Fingerprint required for activate action")
+			fmt.Println("Usage: p0rt -key activate -fingerprint SHA256:xxxxx")
+			os.Exit(1)
+		}
+		if err := keyStore.ActivateKey(fingerprint); err != nil {
+			fmt.Fprintf(os.Stderr, "Error activating key: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✅ Key activated successfully")
+		
+	case "deactivate":
+		if fingerprint == "" {
+			fmt.Fprintln(os.Stderr, "Fingerprint required for deactivate action")
+			fmt.Println("Usage: p0rt -key deactivate -fingerprint SHA256:xxxxx")
+			os.Exit(1)
+		}
+		if err := keyStore.DeactivateKey(fingerprint); err != nil {
+			fmt.Fprintf(os.Stderr, "Error deactivating key: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✅ Key deactivated successfully")
+		
+	case "list":
+		listKeys(keyStore)
+		
+	case "import":
+		if importFile == "" {
+			fmt.Fprintln(os.Stderr, "Import file required for import action")
+			fmt.Println("Usage: p0rt -key import --import-file keys.txt --tier beta")
+			os.Exit(1)
+		}
+		if err := keyStore.ImportFromFile(importFile, tier); err != nil {
+			fmt.Fprintf(os.Stderr, "Error importing keys: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✅ Keys imported successfully")
+		
+	default:
+		fmt.Println("Available SSH key actions:")
+		fmt.Println("  add        - Add a new authorized SSH key")
+		fmt.Println("  remove     - Remove an SSH key")
+		fmt.Println("  list       - List all authorized SSH keys")
+		fmt.Println("  import     - Import keys from authorized_keys file")
+		fmt.Println("  activate   - Activate a deactivated key")
+		fmt.Println("  deactivate - Deactivate a key temporarily")
+		fmt.Println("\nExamples:")
+		fmt.Println("  p0rt -key add --key-file ~/.ssh/id_rsa.pub --tier beta --comment 'John Doe'")
+		fmt.Println("  p0rt -key add --key-fingerprint SHA256:abc123... --tier beta --comment 'John Doe'")
+		fmt.Println("  p0rt -key list")
+		fmt.Println("  p0rt -key import --import-file ~/.ssh/authorized_keys --tier free")
+		fmt.Println("  p0rt -key remove -fingerprint SHA256:xxxxx")
+		fmt.Println("  p0rt -key deactivate -fingerprint SHA256:xxxxx")
+		os.Exit(1)
+	}
+}
+
+// addKey adds a new SSH key to the allowlist
+func addKey(keyStore *auth.KeyStore, keyFile, keyString, keyFingerprint, comment, tier, expiresStr string) error {
+	// Parse expiration if provided
+	var expiresAt *time.Time
+	if expiresStr != "" {
+		t, err := time.Parse(time.RFC3339, expiresStr)
+		if err != nil {
+			return fmt.Errorf("invalid expiration date format (use RFC3339, e.g., 2024-12-31T23:59:59Z): %w", err)
+		}
+		expiresAt = &t
+	}
+	
+	// Check if user provided a fingerprint directly (simplest option)
+	if keyFingerprint != "" {
+		// Add key by fingerprint only
+		if err := keyStore.AddKeyByFingerprint(keyFingerprint, comment, tier, expiresAt); err != nil {
+			return err
+		}
+		
+		fmt.Printf("📋 Added key with fingerprint: %s\n", keyFingerprint)
+		fmt.Printf("🎯 Tier: %s\n", tier)
+		if comment != "" {
+			fmt.Printf("💬 Comment: %s\n", comment)
+		}
+		if expiresAt != nil {
+			fmt.Printf("⏰ Expires: %s\n", expiresAt.Format("2006-01-02 15:04:05"))
+		}
+		
+		return nil
+	}
+	
+	// Otherwise, handle traditional key file/string approach
+	var pubKey string
+	
+	if keyFile != "" {
+		// Read from file
+		data, err := os.ReadFile(keyFile)
+		if err != nil {
+			return fmt.Errorf("failed to read key file: %w", err)
+		}
+		pubKey = strings.TrimSpace(string(data))
+	} else if keyString != "" {
+		pubKey = keyString
+	} else {
+		// Read from stdin
+		fmt.Print("Enter SSH public key (paste and press Enter): ")
+		reader := bufio.NewReader(os.Stdin)
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read from stdin: %w", err)
+		}
+		pubKey = strings.TrimSpace(line)
+	}
+	
+	// Generate fingerprint for display
+	fingerprint, err := auth.GenerateKeyFingerprint(pubKey)
+	if err != nil {
+		return fmt.Errorf("failed to generate fingerprint: %w", err)
+	}
+	
+	if err := keyStore.AddKey(pubKey, comment, tier, expiresAt); err != nil {
+		return err
+	}
+	
+	fmt.Printf("📋 Added key with fingerprint: %s\n", fingerprint)
+	fmt.Printf("🎯 Tier: %s\n", tier)
+	if comment != "" {
+		fmt.Printf("💬 Comment: %s\n", comment)
+	}
+	if expiresAt != nil {
+		fmt.Printf("⏰ Expires: %s\n", expiresAt.Format("2006-01-02 15:04:05"))
+	}
+	
+	return nil
+}
+
+// listKeys lists all authorized SSH keys
+func listKeys(keyStore *auth.KeyStore) {
+	keys := keyStore.ListKeys()
+	
+	if len(keys) == 0 {
+		fmt.Println("No authorized SSH keys found")
+		fmt.Println()
+		fmt.Println("Add a key with:")
+		fmt.Println("  p0rt -key add --key-file ~/.ssh/id_rsa.pub --tier beta")
+		return
+	}
+	
+	fmt.Printf("Found %d authorized SSH key(s):\n\n", len(keys))
+	fmt.Printf("%-50s %-10s %-10s %-20s %s\n", "Fingerprint", "Tier", "Status", "Added", "Comment")
+	fmt.Println(strings.Repeat("-", 120))
+	
+	for _, access := range keys {
+		status := "✅ Active"
+		if !access.Active {
+			status = "❌ Inactive"
+		}
+		if access.ExpiresAt != nil && time.Now().After(*access.ExpiresAt) {
+			status = "⏰ Expired"
+		}
+		
+		// Truncate long fingerprints for display
+		displayFingerprint := access.Fingerprint
+		if len(displayFingerprint) > 47 {
+			displayFingerprint = displayFingerprint[:44] + "..."
+		}
+		
+		fmt.Printf("%-50s %-10s %-10s %-20s %s\n",
+			displayFingerprint,
+			access.Tier,
+			status,
+			access.AddedAt.Format("2006-01-02 15:04:05"),
+			access.Comment,
+		)
+	}
+	
+	fmt.Println()
+	fmt.Printf("🔒 Server is in %s mode\n", getAccessMode())
+}
+
+// getAccessMode returns the current access mode
+func getAccessMode() string {
+	if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
+		return "OPEN ACCESS"
+	}
+	return "RESTRICTED"
 }

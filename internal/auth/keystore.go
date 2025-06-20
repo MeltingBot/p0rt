@@ -122,6 +122,24 @@ func (ks *KeyStore) AddKey(pubKeyStr string, comment string, tier string, expire
 	return ks.saveKeys()
 }
 
+// AddKeyByFingerprint adds a key using only the fingerprint (no public key required)
+func (ks *KeyStore) AddKeyByFingerprint(fingerprint string, comment string, tier string, expiresAt *time.Time) error {
+	ks.mu.Lock()
+	defer ks.mu.Unlock()
+
+	ks.keys[fingerprint] = &KeyAccess{
+		Fingerprint: fingerprint,
+		PublicKey:   "", // No public key stored
+		Comment:     comment,
+		Tier:        tier,
+		AddedAt:     time.Now(),
+		ExpiresAt:   expiresAt,
+		Active:      true,
+	}
+
+	return ks.saveKeys()
+}
+
 // RemoveKey removes a key by fingerprint
 func (ks *KeyStore) RemoveKey(fingerprint string) error {
 	ks.mu.Lock()

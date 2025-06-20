@@ -20,7 +20,7 @@ case "${1:-}" in
     "restricted"|"beta")
         echo "🔒 Starting P0rt in RESTRICTED mode"
         echo "   Only pre-registered SSH keys can create tunnels"
-        echo "   Use 'go run cmd/keymanager/main.go' to manage keys"
+        echo "   Use './p0rt -key add --key-fingerprint SHA256:abc123... --tier beta' to manage keys"
         ./p0rt -server start
         ;;
     "help"|"-h"|"--help")
@@ -39,8 +39,9 @@ case "${1:-}" in
         echo "  $0            # Start in restricted mode (default)"
         echo ""
         echo "Key Management:"
-        echo "  go run cmd/keymanager/main.go -action add -key-file ~/.ssh/id_rsa.pub -tier beta"
-        echo "  go run cmd/keymanager/main.go -action list"
+        echo "  ./p0rt -key add --key-fingerprint SHA256:abc123... --tier beta  # Easiest"
+        echo "  ./p0rt -key add --key-file ~/.ssh/id_rsa.pub --tier beta"
+        echo "  ./p0rt -key list"
         echo ""
         echo "Environment Variables:"
         echo "  P0RT_OPEN_ACCESS=true      # Allow any SSH key"

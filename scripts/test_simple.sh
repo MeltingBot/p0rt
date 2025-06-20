@@ -8,10 +8,9 @@ echo "================================="
 echo "P0rt SSH Key Allowlist Test"
 echo "================================="
 
-# Build the tools
-echo "1. Building tools..."
+# Build the tool
+echo "1. Building P0rt..."
 go build -o p0rt cmd/server/main.go
-go build -o keymanager cmd/keymanager/main.go
 
 # Create test SSH key
 echo "2. Creating test SSH key..."
@@ -41,10 +40,10 @@ sleep 1
 echo ""
 echo "--- Test 2: Adding key to allowlist ---"
 echo "Adding test key to allowlist..."
-./keymanager -action add -key-file test_key.pub -tier beta -comment "Test Key"
+./p0rt -key add --key-file test_key.pub --tier beta --comment "Test Key"
 
 echo "Listing authorized keys:"
-./keymanager -action list
+./p0rt -key list
 
 echo "Starting P0rt in restricted mode again..."
 ./p0rt -server start &
@@ -103,7 +102,7 @@ kill $SERVER_PID 2>/dev/null || true
 # Cleanup
 echo ""
 echo "5. Cleaning up..."
-rm -f test_key* p0rt keymanager authorized_keys.json*
+rm -f test_key* p0rt authorized_keys.json*
 rm -rf data/
 
 echo ""
