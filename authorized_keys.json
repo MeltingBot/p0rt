@@ -1,0 +1,26 @@
+[
+  {
+    "fingerprint": "SHA256:Io/qmT9oKEmZYDYggSFlg+FvPbSjvFtOEmpX8elUxfs",
+    "public_key": "",
+    "comment": "Yann - RSA 4096",
+    "tier": "beta",
+    "added_at": "2025-06-21T02:13:09.650245561+02:00",
+    "active": true
+  },
+  {
+    "fingerprint": "SHA256:L18TQP9ZzGTqxJZD5PKEqILdzckXMbyz3PGXitndkZE",
+    "public_key": "",
+    "comment": "Yann - RSA 2048",
+    "tier": "beta",
+    "added_at": "2025-06-21T02:13:22.785656244+02:00",
+    "active": true
+  },
+  {
+    "fingerprint": "SHA256:1dk4XgPddC0xWx6VfmUxNl3atQUdlU5AdE9/kYmqqZY",
+    "public_key": "",
+    "comment": "Yann - MeltingBot",
+    "tier": "beta",
+    "added_at": "2025-06-21T02:13:30.515773893+02:00",
+    "active": true
+  }
+]

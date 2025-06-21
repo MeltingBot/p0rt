@@ -28,10 +28,11 @@ type KeyAccess struct {
 
 // KeyStore manages authorized SSH keys
 type KeyStore struct {
-	mu       sync.RWMutex
-	keys     map[string]*KeyAccess // fingerprint -> access
-	filePath string
-	allowAll bool // if true, all keys are allowed (open mode)
+	mu        sync.RWMutex
+	keys      map[string]*KeyAccess // fingerprint -> access
+	filePath  string
+	allowAll  bool      // if true, all keys are allowed (open mode)
+	lastCheck time.Time // last time we checked file modification
 }
 
 // NewKeyStore creates a new key store
@@ -47,9 +48,10 @@ func NewKeyStore(filePath string) *KeyStore {
 	}
 	
 	ks := &KeyStore{
-		keys:     make(map[string]*KeyAccess),
-		filePath: filePath,
-		allowAll: false,
+		keys:      make(map[string]*KeyAccess),
+		filePath:  filePath,
+		allowAll:  false,
+		lastCheck: time.Now(),
 	}
 
 	// Check environment variable for open mode
@@ -72,6 +74,9 @@ func (ks *KeyStore) IsKeyAllowed(pubKey ssh.PublicKey) (bool, *KeyAccess) {
 	if ks.allowAll {
 		return true, nil
 	}
+
+	// Check if we need to reload keys from file
+	ks.checkAndReloadKeys()
 
 	fingerprint := ssh.FingerprintSHA256(pubKey)
 
@@ -311,4 +316,64 @@ func GenerateKeyFingerprint(pubKeyStr string) (string, error) {
 func HashKey(fingerprint string) string {
 	h := sha256.Sum256([]byte(fingerprint))
 	return fmt.Sprintf("%x", h[:4])
+}
+
+// checkAndReloadKeys checks if the key file has been modified and reloads if necessary
+func (ks *KeyStore) checkAndReloadKeys() {
+	// Only check every 1 second to avoid too frequent file system calls
+	now := time.Now()
+	if now.Sub(ks.lastCheck) < time.Second {
+		return
+	}
+	
+	ks.lastCheck = now
+	
+	// Check file modification time
+	info, err := os.Stat(ks.filePath)
+	if err != nil {
+		// File doesn't exist or error accessing it
+		return
+	}
+	
+	// If file was modified after we last loaded it, reload
+	if info.ModTime().After(ks.lastCheck.Add(-2 * time.Second)) {
+		ks.mu.Lock()
+		defer ks.mu.Unlock()
+		
+		// Clear existing keys
+		ks.keys = make(map[string]*KeyAccess)
+		
+		// Reload from file
+		if err := ks.loadKeysUnsafe(); err != nil {
+			log.Printf("KeyStore: Failed to reload keys: %v", err)
+		} else {
+			log.Printf("KeyStore: Reloaded %d authorized keys", len(ks.keys))
+		}
+	}
+}
+
+// loadKeysUnsafe loads keys without locking (assumes caller has lock)
+func (ks *KeyStore) loadKeysUnsafe() error {
+	file, err := os.Open(ks.filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// File doesn't exist yet, that's OK
+			return nil
+		}
+		return err
+	}
+	defer file.Close()
+
+	var keys []*KeyAccess
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&keys); err != nil {
+		return err
+	}
+
+	// Convert to map
+	for _, key := range keys {
+		ks.keys[key.Fingerprint] = key
+	}
+
+	return nil
 }
