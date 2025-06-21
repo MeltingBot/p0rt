@@ -1,0 +1,10 @@
+[
+  {
+    "fingerprint": "SHA256:EXAMPLE_FINGERPRINT_HERE",
+    "public_key": "",
+    "comment": "Example User",
+    "tier": "beta",
+    "added_at": "2025-06-21T12:00:00Z",
+    "active": true
+  }
+]
