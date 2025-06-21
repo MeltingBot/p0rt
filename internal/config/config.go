@@ -123,6 +123,10 @@ func overrideWithEnv(config *Config) {
 	}
 	if redisURL := getEnv("REDIS_URL", ""); redisURL != "" {
 		config.Storage.RedisURL = redisURL
+		// Auto-detect Redis usage when REDIS_URL is provided
+		if config.Storage.Type == "json" {
+			config.Storage.Type = "redis"
+		}
 	}
 	if redisPassword := getEnv("REDIS_PASSWORD", ""); redisPassword != "" {
 		config.Storage.RedisPassword = redisPassword
