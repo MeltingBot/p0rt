@@ -51,19 +51,9 @@ var abuseListCmd = &cobra.Command{
 		
 		remoteURL, apiKey, _, _, _, useJSON := GetGlobalFlags()
 		
-		// Always use API if available (local or remote)
 		if remoteURL != "" {
 			showRemoteAbuseReports(remoteURL, apiKey, status, showAll, useJSON)
 		} else {
-			// Try local API first (if server is running)
-			// Check multiple possible ports where server might be running
-			apiURLs := []string{"http://localhost:80", "http://localhost:8080"}
-			for _, url := range apiURLs {
-				if tryLocalAbuseAPI(url, apiKey, "list", status, showAll, "", useJSON) {
-					return
-				}
-			}
-			// Fallback to direct access
 			showLocalAbuseReports(status, showAll, useJSON)
 		}
 	},
@@ -85,18 +75,9 @@ var abuseProcessCmd = &cobra.Command{
 		
 		remoteURL, apiKey, _, _, _, useJSON := GetGlobalFlags()
 		
-		// Always use API if available (local or remote)
 		if remoteURL != "" {
 			processRemoteAbuseReport(remoteURL, apiKey, reportID, action, useJSON)
 		} else {
-			// Try local API first (if server is running)
-			apiURLs := []string{"http://localhost:80", "http://localhost:8080"}
-			for _, url := range apiURLs {
-				if tryLocalAbuseAPI(url, apiKey, "process", "", false, reportID+":"+action, useJSON) {
-					return
-				}
-			}
-			// Fallback to direct access
 			processLocalAbuseReport(reportID, action, useJSON)
 		}
 	},
@@ -109,18 +90,9 @@ var abuseStatsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		remoteURL, apiKey, _, _, _, useJSON := GetGlobalFlags()
 		
-		// Always use API if available (local or remote)
 		if remoteURL != "" {
 			showRemoteAbuseStats(remoteURL, apiKey, useJSON)
 		} else {
-			// Try local API first (if server is running)
-			apiURLs := []string{"http://localhost:80", "http://localhost:8080"}
-			for _, url := range apiURLs {
-				if tryLocalAbuseAPI(url, apiKey, "stats", "", false, "", useJSON) {
-					return
-				}
-			}
-			// Fallback to direct access
 			showLocalAbuseStats(useJSON)
 		}
 	},
@@ -436,50 +408,3 @@ func getTimeString(m map[string]interface{}, key string) string {
 	return ""
 }
 
-// tryLocalAbuseAPI attempts to use local API, returns true if successful
-func tryLocalAbuseAPI(serverURL, apiKey, operation, status string, showAll bool, extra string, useJSON bool) bool {
-	// Test if server is running by checking status endpoint
-	req, err := http.NewRequest("GET", serverURL+"/api/v1/status", nil)
-	if err != nil {
-		if !useJSON {
-			fmt.Printf("🔍 Testing API at %s: request error\n", serverURL)
-		}
-		return false
-	}
-	
-	httpClient := &http.Client{Timeout: 2 * time.Second}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		if !useJSON {
-			fmt.Printf("🔍 Testing API at %s: connection failed\n", serverURL)
-		}
-		return false
-	}
-	resp.Body.Close()
-	
-	if resp.StatusCode != http.StatusOK {
-		if !useJSON {
-			fmt.Printf("🔍 Testing API at %s: status %d\n", serverURL, resp.StatusCode)
-		}
-		return false
-	}
-	
-	if !useJSON {
-		fmt.Printf("✅ Found running server at %s, using API\n", serverURL)
-	}
-	
-	// Server is running, use API
-	switch operation {
-	case "list":
-		showRemoteAbuseReports(serverURL, apiKey, status, showAll, useJSON)
-	case "stats":
-		showRemoteAbuseStats(serverURL, apiKey, useJSON)
-	case "process":
-		parts := strings.Split(extra, ":")
-		if len(parts) == 2 {
-			processRemoteAbuseReport(serverURL, apiKey, parts[0], parts[1], useJSON)
-		}
-	}
-	
-	return true
-}
