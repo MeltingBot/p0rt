@@ -97,6 +97,13 @@ case "$MODE" in
         echo "   - Stockage: Redis + JSON backup"
         echo ""
         
+        # Créer le fichier .env si nécessaire
+        if [ ! -f .env ]; then
+            echo "📝 Création .env depuis .env.example..."
+            cp .env.example .env
+            echo "⚠️  Éditez .env pour personnaliser la configuration"
+        fi
+        
         # Créer les fichiers nécessaires
         if [ ! -f ssh_host_key ]; then
             echo "📝 Création ssh_host_key..."
@@ -135,6 +142,9 @@ case "$MODE" in
             echo "📊 Vérifier Redis:"
             echo "  docker exec p0rt-redis redis-cli ping"
             echo "  docker exec p0rt-redis redis-cli info"
+            echo ""
+            echo "⚙️  Configuration:"
+            echo "  Éditez .env pour personnaliser ports, domaines, Redis, etc."
             echo ""
             echo "📝 Voir les logs:"
             echo "  docker logs -f p0rt"

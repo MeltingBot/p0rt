@@ -104,6 +104,48 @@ go build -o p0rt cmd/server/main.go
 ./run.sh prod
 ```
 
+## ⚙️ Configuration
+
+P0rt uses environment variables for configuration. For production deployment, create a `.env` file:
+
+```bash
+# Copy example configuration
+cp .env.example .env
+
+# Edit configuration
+nano .env
+```
+
+### Key Configuration Options
+
+```bash
+# Server ports
+SSH_SERVER_PORT=22              # SSH tunnel port
+HTTP_PORT=80                    # HTTP proxy port
+
+# Access control
+P0RT_OPEN_ACCESS=false          # true=allow all keys, false=allowlist only
+
+# Redis storage (recommended for production)
+REDIS_URL=redis://redis:6379    # Enable Redis storage
+REDIS_PASSWORD=                 # Redis password (if required)
+
+# Domain configuration
+DOMAIN_BASE=p0rt.xyz           # Your domain for tunnels
+```
+
+### Storage Modes
+
+**JSON Mode (Development)**
+- Leave `REDIS_URL` empty
+- Data stored in local `./data/` directory
+- Simple and portable
+
+**Redis Mode (Production)**
+- Set `REDIS_URL=redis://redis:6379`
+- Scalable and performant
+- Automatic fallback to JSON if Redis unavailable
+
 ## 🔑 SSH Key Management
 
 P0rt supports two access modes:
