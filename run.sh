@@ -54,11 +54,11 @@ case "$MODE" in
         
         # Arrêter les anciens conteneurs
         echo "🛑 Arrêt des anciens conteneurs..."
-        docker-compose down 2>/dev/null || true
+        docker compose down 2>/dev/null || true
         
         # Construire et démarrer
         echo "🔨 Construction et démarrage..."
-        docker-compose up -d --build
+        docker compose up -d --build
         
         # Vérifier le statut
         sleep 3
