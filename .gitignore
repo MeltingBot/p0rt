@@ -36,6 +36,9 @@ stats.json
 # SSH host key
 ssh_host_key
 
+# SSH authorized keys (SECURITY - never commit!)
+authorized_keys.json
+
 # Domain persistence data
 data/
 
