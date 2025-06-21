@@ -199,24 +199,31 @@ func (am *AbuseMonitor) CreateAbuseReportHandler() http.HandlerFunc {
 		contact := r.FormValue("contact")
 		hcaptchaResponse := r.FormValue("h-captcha-response")
 
+		// Debug logs
+		log.Printf("Abuse report submission: domain=%s, reason=%s, hcaptcha_present=%v", domain, reason, hcaptchaResponse != "")
+
 		if domain == "" || reason == "" {
+			log.Printf("Abuse report error: Missing domain or reason (domain=%s, reason=%s)", domain, reason)
 			http.Error(w, "Missing domain or reason", http.StatusBadRequest)
 			return
 		}
 
-		// Verify hCaptcha (using test key for now)
+		// Verify hCaptcha
 		if hcaptchaResponse == "" {
+			log.Printf("Abuse report error: Captcha verification required")
 			http.Error(w, "Captcha verification required", http.StatusBadRequest)
 			return
 		}
 
 		if !am.verifyHCaptcha(hcaptchaResponse) {
+			log.Printf("Abuse report error: Captcha verification failed")
 			http.Error(w, "Captcha verification failed", http.StatusBadRequest)
 			return
 		}
 
 		// Valider le domaine
 		if !strings.HasSuffix(domain, ".p0rt.xyz") {
+			log.Printf("Abuse report error: Invalid domain format (domain=%s)", domain)
 			http.Error(w, "Invalid domain", http.StatusBadRequest)
 			return
 		}
