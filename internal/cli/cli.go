@@ -1273,7 +1273,13 @@ func (c *CLI) deactivateKey(args []string) error {
 // handleHistoryCommand handles connection history commands
 func (c *CLI) handleHistoryCommand(args []string) error {
 	if c.statsManager == nil {
-		return fmt.Errorf("statistics manager not available")
+		if c.jsonOutput {
+			c.outputError("History is only available when the server is running. Start the server with 'server start'")
+		} else {
+			fmt.Println("📊 History is only available when the server is running")
+			fmt.Println("   Start the server with: server start")
+		}
+		return nil
 	}
 	
 	limit := 20
@@ -1361,7 +1367,13 @@ func (c *CLI) handleHistoryCommand(args []string) error {
 // showActiveConnections shows currently active connections
 func (c *CLI) showActiveConnections() error {
 	if c.statsManager == nil {
-		return fmt.Errorf("statistics manager not available")
+		if c.jsonOutput {
+			c.outputError("Connections view is only available when the server is running. Start the server with 'server start'")
+		} else {
+			fmt.Println("🔌 Connections view is only available when the server is running")
+			fmt.Println("   Start the server with: server start")
+		}
+		return nil
 	}
 	
 	fmt.Println("=== Active Connections ===")
