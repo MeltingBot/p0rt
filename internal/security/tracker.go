@@ -58,6 +58,19 @@ type SecurityStats struct {
 	TopOffenders           []string          `json:"top_offenders"`
 }
 
+// SecurityTrackerInterface defines the interface for security tracking
+type SecurityTrackerInterface interface {
+	RecordEvent(eventType EventType, ip string, details map[string]string)
+	IsBanned(ip string) bool
+	BanIP(ip, reason string, duration time.Duration)
+	UnbanIP(ip string)
+	GetBannedIPs() []BannedIP
+	GetSecurityStats() SecurityStats
+}
+
+// Ensure SecurityTracker implements SecurityTrackerInterface
+var _ SecurityTrackerInterface = (*SecurityTracker)(nil)
+
 // SecurityTracker manages security events and bans
 type SecurityTracker struct {
 	mu            sync.RWMutex
@@ -476,4 +489,51 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// NewSecurityTrackerFromConfig creates a security tracker based on configuration
+func NewSecurityTrackerFromConfig(storageType, dataDir, redisURL, redisPassword string, redisDB int) (SecurityTrackerInterface, error) {
+	switch storageType {
+	case "redis":
+		if redisURL == "" {
+			return nil, fmt.Errorf("Redis URL is required for Redis storage")
+		}
+		return NewRedisSecurityTracker(redisURL, redisPassword, redisDB)
+	case "json", "":
+		// Default to JSON if not specified
+		return NewSecurityTracker(dataDir), nil
+	default:
+		return nil, fmt.Errorf("unsupported storage type: %s", storageType)
+	}
+}
+
+// GetRedisURLFromEnv returns Redis URL from environment variables
+func GetRedisURLFromEnv() string {
+	if url := os.Getenv("REDIS_URL"); url != "" {
+		return url
+	}
+	if url := os.Getenv("P0RT_REDIS_URL"); url != "" {
+		return url
+	}
+	
+	host := os.Getenv("REDIS_HOST")
+	if host == "" {
+		return ""
+	}
+	
+	port := os.Getenv("REDIS_PORT")
+	if port == "" {
+		port = "6379"
+	}
+	
+	password := os.Getenv("REDIS_PASSWORD")
+	db := os.Getenv("REDIS_DB")
+	if db == "" {
+		db = "0"
+	}
+	
+	if password != "" {
+		return fmt.Sprintf("redis://:%s@%s:%s/%s", password, host, port, db)
+	}
+	return fmt.Sprintf("redis://%s:%s/%s", host, port, db)
 }

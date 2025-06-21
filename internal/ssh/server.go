@@ -47,7 +47,7 @@ type Server struct {
 	customValidator *domain.CustomDomainValidator
 	baseDomain      string
 	statsManager    *stats.Manager
-	securityTracker *security.SecurityTracker
+	securityTracker security.SecurityTrackerInterface
 	keyStore        auth.KeyStoreInterface // SSH key allowlist
 
 	// Protection anti-bruteforce (legacy - will be replaced by SecurityTracker)
@@ -96,7 +96,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 		customValidator: domain.NewCustomDomainValidator(baseDomain),
 		baseDomain:      baseDomain,
 		statsManager:    statsManager,
-		securityTracker: security.NewSecurityTracker("./data/security"),
+		securityTracker: createSecurityTracker(),
 		keyStore:        keyStore,
 		failedAttempts:  make(map[string]int),
 		bannedIPs:       make(map[string]time.Time),
@@ -992,4 +992,32 @@ func (s *Server) isPrivateIP(ip string) bool {
 	}
 
 	return parsedIP.IsLoopback() || parsedIP.IsPrivate()
+}
+
+// createSecurityTracker creates a security tracker based on environment configuration
+func createSecurityTracker() security.SecurityTrackerInterface {
+	// Check if Redis URL is available
+	redisURL := security.GetRedisURLFromEnv()
+	if redisURL != "" {
+		// Try Redis first
+		tracker, err := security.NewSecurityTrackerFromConfig("redis", "", redisURL, os.Getenv("REDIS_PASSWORD"), getRedisDB())
+		if err != nil {
+			log.Printf("Failed to create Redis security tracker, falling back to JSON: %v", err)
+		} else {
+			return tracker
+		}
+	}
+	
+	// Fallback to JSON storage
+	return security.NewSecurityTracker("./data/security")
+}
+
+// getRedisDB gets Redis DB from environment
+func getRedisDB() int {
+	if dbStr := os.Getenv("REDIS_DB"); dbStr != "" {
+		if db, err := strconv.Atoi(dbStr); err == nil {
+			return db
+		}
+	}
+	return 0
 }
