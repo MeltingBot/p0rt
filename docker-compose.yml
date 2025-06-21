@@ -18,6 +18,7 @@ services:
       - DOMAIN_BASE=${DOMAIN_BASE}
       - P0RT_AUTHORIZED_KEYS=${P0RT_AUTHORIZED_KEYS}
       - P0RT_VERBOSE=${P0RT_VERBOSE}
+      - P0RT_API_KEY=${P0RT_API_KEY}
     # Nécessaire pour que setcap fonctionne
     security_opt:
       - no-new-privileges:false
