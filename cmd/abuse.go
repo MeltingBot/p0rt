@@ -56,8 +56,12 @@ var abuseListCmd = &cobra.Command{
 			showRemoteAbuseReports(remoteURL, apiKey, status, showAll, useJSON)
 		} else {
 			// Try local API first (if server is running)
-			if tryLocalAbuseAPI("http://localhost:80", apiKey, "list", status, showAll, "", useJSON) {
-				return
+			// Check multiple possible ports where server might be running
+			apiURLs := []string{"http://localhost:80", "http://localhost:8080"}
+			for _, url := range apiURLs {
+				if tryLocalAbuseAPI(url, apiKey, "list", status, showAll, "", useJSON) {
+					return
+				}
 			}
 			// Fallback to direct access
 			showLocalAbuseReports(status, showAll, useJSON)
@@ -86,8 +90,11 @@ var abuseProcessCmd = &cobra.Command{
 			processRemoteAbuseReport(remoteURL, apiKey, reportID, action, useJSON)
 		} else {
 			// Try local API first (if server is running)
-			if tryLocalAbuseAPI("http://localhost:80", apiKey, "process", "", false, reportID+":"+action, useJSON) {
-				return
+			apiURLs := []string{"http://localhost:80", "http://localhost:8080"}
+			for _, url := range apiURLs {
+				if tryLocalAbuseAPI(url, apiKey, "process", "", false, reportID+":"+action, useJSON) {
+					return
+				}
 			}
 			// Fallback to direct access
 			processLocalAbuseReport(reportID, action, useJSON)
@@ -107,8 +114,11 @@ var abuseStatsCmd = &cobra.Command{
 			showRemoteAbuseStats(remoteURL, apiKey, useJSON)
 		} else {
 			// Try local API first (if server is running)
-			if tryLocalAbuseAPI("http://localhost:80", apiKey, "stats", "", false, "", useJSON) {
-				return
+			apiURLs := []string{"http://localhost:80", "http://localhost:8080"}
+			for _, url := range apiURLs {
+				if tryLocalAbuseAPI(url, apiKey, "stats", "", false, "", useJSON) {
+					return
+				}
 			}
 			// Fallback to direct access
 			showLocalAbuseStats(useJSON)
@@ -431,18 +441,31 @@ func tryLocalAbuseAPI(serverURL, apiKey, operation, status string, showAll bool,
 	// Test if server is running by checking status endpoint
 	req, err := http.NewRequest("GET", serverURL+"/api/v1/status", nil)
 	if err != nil {
+		if !useJSON {
+			fmt.Printf("🔍 Testing API at %s: request error\n", serverURL)
+		}
 		return false
 	}
 	
 	httpClient := &http.Client{Timeout: 2 * time.Second}
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		if !useJSON {
+			fmt.Printf("🔍 Testing API at %s: connection failed\n", serverURL)
+		}
 		return false
 	}
 	resp.Body.Close()
 	
 	if resp.StatusCode != http.StatusOK {
+		if !useJSON {
+			fmt.Printf("🔍 Testing API at %s: status %d\n", serverURL, resp.StatusCode)
+		}
 		return false
+	}
+	
+	if !useJSON {
+		fmt.Printf("✅ Found running server at %s, using API\n", serverURL)
 	}
 	
 	// Server is running, use API
