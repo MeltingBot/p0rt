@@ -1,12 +1,16 @@
 package stats
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // ConnectionRecord represents a single SSH connection
@@ -32,6 +36,12 @@ type ConnectionHistory struct {
 	history     []*ConnectionRecord          // all records (including disconnected)
 	dataDir     string
 	maxHistory  int
+	
+	// Redis support
+	redisClient *redis.Client
+	useRedis    bool
+	ctx         context.Context
+	keyPrefix   string
 }
 
 // NewConnectionHistory creates a new connection history manager
@@ -45,18 +55,83 @@ func NewConnectionHistory(dataDir string) *ConnectionHistory {
 		history:     make([]*ConnectionRecord, 0),
 		dataDir:     dataDir,
 		maxHistory:  10000, // Keep last 10k connections
+		ctx:         context.Background(),
+		keyPrefix:   "p0rt:stats:",
 	}
 	
-	// Create data directory
-	os.MkdirAll(dataDir, 0755)
+	// Try to initialize Redis
+	ch.initRedis()
 	
-	// Load existing history
-	ch.loadHistory()
-	
-	// Start periodic save
-	go ch.periodicSave()
+	if !ch.useRedis {
+		// Fallback to file storage
+		os.MkdirAll(dataDir, 0755)
+		ch.loadHistory()
+		go ch.periodicSave()
+	} else {
+		// Load from Redis
+		ch.loadFromRedis()
+	}
 	
 	return ch
+}
+
+// initRedis initializes Redis connection if available
+func (ch *ConnectionHistory) initRedis() {
+	redisURL := getRedisURL()
+	if redisURL == "" {
+		log.Println("ConnectionHistory: No Redis URL found, using file storage")
+		return
+	}
+	
+	opts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		log.Printf("ConnectionHistory: Invalid Redis URL: %v", err)
+		return
+	}
+	
+	ch.redisClient = redis.NewClient(opts)
+	
+	// Test connection
+	if err := ch.redisClient.Ping(ch.ctx).Err(); err != nil {
+		log.Printf("ConnectionHistory: Redis connection failed: %v", err)
+		ch.redisClient.Close()
+		ch.redisClient = nil
+		return
+	}
+	
+	ch.useRedis = true
+	log.Println("ConnectionHistory: Using Redis storage")
+}
+
+// getRedisURL returns the Redis URL from environment
+func getRedisURL() string {
+	if url := os.Getenv("REDIS_URL"); url != "" {
+		return url
+	}
+	if url := os.Getenv("P0RT_REDIS_URL"); url != "" {
+		return url
+	}
+	
+	host := os.Getenv("REDIS_HOST")
+	if host == "" {
+		return ""
+	}
+	
+	port := os.Getenv("REDIS_PORT")
+	if port == "" {
+		port = "6379"
+	}
+	
+	password := os.Getenv("REDIS_PASSWORD")
+	db := os.Getenv("REDIS_DB")
+	if db == "" {
+		db = "0"
+	}
+	
+	if password != "" {
+		return fmt.Sprintf("redis://:%s@%s:%s/%s", password, host, port, db)
+	}
+	return fmt.Sprintf("redis://%s:%s/%s", host, port, db)
 }
 
 // RecordConnection records a new SSH connection
@@ -84,6 +159,11 @@ func (ch *ConnectionHistory) RecordConnection(domain, clientIP, fingerprint stri
 	if len(ch.history) > ch.maxHistory {
 		ch.history = ch.history[len(ch.history)-ch.maxHistory:]
 	}
+	
+	// Save to Redis if available
+	if ch.useRedis {
+		ch.saveRecordToRedis(record)
+	}
 }
 
 // RecordDisconnection marks a connection as disconnected
@@ -97,6 +177,11 @@ func (ch *ConnectionHistory) RecordDisconnection(domain string) {
 		record.Duration = now.Sub(record.ConnectedAt).String()
 		record.Active = false
 		delete(ch.connections, domain)
+		
+		// Update in Redis if available
+		if ch.useRedis {
+			ch.saveRecordToRedis(record)
+		}
 	}
 }
 
@@ -109,6 +194,11 @@ func (ch *ConnectionHistory) UpdateTraffic(domain string, bytesIn, bytesOut int6
 		record.BytesIn += bytesIn
 		record.BytesOut += bytesOut
 		record.RequestCount++
+		
+		// Update in Redis if available
+		if ch.useRedis {
+			ch.saveRecordToRedis(record)
+		}
 	}
 }
 
@@ -116,6 +206,11 @@ func (ch *ConnectionHistory) UpdateTraffic(domain string, bytesIn, bytesOut int6
 func (ch *ConnectionHistory) GetActiveConnections() []*ConnectionRecord {
 	ch.mu.RLock()
 	defer ch.mu.RUnlock()
+	
+	// If using Redis, refresh from Redis first
+	if ch.useRedis {
+		ch.refreshActiveFromRedis()
+	}
 	
 	active := make([]*ConnectionRecord, 0, len(ch.connections))
 	for _, record := range ch.connections {
@@ -129,6 +224,11 @@ func (ch *ConnectionHistory) GetActiveConnections() []*ConnectionRecord {
 func (ch *ConnectionHistory) GetHistory(limit int) []*ConnectionRecord {
 	ch.mu.RLock()
 	defer ch.mu.RUnlock()
+	
+	// If using Redis, refresh from Redis first
+	if ch.useRedis {
+		ch.refreshHistoryFromRedis()
+	}
 	
 	if limit <= 0 || limit > len(ch.history) {
 		limit = len(ch.history)
@@ -286,4 +386,148 @@ func findTopN(counts map[string]int, n int) []map[string]interface{} {
 	}
 	
 	return result
+}
+
+// saveRecordToRedis saves a connection record to Redis
+func (ch *ConnectionHistory) saveRecordToRedis(record *ConnectionRecord) {
+	if ch.redisClient == nil {
+		return
+	}
+	
+	data, err := json.Marshal(record)
+	if err != nil {
+		log.Printf("ConnectionHistory: Failed to marshal record: %v", err)
+		return
+	}
+	
+	// Save active connection
+	if record.Active {
+		activeKey := ch.keyPrefix + "active:" + record.Domain
+		if err := ch.redisClient.Set(ch.ctx, activeKey, data, 0).Err(); err != nil {
+			log.Printf("ConnectionHistory: Failed to save active record to Redis: %v", err)
+		}
+	} else {
+		// Remove from active and add to history
+		activeKey := ch.keyPrefix + "active:" + record.Domain
+		ch.redisClient.Del(ch.ctx, activeKey)
+	}
+	
+	// Always save to history
+	historyKey := ch.keyPrefix + "history:" + record.ID
+	if err := ch.redisClient.Set(ch.ctx, historyKey, data, 7*24*time.Hour).Err(); err != nil {
+		log.Printf("ConnectionHistory: Failed to save history record to Redis: %v", err)
+	}
+}
+
+// loadFromRedis loads connection history from Redis
+func (ch *ConnectionHistory) loadFromRedis() {
+	if ch.redisClient == nil {
+		return
+	}
+	
+	// Load active connections
+	activePattern := ch.keyPrefix + "active:*"
+	activeKeys, err := ch.redisClient.Keys(ch.ctx, activePattern).Result()
+	if err != nil {
+		log.Printf("ConnectionHistory: Failed to get active keys from Redis: %v", err)
+		return
+	}
+	
+	for _, key := range activeKeys {
+		data, err := ch.redisClient.Get(ch.ctx, key).Result()
+		if err != nil {
+			continue
+		}
+		
+		var record ConnectionRecord
+		if err := json.Unmarshal([]byte(data), &record); err != nil {
+			continue
+		}
+		
+		ch.connections[record.Domain] = &record
+	}
+	
+	// Load recent history
+	historyPattern := ch.keyPrefix + "history:*"
+	historyKeys, err := ch.redisClient.Keys(ch.ctx, historyPattern).Result()
+	if err != nil {
+		log.Printf("ConnectionHistory: Failed to get history keys from Redis: %v", err)
+		return
+	}
+	
+	for _, key := range historyKeys {
+		data, err := ch.redisClient.Get(ch.ctx, key).Result()
+		if err != nil {
+			continue
+		}
+		
+		var record ConnectionRecord
+		if err := json.Unmarshal([]byte(data), &record); err != nil {
+			continue
+		}
+		
+		ch.history = append(ch.history, &record)
+	}
+	
+	log.Printf("ConnectionHistory: Loaded %d active connections and %d history records from Redis", len(ch.connections), len(ch.history))
+}
+
+// refreshActiveFromRedis refreshes active connections from Redis (called with lock)
+func (ch *ConnectionHistory) refreshActiveFromRedis() {
+	if ch.redisClient == nil {
+		return
+	}
+	
+	activePattern := ch.keyPrefix + "active:*"
+	activeKeys, err := ch.redisClient.Keys(ch.ctx, activePattern).Result()
+	if err != nil {
+		return
+	}
+	
+	// Clear current active connections
+	ch.connections = make(map[string]*ConnectionRecord)
+	
+	for _, key := range activeKeys {
+		data, err := ch.redisClient.Get(ch.ctx, key).Result()
+		if err != nil {
+			continue
+		}
+		
+		var record ConnectionRecord
+		if err := json.Unmarshal([]byte(data), &record); err != nil {
+			continue
+		}
+		
+		ch.connections[record.Domain] = &record
+	}
+}
+
+// refreshHistoryFromRedis refreshes history from Redis (called with lock)
+func (ch *ConnectionHistory) refreshHistoryFromRedis() {
+	if ch.redisClient == nil {
+		return
+	}
+	
+	historyPattern := ch.keyPrefix + "history:*"
+	historyKeys, err := ch.redisClient.Keys(ch.ctx, historyPattern).Result()
+	if err != nil {
+		return
+	}
+	
+	// Clear current history
+	ch.history = make([]*ConnectionRecord, 0)
+	
+	for _, key := range historyKeys {
+		data, err := ch.redisClient.Get(ch.ctx, key).Result()
+		if err != nil {
+			continue
+		}
+		
+		var record ConnectionRecord
+		if err := json.Unmarshal([]byte(data), &record); err != nil {
+			continue
+		}
+		
+		ch.history = append(ch.history, &record)
+	}
 }
