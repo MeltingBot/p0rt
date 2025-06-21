@@ -1,9 +1,12 @@
 package security
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +23,9 @@ type AbuseMonitor struct {
 
 	// Alertes
 	alertCallback func(domain, reason, details string)
+	
+	// Abuse report manager
+	reportManager *AbuseReportManager
 }
 
 type ConnectionLimit struct {
@@ -32,6 +38,7 @@ type ConnectionLimit struct {
 func NewAbuseMonitor() *AbuseMonitor {
 	monitor := &AbuseMonitor{
 		connectionLimits: make(map[string]*ConnectionLimit),
+		reportManager:    NewAbuseReportManager(),
 		// Note: Content analysis removed for privacy - only connection monitoring
 	}
 
@@ -93,11 +100,25 @@ func (am *AbuseMonitor) AnalyzeHTTPRequest(domain, path, userAgent, referer stri
 
 // ReportAbuse permet de signaler un abus
 func (am *AbuseMonitor) ReportAbuse(domain, reporterIP, reason string) {
-	log.Printf("Abuse reported for domain %s by %s: %s", domain, reporterIP, reason)
+	details := fmt.Sprintf("Abuse report from %s", reporterIP)
+	
+	// Submit to report manager
+	report, err := am.reportManager.SubmitReport(domain, reporterIP, reason, details)
+	if err != nil {
+		log.Printf("Failed to submit abuse report: %v", err)
+		return
+	}
+	
+	log.Printf("Abuse reported for domain %s by %s: %s (ID: %s)", domain, reporterIP, reason, report.ID)
 
 	if am.alertCallback != nil {
-		am.alertCallback(domain, "abuse_report", fmt.Sprintf("reported by %s: %s", reporterIP, reason))
+		am.alertCallback(domain, "abuse_report", fmt.Sprintf("reported by %s: %s (ID: %s)", reporterIP, reason, report.ID))
 	}
+}
+
+// GetReportManager returns the abuse report manager
+func (am *AbuseMonitor) GetReportManager() *AbuseReportManager {
+	return am.reportManager
 }
 
 // SetAlertCallback définit le callback pour les alertes
@@ -176,9 +197,21 @@ func (am *AbuseMonitor) CreateAbuseReportHandler() http.HandlerFunc {
 		reason := r.FormValue("reason")
 		details := r.FormValue("details")
 		contact := r.FormValue("contact")
+		hcaptchaResponse := r.FormValue("h-captcha-response")
 
 		if domain == "" || reason == "" {
 			http.Error(w, "Missing domain or reason", http.StatusBadRequest)
+			return
+		}
+
+		// Verify hCaptcha (using test key for now)
+		if hcaptchaResponse == "" {
+			http.Error(w, "Captcha verification required", http.StatusBadRequest)
+			return
+		}
+
+		if !am.verifyHCaptcha(hcaptchaResponse) {
+			http.Error(w, "Captcha verification failed", http.StatusBadRequest)
 			return
 		}
 
@@ -210,12 +243,19 @@ func (am *AbuseMonitor) CreateAbuseReportHandler() http.HandlerFunc {
 }
 
 func (am *AbuseMonitor) serveReportForm(w http.ResponseWriter, r *http.Request) {
-	html := `<!DOCTYPE html>
+	siteKey := os.Getenv("HCAPTCHA_SITE_KEY")
+	if siteKey == "" {
+		// Use test site key for development
+		siteKey = "10000000-ffff-ffff-ffff-000000000001"
+	}
+
+	html := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Report Abuse - P0rt Security</title>
+    <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -327,6 +367,10 @@ func (am *AbuseMonitor) serveReportForm(w http.ResponseWriter, r *http.Request) 
             <small style="color: #888;">Only used if we need clarification about your report</small>
         </div>
         
+        <div class="form-group">
+            <div class="h-captcha" data-sitekey="%s"></div>
+        </div>
+        
         <button type="submit">Submit Report</button>
     </form>
     
@@ -338,8 +382,17 @@ func (am *AbuseMonitor) serveReportForm(w http.ResponseWriter, r *http.Request) 
         document.querySelector('form').addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const formData = new FormData(this);
             const submitButton = document.querySelector('button[type="submit"]');
+            
+            // Get hCaptcha response
+            const hcaptchaResponse = hcaptcha.getResponse();
+            if (!hcaptchaResponse) {
+                alert('Please complete the captcha verification.');
+                return;
+            }
+            
+            const formData = new FormData(this);
+            formData.append('h-captcha-response', hcaptchaResponse);
             
             submitButton.textContent = 'Submitting...';
             submitButton.disabled = true;
@@ -359,6 +412,7 @@ func (am *AbuseMonitor) serveReportForm(w http.ResponseWriter, r *http.Request) 
             .catch(error => {
                 submitButton.textContent = 'Submit Report';
                 submitButton.disabled = false;
+                hcaptcha.reset();
                 alert('Failed to submit report. Please try again.');
             });
         });
@@ -368,5 +422,40 @@ func (am *AbuseMonitor) serveReportForm(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(html))
+	w.Write([]byte(fmt.Sprintf(html, siteKey)))
+}
+
+// verifyHCaptcha verifies the hCaptcha response with hCaptcha service
+func (am *AbuseMonitor) verifyHCaptcha(response string) bool {
+	// Get hCaptcha secret key from environment
+	secretKey := os.Getenv("HCAPTCHA_SECRET_KEY")
+	if secretKey == "" {
+		// For testing/development, use test secret key
+		secretKey = "0x0000000000000000000000000000000000000000"
+	}
+
+	// Prepare verification request
+	data := url.Values{}
+	data.Set("secret", secretKey)
+	data.Set("response", response)
+
+	// Make request to hCaptcha verification endpoint
+	resp, err := http.PostForm("https://hcaptcha.com/siteverify", data)
+	if err != nil {
+		log.Printf("hCaptcha verification request failed: %v", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	// Parse response
+	var result struct {
+		Success bool `json:"success"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("hCaptcha verification response decode failed: %v", err)
+		return false
+	}
+
+	return result.Success
 }

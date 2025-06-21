@@ -58,6 +58,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/connections", h.handleConnections)
 	mux.HandleFunc("/api/v1/security/stats", h.handleSecurityStats)
 	mux.HandleFunc("/api/v1/security/bans", h.handleSecurityBans)
+	mux.HandleFunc("/api/v1/abuse/reports", h.handleAbuseReports)
+	mux.HandleFunc("/api/v1/abuse/reports/", h.handleAbuseReport)
+	mux.HandleFunc("/api/v1/abuse/stats", h.handleAbuseStats)
 	mux.HandleFunc("/api/v1/access", h.handleAccess)
 	mux.HandleFunc("/api/v1/status", h.handleStatus)
 }
@@ -525,4 +528,34 @@ func (h *Handler) handleAccess(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
+}
+
+// handleAbuseReports handles /api/v1/abuse/reports endpoint
+func (h *Handler) handleAbuseReports(w http.ResponseWriter, r *http.Request) {
+	if !h.authenticateRequest(r) {
+		writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	writeError(w, http.StatusNotImplemented, "Abuse report API not yet implemented - use local CLI")
+}
+
+// handleAbuseReport handles /api/v1/abuse/reports/{id} endpoint
+func (h *Handler) handleAbuseReport(w http.ResponseWriter, r *http.Request) {
+	if !h.authenticateRequest(r) {
+		writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	writeError(w, http.StatusNotImplemented, "Abuse report processing API not yet implemented - use local CLI")
+}
+
+// handleAbuseStats handles /api/v1/abuse/stats endpoint
+func (h *Handler) handleAbuseStats(w http.ResponseWriter, r *http.Request) {
+	if !h.authenticateRequest(r) {
+		writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	writeError(w, http.StatusNotImplemented, "Abuse statistics API not yet implemented - use local CLI")
 }

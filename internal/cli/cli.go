@@ -16,6 +16,7 @@ import (
 	"github.com/p0rt/p0rt/internal/auth"
 	"github.com/p0rt/p0rt/internal/config"
 	"github.com/p0rt/p0rt/internal/domain"
+	"github.com/p0rt/p0rt/internal/security"
 	"github.com/p0rt/p0rt/internal/stats"
 )
 
@@ -289,6 +290,8 @@ func (c *CLI) processCommand(line string) error {
 		return c.showActiveConnections()
 	case "access", "mode":
 		return c.handleAccessCommand(args)
+	case "abuse":
+		return c.handleAbuseCommand(args)
 	case "clear":
 		fmt.Print("\033[H\033[2J")
 		return nil
@@ -310,6 +313,7 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("  history [n]        - Show connection history (last n connections)")
 		fmt.Println("  connections        - Show active connections with bandwidth")
 		fmt.Println("  access             - Manage server access mode (open/restricted)")
+		fmt.Println("  abuse              - Manage abuse reports (list, process)")
 		fmt.Println("  status             - Show system status")
 		fmt.Println("  clear              - Clear the screen")
 		fmt.Println("  exit               - Exit the CLI")
@@ -424,6 +428,19 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("  access status")
 		fmt.Println("  access open")
 		fmt.Println("  access restricted")
+	case "abuse":
+		fmt.Println("abuse - Manage abuse reports")
+		fmt.Println()
+		fmt.Println("Usage:")
+		fmt.Println("  abuse list                    - List pending abuse reports")
+		fmt.Println("  abuse list --all              - List all reports (including processed)")
+		fmt.Println("  abuse process [report-id] ban - Ban domain based on abuse report")
+		fmt.Println("  abuse process [report-id] accept - Accept domain (dismiss report)")
+		fmt.Println("  abuse stats                   - Show abuse report statistics")
+		fmt.Println()
+		fmt.Println("Description:")
+		fmt.Println("  View and process abuse reports submitted against domains.")
+		fmt.Println("  Reports are stored in Redis and can be banned or accepted.")
 	default:
 		return fmt.Errorf("no help available for command: %s", command)
 	}
@@ -774,6 +791,7 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 			readline.PcItem("key"),
 			readline.PcItem("security"),
 			readline.PcItem("access"),
+			readline.PcItem("abuse"),
 			readline.PcItem("history"),
 			readline.PcItem("connections"),
 			readline.PcItem("stats"),
@@ -845,6 +863,11 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 			readline.PcItem("status"),
 			readline.PcItem("open"),
 			readline.PcItem("restricted"),
+		),
+		readline.PcItem("abuse",
+			readline.PcItem("list"),
+			readline.PcItem("process"),
+			readline.PcItem("stats"),
 		),
 		readline.PcItem("history"),
 		readline.PcItem("hist"),
@@ -1583,6 +1606,166 @@ func (c *CLI) setAccessMode(mode string) error {
 		fmt.Println("   To make it permanent, update your .env file or environment variables.")
 	}
 
+	return nil
+}
+
+// handleAbuseCommand handles abuse subcommands
+func (c *CLI) handleAbuseCommand(args []string) error {
+	if len(args) == 0 {
+		c.outputError("Abuse command requires a subcommand. Use 'help abuse' for details")
+		return nil
+	}
+	
+	subcommand := args[0]
+	subArgs := args[1:]
+	
+	switch subcommand {
+	case "list":
+		return c.handleAbuseList(subArgs)
+	case "process":
+		return c.handleAbuseProcess(subArgs)
+	case "stats":
+		return c.handleAbuseStats()
+	default:
+		c.outputError(fmt.Sprintf("Unknown abuse subcommand: %s", subcommand))
+		return nil
+	}
+}
+
+// handleAbuseList lists abuse reports
+func (c *CLI) handleAbuseList(args []string) error {
+	status := "pending"
+	
+	// Parse basic flags
+	for _, arg := range args {
+		if arg == "--all" || arg == "-a" {
+			status = ""
+		}
+	}
+	
+	reportManager := security.NewAbuseReportManager()
+	reports, err := reportManager.ListReports(status)
+	if err != nil {
+		c.outputError(fmt.Sprintf("Failed to get abuse reports: %v", err))
+		return nil
+	}
+	
+	if c.jsonOutput {
+		data := map[string]interface{}{
+			"reports": reports,
+			"count":   len(reports),
+			"status":  status,
+		}
+		c.outputSuccess(data, "Abuse reports")
+		return nil
+	}
+	
+	if len(reports) == 0 {
+		if status == "" {
+			fmt.Println("No abuse reports found")
+		} else {
+			fmt.Printf("No %s abuse reports found\n", status)
+		}
+		return nil
+	}
+	
+	statusLabel := status
+	if statusLabel == "" {
+		statusLabel = "all"
+	}
+	fmt.Printf("=== Abuse Reports (%s) ===\n\n", strings.Title(statusLabel))
+	
+	for i, report := range reports {
+		fmt.Printf("%d. ID: %s\n", i+1, report.ID)
+		fmt.Printf("   Domain: %s\n", report.Domain)
+		fmt.Printf("   Reporter: %s\n", report.ReporterIP)
+		fmt.Printf("   Reason: %s\n", report.Reason)
+		fmt.Printf("   Status: %s\n", report.Status)
+		fmt.Printf("   Reported: %s\n", report.ReportedAt.Format("2006-01-02 15:04:05"))
+		if report.ProcessedAt != nil {
+			fmt.Printf("   Processed: %s\n", report.ProcessedAt.Format("2006-01-02 15:04:05"))
+		}
+		fmt.Println()
+	}
+	
+	fmt.Printf("Total: %d reports\n", len(reports))
+	return nil
+}
+
+// handleAbuseProcess processes an abuse report
+func (c *CLI) handleAbuseProcess(args []string) error {
+	if len(args) != 2 {
+		c.outputError("Usage: abuse process [report-id] [ban|accept]")
+		return nil
+	}
+	
+	reportID := args[0]
+	action := args[1]
+	
+	if action != "ban" && action != "accept" {
+		c.outputError("Action must be 'ban' or 'accept'")
+		return nil
+	}
+	
+	reportManager := security.NewAbuseReportManager()
+	
+	// Get the report first to show details
+	report, err := reportManager.GetReport(reportID)
+	if err != nil {
+		c.outputError(fmt.Sprintf("Report not found: %v", err))
+		return nil
+	}
+	
+	if report.Status != "pending" {
+		c.outputError(fmt.Sprintf("Report already processed (status: %s)", report.Status))
+		return nil
+	}
+	
+	err = reportManager.ProcessReport(reportID, action, "admin")
+	if err != nil {
+		c.outputError(fmt.Sprintf("Failed to process report: %v", err))
+		return nil
+	}
+	
+	if c.jsonOutput {
+		data := map[string]interface{}{
+			"report_id": reportID,
+			"action":    action,
+			"domain":    report.Domain,
+		}
+		c.outputSuccess(data, fmt.Sprintf("Report %s processed", action))
+	} else {
+		fmt.Printf("✅ Report %s processed: %s\n", reportID, action)
+		fmt.Printf("   Domain: %s\n", report.Domain)
+		fmt.Printf("   Reason: %s\n", report.Reason)
+		
+		if action == "ban" {
+			fmt.Printf("   🚫 Domain has been banned\n")
+		} else {
+			fmt.Printf("   ✅ Report dismissed - domain accepted\n")
+		}
+	}
+	
+	return nil
+}
+
+// handleAbuseStats shows abuse report statistics
+func (c *CLI) handleAbuseStats() error {
+	reportManager := security.NewAbuseReportManager()
+	stats := reportManager.GetStats()
+	
+	if c.jsonOutput {
+		c.outputSuccess(stats, "Abuse report statistics")
+		return nil
+	}
+	
+	fmt.Println("=== Abuse Report Statistics ===")
+	fmt.Printf("Total Reports: %v\n", stats["total_reports"])
+	fmt.Printf("Pending: %v\n", stats["pending_reports"])
+	fmt.Printf("Banned: %v\n", stats["banned_reports"])
+	fmt.Printf("Accepted: %v\n", stats["accepted_reports"])
+	fmt.Printf("Redis Available: %v\n", stats["redis_available"])
+	
 	return nil
 }
 
