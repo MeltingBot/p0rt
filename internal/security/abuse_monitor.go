@@ -249,7 +249,7 @@ func (am *AbuseMonitor) serveReportForm(w http.ResponseWriter, r *http.Request) 
 		siteKey = "10000000-ffff-ffff-ffff-000000000001"
 	}
 
-	html := fmt.Sprintf(`<!DOCTYPE html>
+	html := `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -420,9 +420,12 @@ func (am *AbuseMonitor) serveReportForm(w http.ResponseWriter, r *http.Request) 
 </body>
 </html>`
 
+	// Replace placeholder with actual site key
+	finalHTML := strings.ReplaceAll(html, "%s", siteKey)
+	
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(fmt.Sprintf(html, siteKey)))
+	w.Write([]byte(finalHTML))
 }
 
 // verifyHCaptcha verifies the hCaptcha response with hCaptcha service
