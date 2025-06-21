@@ -50,6 +50,10 @@ case "$MODE" in
             echo "[]" > authorized_keys.json
         fi
         
+        # Ajuster les permissions pour Docker (uid 1001)
+        echo "🔧 Ajustement des permissions..."
+        chmod 666 ssh_host_key authorized_keys.json 2>/dev/null || true
+        
         mkdir -p data
         
         # Arrêter les anciens conteneurs

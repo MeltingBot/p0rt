@@ -31,7 +31,9 @@ COPY --from=builder /app/p0rt .
 # Créer les répertoires nécessaires et fichiers par défaut
 RUN mkdir -p data/security data/reservations data/stats && \
     echo "[]" > authorized_keys.json && \
-    chown -R p0rt:p0rt /app
+    touch ssh_host_key && \
+    chown -R p0rt:p0rt /app && \
+    chmod 666 ssh_host_key authorized_keys.json
 
 # Aucun fichier de configuration requis - tout est par variables d'environnement
 
@@ -41,6 +43,11 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Exposer les ports
 EXPOSE 22 80
+
+# Pour le port 22, nous devons démarrer en root puis drop privileges
+# ou utiliser setcap pour permettre à l'utilisateur de bind des ports privilégiés
+RUN apk add --no-cache libcap && \
+    setcap 'cap_net_bind_service=+ep' /app/p0rt
 
 # Utiliser l'utilisateur non-root
 USER p0rt
