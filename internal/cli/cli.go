@@ -1588,10 +1588,17 @@ func (c *CLI) handleRemoteHistory(args []string) error {
 		fmt.Printf("   Trigram: %s\n", record.Trigram)
 		fmt.Printf("   Client IP: %s\n", record.ClientIP)
 		fmt.Printf("   Connected: %s\n", record.ConnectedAt.Format("2006-01-02 15:04:05"))
-		fmt.Printf("   Disconnected: %s\n", record.DisconnectedAt.Format("2006-01-02 15:04:05"))
 		
-		duration := record.DisconnectedAt.Sub(record.ConnectedAt)
-		fmt.Printf("   Duration: %s\n", duration.Round(time.Second))
+		if record.DisconnectedAt != nil {
+			fmt.Printf("   Disconnected: %s\n", record.DisconnectedAt.Format("2006-01-02 15:04:05"))
+			duration := record.DisconnectedAt.Sub(record.ConnectedAt)
+			fmt.Printf("   Duration: %s\n", duration.Round(time.Second))
+		} else {
+			// Still connected
+			fmt.Printf("   Status: Still connected\n")
+			duration := time.Since(record.ConnectedAt)
+			fmt.Printf("   Duration: %s\n", duration.Round(time.Second))
+		}
 		
 		fmt.Printf("   Bytes In: %s\n", stats.FormatBytes(record.BytesIn))
 		fmt.Printf("   Bytes Out: %s\n", stats.FormatBytes(record.BytesOut))
