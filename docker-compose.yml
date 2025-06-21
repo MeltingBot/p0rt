@@ -2,74 +2,22 @@ version: '3.8'
 
 services:
   p0rt:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: p0rt-server
+    build: .
+    container_name: p0rt
     restart: unless-stopped
     ports:
-      - "22:22"     # SSH port
-      - "80:80"     # HTTP port
+      - "22:22"
+      - "80:80"
     volumes:
-      - ./data:/app/data
       - ./ssh_host_key:/app/ssh_host_key
       - ./authorized_keys.json:/app/authorized_keys.json
-      - ./config.yaml:/app/config.yaml:ro
+      - ./data:/app/data
     environment:
-      - P0RT_API_KEY=${P0RT_API_KEY:-}
-      - P0RT_VERBOSE=${P0RT_VERBOSE:-false}
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-p0rt_redis_pass}
-      - P0RT_OPEN_ACCESS=${P0RT_OPEN_ACCESS:-false}
       - SSH_SERVER_PORT=22
       - HTTP_PORT=80
+      - P0RT_OPEN_ACCESS=false
     networks:
-      - p0rt-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    # Capabilities pour les ports privilégiés
-    cap_add:
-      - NET_BIND_SERVICE
-    # Sécurité
-    security_opt:
-      - no-new-privileges:true
-    read_only: false  # false car on a besoin d'écrire dans /app/data
-    # user: "${UID:-1000}:${GID:-1000}"  # Commenté car on a besoin de root pour le port 22
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=100m
-
-  # Service Redis optionnel pour le stockage
-  redis:
-    image: redis:7-alpine
-    container_name: p0rt-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    networks:
-      - p0rt-network
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-p0rt_redis_pass}
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-p0rt_redis_pass}", "--raw", "incr", "ping"]
-      interval: 30s
-      timeout: 3s
-      retries: 5
-    security_opt:
-      - no-new-privileges:true
-
-  # Note: Nginx retiré car Cloudflare gère déjà SSL et le reverse proxy
+      - p0rt-net
 
 networks:
-  p0rt-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-
-volumes:
-  redis-data:
-    driver: local
+  p0rt-net:
