@@ -336,3 +336,36 @@ func (c *Client) GetConnections() ([]*stats.ConnectionRecord, error) {
 
 	return response.Connections, nil
 }
+
+// GetAccessMode retrieves the current access mode from the API
+func (c *Client) GetAccessMode() (string, error) {
+	responseBody, err := c.makeRequest("GET", "/api/v1/access", nil)
+	if err != nil {
+		return "", err
+	}
+
+	var response struct {
+		Success    bool   `json:"success"`
+		AccessMode string `json:"access_mode"`
+		OpenAccess bool   `json:"open_access"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if !response.Success {
+		return "", fmt.Errorf("API request failed")
+	}
+
+	return response.AccessMode, nil
+}
+
+// SetAccessMode changes the access mode via the API
+func (c *Client) SetAccessMode(mode string) error {
+	body := map[string]string{
+		"mode": mode,
+	}
+
+	_, err := c.makeRequest("POST", "/api/v1/access", body)
+	return err
+}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/p0rt/p0rt/internal/api"
 )
 
 // accessCmd represents the access command
@@ -66,12 +67,31 @@ func init() {
 
 // showAccessStatus shows the current access mode
 func showAccessStatus() {
-	currentMode := "restricted"
-	if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
-		currentMode = "open"
+	remoteURL, apiKey, _, _, _, useJSON := GetGlobalFlags()
+	
+	var currentMode string
+	var err error
+	
+	if remoteURL != "" {
+		// Use remote API
+		client := api.NewClient(remoteURL, apiKey)
+		currentMode, err = client.GetAccessMode()
+		if err != nil {
+			if useJSON {
+				outputError(fmt.Sprintf("Failed to get access mode from remote server: %v", err))
+			} else {
+				fmt.Printf("❌ Failed to get access mode from remote server: %v\n", err)
+			}
+			return
+		}
+	} else {
+		// Local mode
+		currentMode = "restricted"
+		if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
+			currentMode = "open"
+		}
 	}
 
-	_, _, _, _, _, useJSON := GetGlobalFlags()
 	if useJSON {
 		data := map[string]interface{}{
 			"access_mode": currentMode,
@@ -90,52 +110,112 @@ func showAccessStatus() {
 
 // setAccessMode changes the server access mode
 func setAccessMode(mode string) {
-	oldMode := "restricted"
-	if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
-		oldMode = "open"
-	}
-
-	_, _, _, _, _, useJSON := GetGlobalFlags()
-
-	if oldMode == mode {
+	remoteURL, apiKey, _, _, _, useJSON := GetGlobalFlags()
+	
+	if remoteURL != "" {
+		// Use remote API
+		client := api.NewClient(remoteURL, apiKey)
+		
+		// Get current mode first
+		oldMode, err := client.GetAccessMode()
+		if err != nil {
+			if useJSON {
+				outputError(fmt.Sprintf("Failed to get current access mode: %v", err))
+			} else {
+				fmt.Printf("❌ Failed to get current access mode: %v\n", err)
+			}
+			return
+		}
+		
+		if oldMode == mode {
+			if useJSON {
+				data := map[string]interface{}{
+					"access_mode": mode,
+					"changed":     false,
+				}
+				outputSuccess(data, fmt.Sprintf("Access mode already set to %s", mode))
+			} else {
+				fmt.Printf("✅ Access mode is already set to %s\n", strings.ToUpper(mode))
+			}
+			return
+		}
+		
+		// Set new mode
+		err = client.SetAccessMode(mode)
+		if err != nil {
+			if useJSON {
+				outputError(fmt.Sprintf("Failed to change access mode: %v", err))
+			} else {
+				fmt.Printf("❌ Failed to change access mode: %v\n", err)
+			}
+			return
+		}
+		
 		if useJSON {
 			data := map[string]interface{}{
 				"access_mode": mode,
-				"changed":     false,
+				"changed":     true,
+				"old_mode":    oldMode,
 			}
-			outputSuccess(data, fmt.Sprintf("Access mode already set to %s", mode))
+			outputSuccess(data, fmt.Sprintf("Access mode changed from %s to %s", oldMode, mode))
 		} else {
-			fmt.Printf("✅ Access mode is already set to %s\n", strings.ToUpper(mode))
+			fmt.Printf("✅ Access mode changed from %s to %s\n", strings.ToUpper(oldMode), strings.ToUpper(mode))
+			fmt.Println()
+			if mode == "open" {
+				fmt.Println("⚠️  WARNING: Server is now in OPEN ACCESS mode")
+				fmt.Println("   Any SSH key can now create tunnels")
+			} else {
+				fmt.Println("🔒 Server is now in RESTRICTED ACCESS mode")
+				fmt.Println("   Only pre-authorized keys can create tunnels")
+			}
 		}
-		return
-	}
-
-	// Set the environment variable for the current session
-	if mode == "open" {
-		os.Setenv("P0RT_OPEN_ACCESS", "true")
 	} else {
-		os.Setenv("P0RT_OPEN_ACCESS", "false")
-	}
-
-	if useJSON {
-		data := map[string]interface{}{
-			"access_mode": mode,
-			"changed":     true,
-			"old_mode":    oldMode,
+		// Local mode
+		oldMode := "restricted"
+		if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
+			oldMode = "open"
 		}
-		outputSuccess(data, fmt.Sprintf("Access mode changed from %s to %s", oldMode, mode))
-	} else {
-		fmt.Printf("✅ Access mode changed from %s to %s\n", strings.ToUpper(oldMode), strings.ToUpper(mode))
-		fmt.Println()
+
+		if oldMode == mode {
+			if useJSON {
+				data := map[string]interface{}{
+					"access_mode": mode,
+					"changed":     false,
+				}
+				outputSuccess(data, fmt.Sprintf("Access mode already set to %s", mode))
+			} else {
+				fmt.Printf("✅ Access mode is already set to %s\n", strings.ToUpper(mode))
+			}
+			return
+		}
+
+		// Set the environment variable for the current session
 		if mode == "open" {
-			fmt.Println("⚠️  WARNING: Server is now in OPEN ACCESS mode")
-			fmt.Println("   Any SSH key can now create tunnels")
+			os.Setenv("P0RT_OPEN_ACCESS", "true")
 		} else {
-			fmt.Println("🔒 Server is now in RESTRICTED ACCESS mode")
-			fmt.Println("   Only pre-authorized keys can create tunnels")
+			os.Setenv("P0RT_OPEN_ACCESS", "false")
 		}
-		fmt.Println()
-		fmt.Println("💡 Note: This change applies to the current session only.")
-		fmt.Println("   To make it permanent, update your .env file or environment variables.")
+
+		if useJSON {
+			data := map[string]interface{}{
+				"access_mode": mode,
+				"changed":     true,
+				"old_mode":    oldMode,
+			}
+			outputSuccess(data, fmt.Sprintf("Access mode changed from %s to %s", oldMode, mode))
+		} else {
+			fmt.Printf("✅ Access mode changed from %s to %s\n", strings.ToUpper(oldMode), strings.ToUpper(mode))
+			fmt.Println()
+			if mode == "open" {
+				fmt.Println("⚠️  WARNING: Server is now in OPEN ACCESS mode")
+				fmt.Println("   Any SSH key can now create tunnels")
+			} else {
+				fmt.Println("🔒 Server is now in RESTRICTED ACCESS mode")
+				fmt.Println("   Only pre-authorized keys can create tunnels")
+			}
+			fmt.Println()
+			fmt.Println("💡 Note: This change applies to the current session only.")
+			fmt.Println("   To make it permanent, update your .env file or environment variables.")
+		}
 	}
 }

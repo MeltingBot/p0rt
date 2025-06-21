@@ -58,6 +58,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/connections", h.handleConnections)
 	mux.HandleFunc("/api/v1/security/stats", h.handleSecurityStats)
 	mux.HandleFunc("/api/v1/security/bans", h.handleSecurityBans)
+	mux.HandleFunc("/api/v1/access", h.handleAccess)
 	mux.HandleFunc("/api/v1/status", h.handleStatus)
 }
 
@@ -455,4 +456,73 @@ func (h *Handler) handleConnections(w http.ResponseWriter, r *http.Request) {
 		"count":        len(connections),
 		"timestamp":    time.Now().Format(time.RFC3339),
 	})
+}
+
+// handleAccess handles /api/v1/access endpoint
+func (h *Handler) handleAccess(w http.ResponseWriter, r *http.Request) {
+	if !h.authenticateRequest(r) {
+		writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		// Get current access mode
+		currentMode := "restricted"
+		if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
+			currentMode = "open"
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success":     true,
+			"access_mode": currentMode,
+			"open_access": currentMode == "open",
+			"timestamp":   time.Now().Format(time.RFC3339),
+		})
+
+	case http.MethodPost:
+		// Change access mode
+		var req struct {
+			Mode string `json:"mode"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "Invalid request body")
+			return
+		}
+
+		if req.Mode != "open" && req.Mode != "restricted" {
+			writeError(w, http.StatusBadRequest, "Mode must be 'open' or 'restricted'")
+			return
+		}
+
+		// Get current mode
+		oldMode := "restricted"
+		if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
+			oldMode = "open"
+		}
+
+		// Set new mode
+		if req.Mode == "open" {
+			os.Setenv("P0RT_OPEN_ACCESS", "true")
+		} else {
+			os.Setenv("P0RT_OPEN_ACCESS", "false")
+		}
+
+		// Update stats manager if available
+		if h.statsManager != nil {
+			h.statsManager.SetAccessMode(req.Mode)
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success":     true,
+			"access_mode": req.Mode,
+			"old_mode":    oldMode,
+			"changed":     oldMode != req.Mode,
+			"timestamp":   time.Now().Format(time.RFC3339),
+		})
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+	}
 }
