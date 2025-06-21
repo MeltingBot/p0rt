@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/p0rt/p0rt/internal/domain"
@@ -53,6 +54,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/reservations/", h.handleReservation)
 	mux.HandleFunc("/api/v1/stats", h.handleStats)
 	mux.HandleFunc("/api/v1/stats/tunnel/", h.handleTunnelStats)
+	mux.HandleFunc("/api/v1/history", h.handleHistory)
+	mux.HandleFunc("/api/v1/connections", h.handleConnections)
 	mux.HandleFunc("/api/v1/security/stats", h.handleSecurityStats)
 	mux.HandleFunc("/api/v1/security/bans", h.handleSecurityBans)
 	mux.HandleFunc("/api/v1/status", h.handleStatus)
@@ -388,5 +391,68 @@ func (h *Handler) handleSecurityBans(w http.ResponseWriter, r *http.Request) {
 		"total_bans": banCount,
 		"timestamp":  time.Now().Format(time.RFC3339),
 		"note":       note,
+	})
+}
+
+// handleHistory handles /api/v1/history endpoint
+func (h *Handler) handleHistory(w http.ResponseWriter, r *http.Request) {
+	if !h.authenticateRequest(r) {
+		writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	if h.statsManager == nil {
+		writeError(w, http.StatusServiceUnavailable, "Stats manager not available")
+		return
+	}
+
+	// Get limit from query parameter
+	limit := 20
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if n, err := strconv.Atoi(limitStr); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+
+	history := h.statsManager.GetConnectionHistory(limit)
+	
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":     true,
+		"history":     history,
+		"count":       len(history),
+		"limit":       limit,
+		"timestamp":   time.Now().Format(time.RFC3339),
+	})
+}
+
+// handleConnections handles /api/v1/connections endpoint
+func (h *Handler) handleConnections(w http.ResponseWriter, r *http.Request) {
+	if !h.authenticateRequest(r) {
+		writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	if h.statsManager == nil {
+		writeError(w, http.StatusServiceUnavailable, "Stats manager not available")
+		return
+	}
+
+	connections := h.statsManager.GetActiveConnections()
+	
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":      true,
+		"connections":  connections,
+		"count":        len(connections),
+		"timestamp":    time.Now().Format(time.RFC3339),
 	})
 }

@@ -288,3 +288,51 @@ func (c *Client) Ping() error {
 	_, err := c.GetStatus()
 	return err
 }
+
+// GetHistory retrieves connection history from the API
+func (c *Client) GetHistory(limit int) ([]*stats.ConnectionRecord, error) {
+	path := fmt.Sprintf("/api/v1/history?limit=%d", limit)
+	responseBody, err := c.makeRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		Success bool                       `json:"success"`
+		History []*stats.ConnectionRecord `json:"history"`
+		Count   int                        `json:"count"`
+		Limit   int                        `json:"limit"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if !response.Success {
+		return nil, fmt.Errorf("API request failed")
+	}
+
+	return response.History, nil
+}
+
+// GetConnections retrieves active connections from the API
+func (c *Client) GetConnections() ([]*stats.ConnectionRecord, error) {
+	responseBody, err := c.makeRequest("GET", "/api/v1/connections", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		Success     bool                        `json:"success"`
+		Connections []*stats.ConnectionRecord   `json:"connections"`
+		Count       int                         `json:"count"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if !response.Success {
+		return nil, fmt.Errorf("API request failed")
+	}
+
+	return response.Connections, nil
+}

@@ -549,6 +549,9 @@ func (c *CLI) showReservationStats() error {
 func (c *CLI) showStats() error {
 	if c.useRemoteAPI {
 		// Get stats from remote API
+		if os.Getenv("P0RT_VERBOSE") == "true" {
+			fmt.Printf("Debug: Fetching stats from API...\n")
+		}
 		statsResponse, err := c.apiClient.GetStats()
 		if err != nil {
 			c.outputError(fmt.Sprintf("Failed to get remote stats: %v", err))
@@ -1272,6 +1275,11 @@ func (c *CLI) deactivateKey(args []string) error {
 
 // handleHistoryCommand handles connection history commands
 func (c *CLI) handleHistoryCommand(args []string) error {
+	// Check if we're using remote API
+	if c.useRemoteAPI {
+		return c.handleRemoteHistory(args)
+	}
+	
 	if c.statsManager == nil {
 		if c.jsonOutput {
 			c.outputError("History is only available when the server is running. Start the server with 'server start'")
@@ -1366,6 +1374,11 @@ func (c *CLI) handleHistoryCommand(args []string) error {
 
 // showActiveConnections shows currently active connections
 func (c *CLI) showActiveConnections() error {
+	// Check if we're using remote API
+	if c.useRemoteAPI {
+		return c.showRemoteConnections()
+	}
+
 	if c.statsManager == nil {
 		if c.jsonOutput {
 			c.outputError("Connections view is only available when the server is running. Start the server with 'server start'")
@@ -1536,4 +1549,98 @@ func (c *CLI) getDomainCompletions(line string) []string {
 		domains = append(domains, res.Domain)
 	}
 	return domains
+}
+
+// handleRemoteHistory handles history command via remote API
+func (c *CLI) handleRemoteHistory(args []string) error {
+	limit := 20
+	if len(args) > 0 {
+		if n, err := strconv.Atoi(args[0]); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	history, err := c.apiClient.GetHistory(limit)
+	if err != nil {
+		c.outputError(fmt.Sprintf("Failed to get history from remote server: %v", err))
+		return nil
+	}
+
+	if len(history) == 0 {
+		if c.jsonOutput {
+			c.outputSuccess([]interface{}{}, "No connection history found")
+		} else {
+			fmt.Println("No connection history found")
+		}
+		return nil
+	}
+
+	if c.jsonOutput {
+		c.outputSuccess(history, fmt.Sprintf("Connection history (last %d)", limit))
+		return nil
+	}
+
+	// Human-readable format
+	fmt.Printf("=== Connection History (Last %d) ===\n\n", limit)
+	
+	for i, record := range history {
+		fmt.Printf("%d. Domain: %s\n", i+1, record.Domain)
+		fmt.Printf("   Trigram: %s\n", record.Trigram)
+		fmt.Printf("   Client IP: %s\n", record.ClientIP)
+		fmt.Printf("   Connected: %s\n", record.ConnectedAt.Format("2006-01-02 15:04:05"))
+		fmt.Printf("   Disconnected: %s\n", record.DisconnectedAt.Format("2006-01-02 15:04:05"))
+		
+		duration := record.DisconnectedAt.Sub(record.ConnectedAt)
+		fmt.Printf("   Duration: %s\n", duration.Round(time.Second))
+		
+		fmt.Printf("   Bytes In: %s\n", stats.FormatBytes(record.BytesIn))
+		fmt.Printf("   Bytes Out: %s\n", stats.FormatBytes(record.BytesOut))
+		fmt.Printf("   Requests: %d\n", record.RequestCount)
+		fmt.Println()
+	}
+	
+	return nil
+}
+
+// showRemoteConnections shows connections via remote API
+func (c *CLI) showRemoteConnections() error {
+	connections, err := c.apiClient.GetConnections()
+	if err != nil {
+		c.outputError(fmt.Sprintf("Failed to get connections from remote server: %v", err))
+		return nil
+	}
+
+	if len(connections) == 0 {
+		if c.jsonOutput {
+			c.outputSuccess([]interface{}{}, "No active connections")
+		} else {
+			fmt.Println("No active connections")
+		}
+		return nil
+	}
+
+	if c.jsonOutput {
+		c.outputSuccess(connections, fmt.Sprintf("Active connections (%d)", len(connections)))
+		return nil
+	}
+
+	// Human-readable format
+	fmt.Printf("=== Active Connections (%d) ===\n\n", len(connections))
+	
+	for i, conn := range connections {
+		fmt.Printf("%d. Domain: %s\n", i+1, conn.Domain)
+		fmt.Printf("   Trigram: %s\n", conn.Trigram)
+		fmt.Printf("   Client IP: %s\n", conn.ClientIP)
+		fmt.Printf("   Connected: %s\n", conn.ConnectedAt.Format("2006-01-02 15:04:05"))
+		
+		duration := time.Since(conn.ConnectedAt)
+		fmt.Printf("   Duration: %s\n", duration.Round(time.Second))
+		
+		fmt.Printf("   Bandwidth In: %s\n", stats.FormatBytes(conn.BytesIn))
+		fmt.Printf("   Bandwidth Out: %s\n", stats.FormatBytes(conn.BytesOut))
+		fmt.Printf("   Requests: %d\n", conn.RequestCount)
+		fmt.Println()
+	}
+	
+	return nil
 }
