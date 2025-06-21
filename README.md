@@ -224,8 +224,14 @@ P0rt supports two access modes:
 ### Interactive CLI
 
 ```bash
-./p0rt -cli
+./p0rt cli
 ```
+
+**Features:**
+- Tab completion for all commands and subcommands
+- Command history with up/down arrows
+- Context-sensitive help
+- Support for command aliases
 
 Available commands:
 - `key add <fingerprint> [tier] [comment]` - Add SSH key
