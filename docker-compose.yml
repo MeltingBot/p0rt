@@ -12,12 +12,16 @@ services:
       - "80:80"     # HTTP port
     volumes:
       - ./data:/app/data
-      - ./ssh_host_key:/app/ssh_host_key:ro
+      - ./ssh_host_key:/app/ssh_host_key
+      - ./authorized_keys.json:/app/authorized_keys.json
       - ./config.yaml:/app/config.yaml:ro
     environment:
       - P0RT_API_KEY=${P0RT_API_KEY:-}
       - P0RT_VERBOSE=${P0RT_VERBOSE:-false}
       - REDIS_PASSWORD=${REDIS_PASSWORD:-p0rt_redis_pass}
+      - P0RT_OPEN_ACCESS=${P0RT_OPEN_ACCESS:-false}
+      - SSH_SERVER_PORT=22
+      - HTTP_PORT=80
     networks:
       - p0rt-network
     healthcheck:
@@ -33,6 +37,7 @@ services:
     security_opt:
       - no-new-privileges:true
     read_only: false  # false car on a besoin d'écrire dans /app/data
+    # user: "${UID:-1000}:${GID:-1000}"  # Commenté car on a besoin de root pour le port 22
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=100m
 
