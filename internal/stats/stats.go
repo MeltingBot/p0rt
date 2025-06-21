@@ -275,3 +275,8 @@ func (m *Manager) GetActiveConnections() []*ConnectionRecord {
 func (m *Manager) GetConnectionStats() map[string]interface{} {
 	return m.connectionHistory.GetConnectionStats()
 }
+
+// CleanupStaleConnections manually triggers cleanup of stale connections
+func (m *Manager) CleanupStaleConnections(timeout time.Duration) {
+	m.connectionHistory.CleanupStaleConnections(timeout)
+}

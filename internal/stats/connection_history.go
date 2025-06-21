@@ -72,6 +72,9 @@ func NewConnectionHistory(dataDir string) *ConnectionHistory {
 		ch.loadFromRedis()
 	}
 	
+	// Start periodic cleanup of stale connections (every 10 minutes)
+	go ch.periodicCleanup()
+	
 	return ch
 }
 
@@ -529,5 +532,50 @@ func (ch *ConnectionHistory) refreshHistoryFromRedis() {
 		}
 		
 		ch.history = append(ch.history, &record)
+	}
+}
+
+// CleanupStaleConnections marks connections as disconnected if they're older than the timeout
+func (ch *ConnectionHistory) CleanupStaleConnections(timeout time.Duration) {
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	
+	now := time.Now()
+	staleConnections := make([]string, 0)
+	
+	for domain, record := range ch.connections {
+		if record.DisconnectedAt == nil && now.Sub(record.ConnectedAt) > timeout {
+			// Mark as disconnected
+			record.DisconnectedAt = &now
+			record.Duration = now.Sub(record.ConnectedAt).String()
+			record.Active = false
+			
+			staleConnections = append(staleConnections, domain)
+			
+			log.Printf("ConnectionHistory: Marked stale connection as disconnected: %s (age: %v)", 
+				domain, now.Sub(record.ConnectedAt))
+		}
+	}
+	
+	// Remove from active connections map and update Redis
+	for _, domain := range staleConnections {
+		if record, exists := ch.connections[domain]; exists {
+			// Update in Redis before removing from map
+			if ch.useRedis {
+				ch.saveRecordToRedis(record)
+			}
+			delete(ch.connections, domain)
+		}
+	}
+}
+
+// periodicCleanup runs periodic cleanup of stale connections
+func (ch *ConnectionHistory) periodicCleanup() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	
+	for range ticker.C {
+		// Mark connections as disconnected if they're older than 30 minutes without activity
+		ch.CleanupStaleConnections(30 * time.Minute)
 	}
 }
