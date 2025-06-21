@@ -8,17 +8,8 @@ services:
       - ./ssh_host_key:/app/ssh_host_key:rw
       - ./authorized_keys.json:/app/authorized_keys.json:rw
       - ./data:/app/data:rw
-    environment:
-      - SSH_SERVER_PORT=${SSH_SERVER_PORT}
-      - HTTP_PORT=${HTTP_PORT}
-      - P0RT_OPEN_ACCESS=${P0RT_OPEN_ACCESS}
-      - REDIS_URL=${REDIS_URL}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_DB=${REDIS_DB}
-      - DOMAIN_BASE=${DOMAIN_BASE}
-      - P0RT_AUTHORIZED_KEYS=${P0RT_AUTHORIZED_KEYS}
-      - P0RT_VERBOSE=${P0RT_VERBOSE}
-      - P0RT_API_KEY=${P0RT_API_KEY}
+    env_file:
+      - .env
     # Nécessaire pour que setcap fonctionne
     security_opt:
       - no-new-privileges:false
