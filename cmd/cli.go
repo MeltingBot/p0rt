@@ -31,7 +31,7 @@ and control the server with tab completion, command history, and context-sensiti
 			cfg = config.LoadDefault()
 		}
 
-		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
+		_, remoteURL, apiKey, _, _, useJSON := GetGlobalFlags()
 
 		var cliInstance *cli.CLI
 
@@ -55,6 +55,9 @@ and control the server with tab completion, command history, and context-sensiti
 				return
 			}
 		}
+
+		// Set JSON output mode if requested
+		cliInstance.SetJSONOutput(useJSON)
 
 		if err := cliInstance.Start(); err != nil {
 			fmt.Printf("Error: CLI error: %v\n", err)

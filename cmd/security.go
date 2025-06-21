@@ -33,7 +33,7 @@ var securityStatsCmd = &cobra.Command{
 	Short: "Show security statistics",
 	Long:  `Display security statistics including authentication failures, blocked IPs, and abuse reports.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
+		_, remoteURL, apiKey, _, _, _ := GetGlobalFlags()
 
 		if remoteURL != "" {
 			showRemoteSecurityStats(remoteURL, apiKey)
@@ -50,7 +50,7 @@ var securityBansCmd = &cobra.Command{
 	Short: "Show banned IPs and blocking information",
 	Long:  `Display currently banned IP addresses and blocking statistics.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
+		_, remoteURL, apiKey, _, _, _ := GetGlobalFlags()
 
 		if remoteURL != "" {
 			showRemoteBanInfo(remoteURL, apiKey)

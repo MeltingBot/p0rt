@@ -17,6 +17,7 @@ case "$MODE" in
         echo "   - HTTP: 8080" 
         echo "   - Accès ouvert (toutes les clés SSH)"
         echo "   - Stockage: Fichiers JSON locaux"
+        echo "   - CLI: Support JSON pour scripts (./p0rt --json)"
         echo ""
         
         # Build si nécessaire
@@ -167,6 +168,10 @@ case "$MODE" in
         echo "  ./run.sh dev          # Développement simple (JSON)"  
         echo "  ./run.sh dev-redis    # Développement avec Redis"
         echo "  ./run.sh prod         # Production avec Docker+Redis"
+        echo ""
+        echo "CLI Usage:"
+        echo "  ./p0rt reservation list --json    # Format JSON pour scripts"
+        echo "  ./p0rt cli --json                 # Mode interactif JSON"
         exit 1
         ;;
 esac

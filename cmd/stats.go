@@ -31,7 +31,7 @@ If a domain is specified, shows detailed statistics for that specific tunnel.`,
   p0rt --remote http://localhost:80 stats test-domain`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
+		_, remoteURL, apiKey, _, _, _ := GetGlobalFlags()
 
 		var domain string
 		if len(args) > 0 {

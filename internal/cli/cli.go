@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -28,6 +29,7 @@ type CLI struct {
 	statsManager       *stats.Manager // For displaying runtime stats when server is running
 	apiClient          *api.Client    // For remote API access
 	useRemoteAPI       bool           // Whether to use remote API instead of local storage
+	jsonOutput         bool           // Whether to output in JSON format
 }
 
 // Command represents a CLI command
@@ -36,6 +38,84 @@ type Command struct {
 	Description string
 	Usage       string
 	Handler     func(args []string) error
+}
+
+// OutputFormat represents different output formats
+type OutputFormat struct {
+	Success bool        `json:"success"`
+	Message string      `json:"message,omitempty"`
+	Data    interface{} `json:"data,omitempty"`
+	Error   string      `json:"error,omitempty"`
+}
+
+// SetJSONOutput enables JSON output format
+func (c *CLI) SetJSONOutput(enabled bool) {
+	c.jsonOutput = enabled
+}
+
+// output prints data in the appropriate format (human-readable or JSON)
+func (c *CLI) output(data interface{}, message string, isError bool) {
+	if c.jsonOutput {
+		result := OutputFormat{
+			Success: !isError,
+			Data:    data,
+		}
+		if message != "" {
+			if isError {
+				result.Error = message
+			} else {
+				result.Message = message
+			}
+		}
+		
+		jsonData, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			fmt.Printf(`{"success":false,"error":"Failed to marshal JSON: %v"}`, err)
+			return
+		}
+		fmt.Println(string(jsonData))
+	} else {
+		// Human-readable format
+		if message != "" {
+			if isError {
+				fmt.Printf("Error: %s\n", message)
+			} else {
+				fmt.Println(message)
+			}
+		}
+		if data != nil {
+			fmt.Printf("%+v\n", data)
+		}
+	}
+}
+
+// outputSuccess prints successful results
+func (c *CLI) outputSuccess(data interface{}, message string) {
+	c.output(data, message, false)
+}
+
+// outputError prints error results
+func (c *CLI) outputError(message string) {
+	c.output(nil, message, true)
+}
+
+// outputList prints a list of items with appropriate formatting
+func (c *CLI) outputList(items interface{}, title string) {
+	if c.jsonOutput {
+		c.outputSuccess(items, title)
+	} else {
+		if title != "" {
+			fmt.Printf("%s:\n", title)
+		}
+		switch v := items.(type) {
+		case []interface{}:
+			for i, item := range v {
+				fmt.Printf("  %d. %+v\n", i+1, item)
+			}
+		default:
+			fmt.Printf("%+v\n", items)
+		}
+	}
 }
 
 // NewCLI creates a new interactive CLI
@@ -408,20 +488,24 @@ func (c *CLI) removeReservation(args []string) error {
 func (c *CLI) listReservations() error {
 	reservations := c.reservationManager.ListReservations()
 	if len(reservations) == 0 {
-		fmt.Println("No reservations found")
+		c.outputSuccess([]interface{}{}, "No reservations found")
 		return nil
 	}
 
-	fmt.Printf("Found %d reservation(s):\n\n", len(reservations))
-	for i, res := range reservations {
-		fmt.Printf("%d. Domain: %s\n", i+1, res.Domain)
-		fmt.Printf("   Fingerprint: %s\n", res.Fingerprint)
-		if res.Comment != "" {
-			fmt.Printf("   Comment: %s\n", res.Comment)
+	if c.jsonOutput {
+		c.outputSuccess(reservations, fmt.Sprintf("Found %d reservation(s)", len(reservations)))
+	} else {
+		fmt.Printf("Found %d reservation(s):\n\n", len(reservations))
+		for i, res := range reservations {
+			fmt.Printf("%d. Domain: %s\n", i+1, res.Domain)
+			fmt.Printf("   Fingerprint: %s\n", res.Fingerprint)
+			if res.Comment != "" {
+				fmt.Printf("   Comment: %s\n", res.Comment)
+			}
+			fmt.Printf("   Created: %s\n", res.CreatedAt.Format("2006-01-02 15:04:05"))
+			fmt.Printf("   Updated: %s\n", res.UpdatedAt.Format("2006-01-02 15:04:05"))
+			fmt.Println()
 		}
-		fmt.Printf("   Created: %s\n", res.CreatedAt.Format("2006-01-02 15:04:05"))
-		fmt.Printf("   Updated: %s\n", res.UpdatedAt.Format("2006-01-02 15:04:05"))
-		fmt.Println()
 	}
 
 	return nil
@@ -430,33 +514,138 @@ func (c *CLI) listReservations() error {
 // showReservationStats shows reservation statistics
 func (c *CLI) showReservationStats() error {
 	stats := c.reservationManager.GetStats()
-	fmt.Println("Reservation Statistics:")
-	for key, value := range stats {
-		fmt.Printf("  %s: %v\n", strings.ReplaceAll(key, "_", " "), value)
+	
+	if c.jsonOutput {
+		c.outputSuccess(stats, "Reservation statistics")
+	} else {
+		fmt.Println("Reservation Statistics:")
+		for key, value := range stats {
+			fmt.Printf("  %s: %v\n", strings.ReplaceAll(key, "_", " "), value)
+		}
 	}
 	return nil
 }
 
 // showStats shows system statistics
 func (c *CLI) showStats() error {
-	fmt.Println("=== P0rt System Statistics ===")
-	fmt.Println()
-
 	if c.useRemoteAPI {
 		// Get stats from remote API
 		statsResponse, err := c.apiClient.GetStats()
 		if err != nil {
-			fmt.Printf("Failed to get remote stats: %v\n", err)
+			c.outputError(fmt.Sprintf("Failed to get remote stats: %v", err))
 			return err
 		}
 
-		fmt.Println("Connection:")
-		fmt.Printf("  Remote API: Connected\n")
+		if c.jsonOutput {
+			statsData := map[string]interface{}{
+				"connection":       "Remote API Connected",
+				"global_stats":     statsResponse.GlobalStats,
+				"reservation_stats": statsResponse.ReservationStats,
+			}
+			c.outputSuccess(statsData, "P0rt system statistics")
+		} else {
+			fmt.Println("=== P0rt System Statistics ===")
+			fmt.Println()
+			fmt.Println("Connection:")
+			fmt.Printf("  Remote API: Connected\n")
+			fmt.Println()
+
+			// Global statistics from API
+			if statsResponse.GlobalStats != nil {
+				globalStats := statsResponse.GlobalStats
+				fmt.Println("Server Statistics:")
+				fmt.Printf("  Uptime: %s\n", globalStats.Uptime)
+				fmt.Printf("  Active Tunnels: %d\n", globalStats.ActiveTunnels)
+				fmt.Printf("  Total Tunnels: %d\n", globalStats.TotalTunnels)
+				fmt.Printf("  Total Connections: %d\n", globalStats.TotalConnections)
+				fmt.Printf("  HTTP Requests: %d\n", globalStats.HTTPRequests)
+				fmt.Printf("  WebSocket Connections: %d\n", globalStats.WebSocketConnections)
+				fmt.Printf("  Bytes Transferred: %s\n", stats.FormatBytes(globalStats.BytesTransferred))
+				fmt.Println()
+
+				// Top domains by traffic
+				if len(globalStats.TopDomains) > 0 {
+					fmt.Println("Top Domains by Requests:")
+					for i, domain := range globalStats.TopDomains {
+						if i >= 5 { // Limit to top 5
+							break
+						}
+						fmt.Printf("  %d. %s - %d requests (%s in, %s out)\n",
+							i+1, domain.Domain, domain.TotalRequests,
+							stats.FormatBytes(domain.BytesIn), stats.FormatBytes(domain.BytesOut))
+					}
+					fmt.Println()
+				}
+			} else {
+				fmt.Println("Server Statistics: Not available")
+				fmt.Println()
+			}
+
+			// Reservation statistics from API
+			fmt.Println("Domain Reservations:")
+			if statsResponse.ReservationStats != nil {
+				for key, value := range statsResponse.ReservationStats {
+					fmt.Printf("  %s: %v\n", strings.ReplaceAll(key, "_", " "), value)
+				}
+			}
+		}
+		return nil
+	}
+
+	// Local mode
+	if c.jsonOutput {
+		// Build JSON stats data
+		configStats := map[string]interface{}{
+			"storage_type":  c.config.Storage.Type,
+			"ssh_port":      c.config.GetSSHPort(),
+			"http_port":     c.config.GetHTTPPort(),
+			"domain_base":   c.config.GetDomainBase(),
+		}
+		if c.config.Storage.Type == "json" {
+			configStats["data_directory"] = c.config.Storage.DataDir
+		} else if c.config.Storage.Type == "redis" {
+			configStats["redis_url"] = c.config.Storage.RedisURL
+			configStats["redis_db"] = c.config.Storage.RedisDB
+		}
+
+		statsData := map[string]interface{}{
+			"configuration": configStats,
+		}
+
+		// Add server stats if available
+		if c.statsManager != nil {
+			statsData["server_stats"] = c.statsManager.GetGlobalStats()
+			statsData["server_running"] = true
+		} else {
+			statsData["server_running"] = false
+		}
+
+		// Add reservation stats
+		statsData["reservation_stats"] = c.reservationManager.GetStats()
+
+		c.outputSuccess(statsData, "P0rt system statistics")
+	} else {
+		fmt.Println("=== P0rt System Statistics ===")
 		fmt.Println()
 
-		// Global statistics from API
-		if statsResponse.GlobalStats != nil {
-			globalStats := statsResponse.GlobalStats
+		// Configuration Statistics
+		fmt.Println("Configuration:")
+		fmt.Printf("  Storage Type: %s\n", c.config.Storage.Type)
+		if c.config.Storage.Type == "json" {
+			fmt.Printf("  Data Directory: %s\n", c.config.Storage.DataDir)
+		} else if c.config.Storage.Type == "redis" {
+			fmt.Printf("  Redis URL: %s\n", c.config.Storage.RedisURL)
+			fmt.Printf("  Redis DB: %d\n", c.config.Storage.RedisDB)
+		}
+		fmt.Printf("  SSH Port: %s\n", c.config.GetSSHPort())
+		fmt.Printf("  HTTP Port: %s\n", c.config.GetHTTPPort())
+		fmt.Printf("  Domain Base: %s\n", c.config.GetDomainBase())
+		fmt.Println()
+
+		// Runtime Statistics (only if server is running and statsManager is available)
+		if c.statsManager != nil {
+			globalStats := c.statsManager.GetGlobalStats()
+
 			fmt.Println("Server Statistics:")
 			fmt.Printf("  Uptime: %s\n", globalStats.Uptime)
 			fmt.Printf("  Active Tunnels: %d\n", globalStats.ActiveTunnels)
@@ -481,70 +670,15 @@ func (c *CLI) showStats() error {
 				fmt.Println()
 			}
 		} else {
-			fmt.Println("Server Statistics: Not available")
+			fmt.Println("Server Statistics: Not available (server not running)")
 			fmt.Println()
 		}
 
-		// Reservation statistics from API
+		// Reservation Statistics
 		fmt.Println("Domain Reservations:")
-		if statsResponse.ReservationStats != nil {
-			for key, value := range statsResponse.ReservationStats {
-				fmt.Printf("  %s: %v\n", strings.ReplaceAll(key, "_", " "), value)
-			}
-		}
-		return nil
+		return c.showReservationStats()
 	}
-
-	// Local mode
-	// Configuration Statistics
-	fmt.Println("Configuration:")
-	fmt.Printf("  Storage Type: %s\n", c.config.Storage.Type)
-	if c.config.Storage.Type == "json" {
-		fmt.Printf("  Data Directory: %s\n", c.config.Storage.DataDir)
-	} else if c.config.Storage.Type == "redis" {
-		fmt.Printf("  Redis URL: %s\n", c.config.Storage.RedisURL)
-		fmt.Printf("  Redis DB: %d\n", c.config.Storage.RedisDB)
-	}
-	fmt.Printf("  SSH Port: %s\n", c.config.GetSSHPort())
-	fmt.Printf("  HTTP Port: %s\n", c.config.GetHTTPPort())
-	fmt.Printf("  Domain Base: %s\n", c.config.GetDomainBase())
-	fmt.Println()
-
-	// Runtime Statistics (only if server is running and statsManager is available)
-	if c.statsManager != nil {
-		globalStats := c.statsManager.GetGlobalStats()
-
-		fmt.Println("Server Statistics:")
-		fmt.Printf("  Uptime: %s\n", globalStats.Uptime)
-		fmt.Printf("  Active Tunnels: %d\n", globalStats.ActiveTunnels)
-		fmt.Printf("  Total Tunnels: %d\n", globalStats.TotalTunnels)
-		fmt.Printf("  Total Connections: %d\n", globalStats.TotalConnections)
-		fmt.Printf("  HTTP Requests: %d\n", globalStats.HTTPRequests)
-		fmt.Printf("  WebSocket Connections: %d\n", globalStats.WebSocketConnections)
-		fmt.Printf("  Bytes Transferred: %s\n", stats.FormatBytes(globalStats.BytesTransferred))
-		fmt.Println()
-
-		// Top domains by traffic
-		if len(globalStats.TopDomains) > 0 {
-			fmt.Println("Top Domains by Requests:")
-			for i, domain := range globalStats.TopDomains {
-				if i >= 5 { // Limit to top 5
-					break
-				}
-				fmt.Printf("  %d. %s - %d requests (%s in, %s out)\n",
-					i+1, domain.Domain, domain.TotalRequests,
-					stats.FormatBytes(domain.BytesIn), stats.FormatBytes(domain.BytesOut))
-			}
-			fmt.Println()
-		}
-	} else {
-		fmt.Println("Server Statistics: Not available (server not running)")
-		fmt.Println()
-	}
-
-	// Reservation Statistics
-	fmt.Println("Domain Reservations:")
-	return c.showReservationStats()
+	return nil
 }
 
 // showDomainStats shows statistics for a specific domain
@@ -953,49 +1087,104 @@ func (c *CLI) listKeys() error {
 	keys := c.keyStore.ListKeys()
 
 	if len(keys) == 0 {
-		fmt.Println("No authorized SSH keys found")
-		fmt.Println()
-		fmt.Println("Add a key with:")
-		fmt.Println("  key add SHA256:abc123... beta \"User Name\"")
+		if c.jsonOutput {
+			c.outputSuccess([]interface{}{}, "No authorized SSH keys found")
+		} else {
+			fmt.Println("No authorized SSH keys found")
+			fmt.Println()
+			fmt.Println("Add a key with:")
+			fmt.Println("  key add SHA256:abc123... beta \"User Name\"")
+		}
 		return nil
 	}
 
-	fmt.Printf("Found %d authorized SSH key(s):\n\n", len(keys))
-	fmt.Printf("%-50s %-10s %-10s %-20s %s\n", "Fingerprint", "Tier", "Status", "Added", "Comment")
-	fmt.Println(strings.Repeat("-", 120))
-
+	// Convert to structured data for JSON output
+	type KeyInfo struct {
+		Fingerprint string    `json:"fingerprint"`
+		Tier        string    `json:"tier"`
+		Status      string    `json:"status"`
+		Active      bool      `json:"active"`
+		Expired     bool      `json:"expired"`
+		AddedAt     time.Time `json:"added_at"`
+		ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+		Comment     string    `json:"comment"`
+	}
+	
+	var keyList []KeyInfo
 	for _, access := range keys {
-		status := "✅ Active"
+		status := "active"
+		expired := false
 		if !access.Active {
-			status = "❌ Inactive"
+			status = "inactive"
 		}
 		if access.ExpiresAt != nil && time.Now().After(*access.ExpiresAt) {
-			status = "⏰ Expired"
+			status = "expired"
+			expired = true
 		}
 
-		// Truncate long fingerprints for display
-		displayFingerprint := access.Fingerprint
-		if len(displayFingerprint) > 47 {
-			displayFingerprint = displayFingerprint[:44] + "..."
+		keyList = append(keyList, KeyInfo{
+			Fingerprint: access.Fingerprint,
+			Tier:        access.Tier,
+			Status:      status,
+			Active:      access.Active,
+			Expired:     expired,
+			AddedAt:     access.AddedAt,
+			ExpiresAt:   access.ExpiresAt,
+			Comment:     access.Comment,
+		})
+	}
+
+	if c.jsonOutput {
+		// Add metadata for JSON output
+		accessMode := "restricted"
+		if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
+			accessMode = "open"
+		}
+		
+		result := map[string]interface{}{
+			"keys":        keyList,
+			"total":       len(keyList),
+			"access_mode": accessMode,
+		}
+		c.outputSuccess(result, "SSH key list")
+	} else {
+		// Human-readable format
+		fmt.Printf("Found %d authorized SSH key(s):\n\n", len(keys))
+		fmt.Printf("%-50s %-10s %-10s %-20s %s\n", "Fingerprint", "Tier", "Status", "Added", "Comment")
+		fmt.Println(strings.Repeat("-", 120))
+
+		for _, keyInfo := range keyList {
+			displayStatus := "✅ Active"
+			if keyInfo.Status == "inactive" {
+				displayStatus = "❌ Inactive"
+			} else if keyInfo.Status == "expired" {
+				displayStatus = "⏰ Expired"
+			}
+
+			// Truncate long fingerprints for display
+			displayFingerprint := keyInfo.Fingerprint
+			if len(displayFingerprint) > 47 {
+				displayFingerprint = displayFingerprint[:44] + "..."
+			}
+
+			fmt.Printf("%-50s %-10s %-10s %-20s %s\n",
+				displayFingerprint,
+				keyInfo.Tier,
+				displayStatus,
+				keyInfo.AddedAt.Format("2006-01-02 15:04:05"),
+				keyInfo.Comment,
+			)
 		}
 
-		fmt.Printf("%-50s %-10s %-10s %-20s %s\n",
-			displayFingerprint,
-			access.Tier,
-			status,
-			access.AddedAt.Format("2006-01-02 15:04:05"),
-			access.Comment,
-		)
+		fmt.Println()
+		
+		// Show access mode
+		accessMode := "RESTRICTED"
+		if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
+			accessMode = "OPEN ACCESS"
+		}
+		fmt.Printf("🔒 Server is in %s mode\n", accessMode)
 	}
-
-	fmt.Println()
-	
-	// Show access mode
-	accessMode := "RESTRICTED"
-	if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
-		accessMode = "OPEN ACCESS"
-	}
-	fmt.Printf("🔒 Server is in %s mode\n", accessMode)
 
 	return nil
 }

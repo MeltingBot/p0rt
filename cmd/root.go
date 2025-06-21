@@ -14,6 +14,7 @@ var (
 	apiKey     string
 	verbose    bool
 	quiet      bool
+	jsonOutput bool
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -65,6 +66,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&apiKey, "api-key", "k", "", "API key for remote server authentication")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output (show detailed logs)")
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "quiet mode (minimal output)")
+	rootCmd.PersistentFlags().BoolVarP(&jsonOutput, "json", "j", false, "output in JSON format for scripting")
 
 	// Set environment variable for config if provided
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
@@ -78,8 +80,8 @@ func init() {
 }
 
 // GetGlobalFlags returns the global flags for use in subcommands
-func GetGlobalFlags() (string, string, string, bool, bool) {
-	return configFile, remoteURL, apiKey, verbose, quiet
+func GetGlobalFlags() (string, string, string, bool, bool, bool) {
+	return configFile, remoteURL, apiKey, verbose, quiet, jsonOutput
 }
 
 // setupLogging configures logging based on verbosity flags

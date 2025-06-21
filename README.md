@@ -175,6 +175,9 @@ P0rt supports two access modes:
 **List all keys:**
 ```bash
 ./p0rt -key list
+
+# JSON output for scripting
+./p0rt -key list --json
 ```
 
 **Remove key:**
@@ -201,6 +204,37 @@ Available commands:
 - `server` - Start server
 - `stats` - Show statistics
 - `help` - Show all commands
+
+### JSON Output for Scripting
+
+All CLI commands support JSON output for automation and scripting:
+
+```bash
+# Get reservation data in JSON format
+./p0rt reservation list --json
+
+# Get system statistics as JSON
+./p0rt cli --json
+> stats
+
+# Get SSH keys as structured data
+./p0rt cli --json
+> key list
+
+# Example: Extract domain names from reservations
+./p0rt reservation list --json | jq -r '.data[].domain'
+```
+
+**JSON Response Format:**
+```json
+{
+  "success": true,
+  "message": "Operation description",
+  "data": { /* structured data */ }
+}
+```
+
+Use the `--json` or `-j` flag with any command to enable JSON output.
 
 ## 🌐 Creating Tunnels
 

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -16,6 +17,62 @@ var (
 	fingerprint string
 	comment     string
 )
+
+// OutputFormat represents different output formats for CLI commands
+type OutputFormat struct {
+	Success bool        `json:"success"`
+	Message string      `json:"message,omitempty"`
+	Data    interface{} `json:"data,omitempty"`
+	Error   string      `json:"error,omitempty"`
+}
+
+// outputResult prints data in the appropriate format (human-readable or JSON)
+func outputResult(data interface{}, message string, isError bool) {
+	_, _, _, _, _, useJSON := GetGlobalFlags()
+	
+	if useJSON {
+		result := OutputFormat{
+			Success: !isError,
+			Data:    data,
+		}
+		if message != "" {
+			if isError {
+				result.Error = message
+			} else {
+				result.Message = message
+			}
+		}
+		
+		jsonData, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			fmt.Printf(`{"success":false,"error":"Failed to marshal JSON: %v"}`, err)
+			return
+		}
+		fmt.Println(string(jsonData))
+	} else {
+		// Human-readable format
+		if message != "" {
+			if isError {
+				fmt.Printf("Error: %s\n", message)
+			} else {
+				fmt.Println(message)
+			}
+		}
+		if data != nil {
+			fmt.Printf("%+v\n", data)
+		}
+	}
+}
+
+// outputSuccess prints successful results
+func outputSuccess(data interface{}, message string) {
+	outputResult(data, message, false)
+}
+
+// outputError prints error results
+func outputError(message string) {
+	outputResult(nil, message, true)
+}
 
 // reservationCmd represents the reservation command
 var reservationCmd = &cobra.Command{
@@ -49,7 +106,7 @@ var reservationListCmd = &cobra.Command{
 	Short:   "List all domain reservations",
 	Long:    `Display all current domain reservations with their details.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
+		_, remoteURL, apiKey, _, _, _ := GetGlobalFlags()
 
 		if remoteURL != "" {
 			// Use remote API
@@ -122,7 +179,7 @@ You can provide arguments either as positional parameters or using flags.`,
 			return
 		}
 
-		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
+		_, remoteURL, apiKey, _, _, _ := GetGlobalFlags()
 
 		if remoteURL != "" {
 			// Use remote API
@@ -153,7 +210,7 @@ var reservationRemoveCmd = &cobra.Command{
 			domain = domainName
 		}
 
-		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
+		_, remoteURL, apiKey, _, _, _ := GetGlobalFlags()
 
 		if remoteURL != "" {
 			// Use remote API
@@ -170,7 +227,7 @@ var reservationStatsCmd = &cobra.Command{
 	Short: "Show reservation statistics",
 	Long:  `Display statistics about domain reservations.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		_, remoteURL, apiKey, _, _ := GetGlobalFlags()
+		_, remoteURL, apiKey, _, _, _ := GetGlobalFlags()
 
 		if remoteURL != "" {
 			// Use remote API
@@ -209,26 +266,31 @@ func listLocalReservations() {
 
 	reservationManager, err := createLocalReservationManager(cfg)
 	if err != nil {
-		fmt.Printf("Error: Failed to create reservation manager: %v\n", err)
+		outputError(fmt.Sprintf("Failed to create reservation manager: %v", err))
 		return
 	}
 
 	reservations := reservationManager.ListReservations()
 	if len(reservations) == 0 {
-		fmt.Println("No reservations found")
+		outputSuccess([]interface{}{}, "No reservations found")
 		return
 	}
 
-	fmt.Printf("Found %d reservation(s):\n\n", len(reservations))
-	for i, res := range reservations {
-		fmt.Printf("%d. Domain: %s\n", i+1, res.Domain)
-		fmt.Printf("   Fingerprint: %s\n", res.Fingerprint)
-		if res.Comment != "" {
-			fmt.Printf("   Comment: %s\n", res.Comment)
+	_, _, _, _, _, useJSON := GetGlobalFlags()
+	if useJSON {
+		outputSuccess(reservations, fmt.Sprintf("Found %d reservation(s)", len(reservations)))
+	} else {
+		fmt.Printf("Found %d reservation(s):\n\n", len(reservations))
+		for i, res := range reservations {
+			fmt.Printf("%d. Domain: %s\n", i+1, res.Domain)
+			fmt.Printf("   Fingerprint: %s\n", res.Fingerprint)
+			if res.Comment != "" {
+				fmt.Printf("   Comment: %s\n", res.Comment)
+			}
+			fmt.Printf("   Created: %s\n", res.CreatedAt.Format("2006-01-02 15:04:05"))
+			fmt.Printf("   Updated: %s\n", res.UpdatedAt.Format("2006-01-02 15:04:05"))
+			fmt.Println()
 		}
-		fmt.Printf("   Created: %s\n", res.CreatedAt.Format("2006-01-02 15:04:05"))
-		fmt.Printf("   Updated: %s\n", res.UpdatedAt.Format("2006-01-02 15:04:05"))
-		fmt.Println()
 	}
 }
 
@@ -299,31 +361,36 @@ func listRemoteReservations(serverURL, apiKey string) {
 	client := api.NewClient(serverURL, apiKey)
 
 	if err := client.Ping(); err != nil {
-		fmt.Printf("Error: Failed to connect to remote server at %s: %v\n", serverURL, err)
+		outputError(fmt.Sprintf("Failed to connect to remote server at %s: %v", serverURL, err))
 		return
 	}
 
 	reservations, err := client.ListReservations()
 	if err != nil {
-		fmt.Printf("Error: Failed to list reservations: %v\n", err)
+		outputError(fmt.Sprintf("Failed to list reservations: %v", err))
 		return
 	}
 
 	if len(reservations) == 0 {
-		fmt.Println("No reservations found")
+		outputSuccess([]interface{}{}, "No reservations found")
 		return
 	}
 
-	fmt.Printf("Found %d reservation(s) on remote server:\n\n", len(reservations))
-	for i, res := range reservations {
-		fmt.Printf("%d. Domain: %s\n", i+1, res.Domain)
-		fmt.Printf("   Fingerprint: %s\n", res.Fingerprint)
-		if res.Comment != "" {
-			fmt.Printf("   Comment: %s\n", res.Comment)
+	_, _, _, _, _, useJSON := GetGlobalFlags()
+	if useJSON {
+		outputSuccess(reservations, fmt.Sprintf("Found %d reservation(s) on remote server", len(reservations)))
+	} else {
+		fmt.Printf("Found %d reservation(s) on remote server:\n\n", len(reservations))
+		for i, res := range reservations {
+			fmt.Printf("%d. Domain: %s\n", i+1, res.Domain)
+			fmt.Printf("   Fingerprint: %s\n", res.Fingerprint)
+			if res.Comment != "" {
+				fmt.Printf("   Comment: %s\n", res.Comment)
+			}
+			fmt.Printf("   Created: %s\n", res.CreatedAt.Format("2006-01-02 15:04:05"))
+			fmt.Printf("   Updated: %s\n", res.UpdatedAt.Format("2006-01-02 15:04:05"))
+			fmt.Println()
 		}
-		fmt.Printf("   Created: %s\n", res.CreatedAt.Format("2006-01-02 15:04:05"))
-		fmt.Printf("   Updated: %s\n", res.UpdatedAt.Format("2006-01-02 15:04:05"))
-		fmt.Println()
 	}
 }
 

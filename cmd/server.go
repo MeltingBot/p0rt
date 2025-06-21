@@ -206,7 +206,7 @@ func (c *clientPortAdapter) GetPort() int {
 // startServer starts the P0rt server (moved from main.go)
 func startServer(cfg *config.Config) error {
 	// Get verbosity flags
-	_, _, _, verbose, quiet := GetGlobalFlags()
+	_, _, _, verbose, quiet, _ := GetGlobalFlags()
 
 	if !quiet {
 		fmt.Printf("Starting P0rt server...\n")
