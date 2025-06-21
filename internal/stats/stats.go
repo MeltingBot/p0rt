@@ -18,6 +18,7 @@ type Manager struct {
 	websocketConnections int64
 	tunnelDomains        map[string]*TunnelStats
 	accessMode           string // "open" or "restricted"
+	connectionHistory    *ConnectionHistory
 }
 
 // TunnelStats represents statistics for a specific tunnel/domain
@@ -57,9 +58,10 @@ type ActivityEntry struct {
 // NewManager creates a new statistics manager
 func NewManager() *Manager {
 	return &Manager{
-		startTime:     time.Now(),
-		tunnelDomains: make(map[string]*TunnelStats),
-		accessMode:    "restricted", // Default, will be updated by server
+		startTime:         time.Now(),
+		tunnelDomains:     make(map[string]*TunnelStats),
+		accessMode:        "restricted", // Default, will be updated by server
+		connectionHistory: NewConnectionHistory("./data/stats"),
 	}
 }
 
@@ -87,6 +89,12 @@ func (m *Manager) TunnelConnected(domain string) {
 	m.tunnelDomains[domain].LastActivity = time.Now()
 }
 
+// TunnelConnectedWithDetails records a new tunnel connection with client details
+func (m *Manager) TunnelConnectedWithDetails(domain, clientIP, fingerprint string) {
+	m.TunnelConnected(domain)
+	m.connectionHistory.RecordConnection(domain, clientIP, fingerprint)
+}
+
 // TunnelDisconnected records a tunnel disconnection
 func (m *Manager) TunnelDisconnected(domain string) {
 	m.mu.Lock()
@@ -100,6 +108,8 @@ func (m *Manager) TunnelDisconnected(domain string) {
 	if stats, exists := m.tunnelDomains[domain]; exists {
 		stats.ActiveConnections = 0
 	}
+	
+	m.connectionHistory.RecordDisconnection(domain)
 }
 
 // HTTPRequest records an HTTP request
@@ -117,6 +127,9 @@ func (m *Manager) HTTPRequest(domain string, bytesIn, bytesOut int64) {
 		stats.BytesOut += bytesOut
 		stats.LastActivity = time.Now()
 	}
+	
+	// Update connection history bandwidth
+	m.connectionHistory.UpdateTraffic(domain, bytesIn, bytesOut)
 }
 
 // WebSocketUpgrade records a WebSocket upgrade
@@ -246,4 +259,19 @@ func FormatBytes(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// GetConnectionHistory returns connection history
+func (m *Manager) GetConnectionHistory(limit int) []*ConnectionRecord {
+	return m.connectionHistory.GetHistory(limit)
+}
+
+// GetActiveConnections returns currently active connections
+func (m *Manager) GetActiveConnections() []*ConnectionRecord {
+	return m.connectionHistory.GetActiveConnections()
+}
+
+// GetConnectionStats returns aggregated connection statistics
+func (m *Manager) GetConnectionStats() map[string]interface{} {
+	return m.connectionHistory.GetConnectionStats()
 }

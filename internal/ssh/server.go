@@ -567,10 +567,25 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 					}
 					<-done
 
-					// Record tunnel connection statistics
-					s.statsManager.TunnelConnected(domain)
+					// Get client IP and fingerprint
+					connAddr := client.Conn.RemoteAddr().String()
+					clientIP := connAddr
+					if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
+						clientIP = clientIP[:idx]
+					}
+					
+					// Get fingerprint from public key
+					fingerprint := ""
+					if keyData, err := base64.StdEncoding.DecodeString(client.Key); err == nil {
+						if pubKey, err := ssh.ParsePublicKey(keyData); err == nil {
+							fingerprint = ssh.FingerprintSHA256(pubKey)
+						}
+					}
+					
+					// Record tunnel connection statistics with details
+					s.statsManager.TunnelConnectedWithDetails(domain, clientIP, fingerprint)
 
-					log.Printf("Client connected: %s -> https://%s.p0rt.xyz", domain, domain)
+					log.Printf("Client connected: %s -> https://%s.p0rt.xyz (IP: %s)", domain, domain, clientIP)
 					s.updateStats()
 				} else {
 					domain = client.Domain

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -190,6 +191,10 @@ func (c *CLI) processCommand(line string) error {
 		return c.showStatus()
 	case "security", "sec":
 		return c.handleSecurityCommand(args)
+	case "history", "hist":
+		return c.handleHistoryCommand(args)
+	case "connections", "conn":
+		return c.showActiveConnections()
 	case "clear":
 		fmt.Print("\033[H\033[2J")
 		return nil
@@ -207,10 +212,12 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("  reservation        - Manage domain reservations")
 		fmt.Println("  key                - Manage SSH key allowlist")
 		fmt.Println("  security           - View security information and bans")
-		fmt.Println("  stats [domain]    - Show system statistics (or domain-specific stats)")
-		fmt.Println("  status            - Show system status")
-		fmt.Println("  clear             - Clear the screen")
-		fmt.Println("  exit              - Exit the CLI")
+		fmt.Println("  stats [domain]     - Show system statistics (or domain-specific stats)")
+		fmt.Println("  history [n]        - Show connection history (last n connections)")
+		fmt.Println("  connections        - Show active connections with bandwidth")
+		fmt.Println("  status             - Show system status")
+		fmt.Println("  clear              - Clear the screen")
+		fmt.Println("  exit               - Exit the CLI")
 		fmt.Println()
 		fmt.Println("Use 'help <command>' for detailed information about a command.")
 		return nil
@@ -282,6 +289,30 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("  - Blocked IP addresses")
 		fmt.Println("  - Scanning attempts")
 		fmt.Println("  - Ban reasons and expiration times")
+	case "history", "hist":
+		fmt.Println("history [n] - Show connection history")
+		fmt.Println("  n - Number of connections to show (default: 20)")
+		fmt.Println()
+		fmt.Println("Displays historical connection information including:")
+		fmt.Println("  - Connection time and duration")
+		fmt.Println("  - Domain and trigram (first 3 chars)")
+		fmt.Println("  - Client IP address")
+		fmt.Println("  - Bandwidth usage (in/out)")
+		fmt.Println("  - Number of HTTP requests")
+		fmt.Println()
+		fmt.Println("Also shows aggregated statistics:")
+		fmt.Println("  - Top domain trigrams")
+		fmt.Println("  - Top client IPs")
+		fmt.Println("  - Total traffic")
+	case "connections", "conn":
+		fmt.Println("connections - Show active connections")
+		fmt.Println()
+		fmt.Println("Displays all currently active SSH tunnels with:")
+		fmt.Println("  - Domain and trigram")
+		fmt.Println("  - Client IP address")
+		fmt.Println("  - Connection duration")
+		fmt.Println("  - Real-time bandwidth usage")
+		fmt.Println("  - HTTP request count")
 	default:
 		return fmt.Errorf("no help available for command: %s", command)
 	}
@@ -987,6 +1018,144 @@ func (c *CLI) deactivateKey(args []string) error {
 
 	fmt.Printf("✅ Successfully deactivated SSH key: %s\n", fingerprint)
 	return nil
+}
+
+// handleHistoryCommand handles connection history commands
+func (c *CLI) handleHistoryCommand(args []string) error {
+	if c.statsManager == nil {
+		return fmt.Errorf("statistics manager not available")
+	}
+	
+	limit := 20
+	if len(args) > 0 {
+		if n, err := strconv.Atoi(args[0]); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	
+	fmt.Printf("=== Connection History (Last %d) ===\n", limit)
+	fmt.Println()
+	
+	history := c.statsManager.GetConnectionHistory(limit)
+	if len(history) == 0 {
+		fmt.Println("No connection history available.")
+		return nil
+	}
+	
+	// Table header
+	fmt.Printf("%-20s %-15s %-15s %-15s %-10s %-10s %-8s\n", 
+		"Time", "Domain", "Trigram", "Client IP", "Duration", "Traffic", "Requests")
+	fmt.Println(strings.Repeat("-", 100))
+	
+	for _, conn := range history {
+		timestamp := conn.ConnectedAt.Format("2006-01-02 15:04:05")
+		duration := "Active"
+		if conn.DisconnectedAt != nil {
+			duration = conn.Duration
+		}
+		
+		traffic := fmt.Sprintf("%s/%s", 
+			stats.FormatBytes(conn.BytesIn), 
+			stats.FormatBytes(conn.BytesOut))
+		
+		fmt.Printf("%-20s %-15s %-15s %-15s %-10s %-10s %-8d\n",
+			timestamp,
+			truncateString(conn.Domain, 15),
+			conn.Trigram,
+			conn.ClientIP,
+			truncateString(duration, 10),
+			traffic,
+			conn.RequestCount,
+		)
+	}
+	
+	fmt.Println()
+	
+	// Show aggregated stats
+	connStats := c.statsManager.GetConnectionStats()
+	fmt.Println("=== Aggregated Statistics ===")
+	fmt.Printf("Total Connections: %v\n", connStats["total_connections"])
+	fmt.Printf("Active Connections: %v\n", connStats["active_connections"])
+	fmt.Printf("Total Traffic: %s in / %s out\n", 
+		stats.FormatBytes(connStats["total_bytes_in"].(int64)),
+		stats.FormatBytes(connStats["total_bytes_out"].(int64)))
+	fmt.Printf("Total Requests: %v\n", connStats["total_requests"])
+	fmt.Println()
+	
+	// Top trigrams
+	if topTrigrams, ok := connStats["top_trigrams"].([]map[string]interface{}); ok && len(topTrigrams) > 0 {
+		fmt.Println("Top Domain Trigrams:")
+		for i, item := range topTrigrams {
+			if i >= 5 {
+				break
+			}
+			fmt.Printf("  %s: %v connections\n", item["value"], item["count"])
+		}
+		fmt.Println()
+	}
+	
+	// Top client IPs
+	if topIPs, ok := connStats["top_client_ips"].([]map[string]interface{}); ok && len(topIPs) > 0 {
+		fmt.Println("Top Client IPs:")
+		for i, item := range topIPs {
+			if i >= 5 {
+				break
+			}
+			fmt.Printf("  %s: %v connections\n", item["value"], item["count"])
+		}
+	}
+	
+	return nil
+}
+
+// showActiveConnections shows currently active connections
+func (c *CLI) showActiveConnections() error {
+	if c.statsManager == nil {
+		return fmt.Errorf("statistics manager not available")
+	}
+	
+	fmt.Println("=== Active Connections ===")
+	fmt.Println()
+	
+	active := c.statsManager.GetActiveConnections()
+	if len(active) == 0 {
+		fmt.Println("No active connections.")
+		return nil
+	}
+	
+	// Table header
+	fmt.Printf("%-15s %-15s %-15s %-20s %-10s %-10s %-8s\n", 
+		"Domain", "Trigram", "Client IP", "Connected Since", "Duration", "Traffic", "Requests")
+	fmt.Println(strings.Repeat("-", 100))
+	
+	for _, conn := range active {
+		duration := time.Since(conn.ConnectedAt).Truncate(time.Second).String()
+		traffic := fmt.Sprintf("%s/%s", 
+			stats.FormatBytes(conn.BytesIn), 
+			stats.FormatBytes(conn.BytesOut))
+		
+		fmt.Printf("%-15s %-15s %-15s %-20s %-10s %-10s %-8d\n",
+			truncateString(conn.Domain, 15),
+			conn.Trigram,
+			conn.ClientIP,
+			conn.ConnectedAt.Format("2006-01-02 15:04:05"),
+			duration,
+			traffic,
+			conn.RequestCount,
+		)
+	}
+	
+	fmt.Printf("\nTotal active connections: %d\n", len(active))
+	
+	return nil
+}
+
+// truncateString truncates a string to max length
+func truncateString(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max-3] + "..."
 }
 
 // getDomainCompletions returns domain completions for autocomplete
