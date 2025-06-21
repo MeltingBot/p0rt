@@ -1585,7 +1585,6 @@ func (c *CLI) handleRemoteHistory(args []string) error {
 	
 	for i, record := range history {
 		fmt.Printf("%d. Domain: %s\n", i+1, record.Domain)
-		fmt.Printf("   Trigram: %s\n", record.Trigram)
 		fmt.Printf("   Client IP: %s\n", record.ClientIP)
 		fmt.Printf("   Connected: %s\n", record.ConnectedAt.Format("2006-01-02 15:04:05"))
 		
@@ -1636,7 +1635,6 @@ func (c *CLI) showRemoteConnections() error {
 	
 	for i, conn := range connections {
 		fmt.Printf("%d. Domain: %s\n", i+1, conn.Domain)
-		fmt.Printf("   Trigram: %s\n", conn.Trigram)
 		fmt.Printf("   Client IP: %s\n", conn.ClientIP)
 		fmt.Printf("   Connected: %s\n", conn.ConnectedAt.Format("2006-01-02 15:04:05"))
 		
