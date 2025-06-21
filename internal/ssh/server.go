@@ -48,7 +48,7 @@ type Server struct {
 	baseDomain      string
 	statsManager    *stats.Manager
 	securityTracker *security.SecurityTracker
-	keyStore        *auth.KeyStore // SSH key allowlist
+	keyStore        auth.KeyStoreInterface // SSH key allowlist
 
 	// Protection anti-bruteforce (legacy - will be replaced by SecurityTracker)
 	failedAttempts map[string]int
@@ -74,7 +74,10 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 	}
 
 	statsManager := stats.NewManager()
-	keyStore := auth.NewKeyStore(keysFile)
+	keyStore, err := auth.NewKeyStoreFromConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create key store: %w", err)
+	}
 	
 	// Set access mode in stats based on key store configuration
 	if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
@@ -189,7 +192,6 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 	}
 
 	var signer ssh.Signer
-	var err error
 
 	if hostKey != "" {
 		signer, err = ssh.ParsePrivateKey([]byte(hostKey))

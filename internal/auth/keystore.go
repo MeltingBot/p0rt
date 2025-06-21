@@ -35,6 +35,9 @@ type KeyStore struct {
 	lastCheck time.Time // last time we checked file modification
 }
 
+// Ensure KeyStore implements KeyStoreInterface
+var _ KeyStoreInterface = (*KeyStore)(nil)
+
 // NewKeyStore creates a new key store
 func NewKeyStore(filePath string) *KeyStore {
 	// Use default file path if empty
@@ -239,7 +242,7 @@ func (ks *KeyStore) loadKeys() error {
 	return nil
 }
 
-// saveKeys saves keys to file
+// saveKeys saves keys to file with retry logic
 func (ks *KeyStore) saveKeys() error {
 	// Convert map to slice
 	var keys []*KeyAccess
@@ -247,9 +250,61 @@ func (ks *KeyStore) saveKeys() error {
 		keys = append(keys, key)
 	}
 
-	// Create temporary file
+	// Try multiple times with different strategies
+	for attempt := 0; attempt < 3; attempt++ {
+		if err := ks.saveKeysAttempt(keys, attempt); err == nil {
+			return nil
+		} else {
+			log.Printf("KeyStore: Save attempt %d failed: %v", attempt+1, err)
+			time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+		}
+	}
+
+	return fmt.Errorf("failed to save keys after 3 attempts")
+}
+
+// saveKeysAttempt tries to save keys with different strategies
+func (ks *KeyStore) saveKeysAttempt(keys []*KeyAccess, attempt int) error {
+	switch attempt {
+	case 0:
+		// Standard atomic rename
+		return ks.saveKeysAtomic(keys)
+	case 1:
+		// Direct write (less safe but works in more situations)
+		return ks.saveKeysDirect(keys)
+	case 2:
+		// Write to different temp file location
+		return ks.saveKeysAlternative(keys)
+	default:
+		return fmt.Errorf("unknown save attempt: %d", attempt)
+	}
+}
+
+// saveKeysAtomic saves keys with atomic rename
+func (ks *KeyStore) saveKeysAtomic(keys []*KeyAccess) error {
 	tmpFile := ks.filePath + ".tmp"
 	file, err := os.Create(tmpFile)
+	if err != nil {
+		return err
+	}
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	err = encoder.Encode(keys)
+	file.Close()
+
+	if err != nil {
+		os.Remove(tmpFile)
+		return err
+	}
+
+	// Atomic rename
+	return os.Rename(tmpFile, ks.filePath)
+}
+
+// saveKeysDirect saves keys directly to the file
+func (ks *KeyStore) saveKeysDirect(keys []*KeyAccess) error {
+	file, err := os.Create(ks.filePath)
 	if err != nil {
 		return err
 	}
@@ -257,13 +312,37 @@ func (ks *KeyStore) saveKeys() error {
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(keys); err != nil {
+	return encoder.Encode(keys)
+}
+
+// saveKeysAlternative saves keys using /tmp directory
+func (ks *KeyStore) saveKeysAlternative(keys []*KeyAccess) error {
+	tmpFile := fmt.Sprintf("/tmp/p0rt_keys_%d.json", time.Now().UnixNano())
+	file, err := os.Create(tmpFile)
+	if err != nil {
+		return err
+	}
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	err = encoder.Encode(keys)
+	file.Close()
+
+	if err != nil {
 		os.Remove(tmpFile)
 		return err
 	}
 
-	// Atomic rename
-	return os.Rename(tmpFile, ks.filePath)
+	// Move to final location
+	defer os.Remove(tmpFile)
+	
+	// Read and write (works better across filesystems)
+	data, err := os.ReadFile(tmpFile)
+	if err != nil {
+		return err
+	}
+	
+	return os.WriteFile(ks.filePath, data, 0644)
 }
 
 // ImportFromFile imports keys from an authorized_keys format file

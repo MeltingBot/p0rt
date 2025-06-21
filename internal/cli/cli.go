@@ -22,7 +22,7 @@ import (
 type CLI struct {
 	config             *config.Config
 	reservationManager domain.ReservationManagerInterface
-	keyStore           *auth.KeyStore // For SSH key management
+	keyStore           auth.KeyStoreInterface // For SSH key management
 	rl                 *readline.Instance
 	serverStartFunc    func() error   // Function to start the server
 	statsManager       *stats.Manager // For displaying runtime stats when server is running
@@ -52,10 +52,16 @@ func NewCLIWithRemoteAPI(cfg *config.Config, serverURL, apiKey string) (*CLI, er
 		return nil, fmt.Errorf("failed to connect to remote API at %s: %v", serverURL, err)
 	}
 
+	// Create key store for local operations
+	keyStore, err := auth.NewKeyStoreFromConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create key store: %v", err)
+	}
+
 	cli := &CLI{
 		config:             cfg,
 		reservationManager: api.NewRemoteReservationManager(serverURL, apiKey),
-		keyStore:           auth.NewKeyStore("authorized_keys.json"), // Default key store for local operations
+		keyStore:           keyStore,
 		apiClient:          apiClient,
 		useRemoteAPI:       true,
 	}
@@ -102,10 +108,16 @@ func NewCLIWithServerFunc(cfg *config.Config, serverStartFunc func() error) (*CL
 		return nil, fmt.Errorf("failed to create reservation manager: %v", err)
 	}
 
+	// Create key store based on configuration
+	keyStore, err := auth.NewKeyStoreFromConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create key store: %v", err)
+	}
+
 	cli := &CLI{
 		config:             cfg,
 		reservationManager: reservationManager,
-		keyStore:           auth.NewKeyStore("authorized_keys.json"), // Default key store
+		keyStore:           keyStore,
 		serverStartFunc:    serverStartFunc,
 	}
 
