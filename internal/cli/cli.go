@@ -7,9 +7,11 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/chzyer/readline"
 	"github.com/p0rt/p0rt/internal/api"
+	"github.com/p0rt/p0rt/internal/auth"
 	"github.com/p0rt/p0rt/internal/config"
 	"github.com/p0rt/p0rt/internal/domain"
 	"github.com/p0rt/p0rt/internal/stats"
@@ -19,6 +21,7 @@ import (
 type CLI struct {
 	config             *config.Config
 	reservationManager domain.ReservationManagerInterface
+	keyStore           *auth.KeyStore // For SSH key management
 	rl                 *readline.Instance
 	serverStartFunc    func() error   // Function to start the server
 	statsManager       *stats.Manager // For displaying runtime stats when server is running
@@ -51,6 +54,7 @@ func NewCLIWithRemoteAPI(cfg *config.Config, serverURL, apiKey string) (*CLI, er
 	cli := &CLI{
 		config:             cfg,
 		reservationManager: api.NewRemoteReservationManager(serverURL, apiKey),
+		keyStore:           auth.NewKeyStore("authorized_keys.json"), // Default key store for local operations
 		apiClient:          apiClient,
 		useRemoteAPI:       true,
 	}
@@ -100,6 +104,7 @@ func NewCLIWithServerFunc(cfg *config.Config, serverStartFunc func() error) (*CL
 	cli := &CLI{
 		config:             cfg,
 		reservationManager: reservationManager,
+		keyStore:           auth.NewKeyStore("authorized_keys.json"), // Default key store
 		serverStartFunc:    serverStartFunc,
 	}
 
@@ -174,6 +179,8 @@ func (c *CLI) processCommand(line string) error {
 		return c.handleServerCommand(args)
 	case "reservation", "res":
 		return c.handleReservationCommand(args)
+	case "key", "keys":
+		return c.handleKeyCommand(args)
 	case "stats":
 		if len(args) > 0 && args[0] != "" {
 			return c.showDomainStats(args[0])
@@ -198,6 +205,7 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("  help [command]     - Show help information")
 		fmt.Println("  server             - Start the P0rt server")
 		fmt.Println("  reservation        - Manage domain reservations")
+		fmt.Println("  key                - Manage SSH key allowlist")
 		fmt.Println("  security           - View security information and bans")
 		fmt.Println("  stats [domain]    - Show system statistics (or domain-specific stats)")
 		fmt.Println("  status            - Show system status")
@@ -234,6 +242,24 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("  reservation add happy-cat-jump SHA256:abc123... \"My personal domain\"")
 		fmt.Println("  reservation remove happy-cat-jump")
 		fmt.Println("  reservation list")
+	case "key", "keys":
+		fmt.Println("SSH Key Management commands:")
+		fmt.Println("  key add <fingerprint> [tier] [comment]")
+		fmt.Println("    - Add an SSH key by fingerprint (easiest)")
+		fmt.Println("  key remove <fingerprint>")
+		fmt.Println("    - Remove an SSH key from allowlist")
+		fmt.Println("  key list")
+		fmt.Println("    - List all authorized SSH keys")
+		fmt.Println("  key activate <fingerprint>")
+		fmt.Println("    - Activate a deactivated key")
+		fmt.Println("  key deactivate <fingerprint>")
+		fmt.Println("    - Temporarily deactivate a key")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  key add SHA256:abc123... beta \"John Doe\"")
+		fmt.Println("  key list")
+		fmt.Println("  key remove SHA256:abc123...")
+		fmt.Println("  key deactivate SHA256:abc123...")
 	case "stats":
 		fmt.Println("stats - Show system statistics")
 		fmt.Println("Usage: stats [domain]")
@@ -546,6 +572,7 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 		readline.PcItem("help",
 			readline.PcItem("server"),
 			readline.PcItem("reservation"),
+			readline.PcItem("key"),
 			readline.PcItem("stats"),
 			readline.PcItem("status"),
 		),
@@ -572,6 +599,20 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 			readline.PcItem("remove", readline.PcItemDynamic(c.getDomainCompletions)),
 			readline.PcItem("list"),
 			readline.PcItem("stats"),
+		),
+		readline.PcItem("key",
+			readline.PcItem("add"),
+			readline.PcItem("remove"),
+			readline.PcItem("list"),
+			readline.PcItem("activate"),
+			readline.PcItem("deactivate"),
+		),
+		readline.PcItem("keys",
+			readline.PcItem("add"),
+			readline.PcItem("remove"),
+			readline.PcItem("list"),
+			readline.PcItem("activate"),
+			readline.PcItem("deactivate"),
 		),
 		readline.PcItem("security",
 			readline.PcItem("stats"),
@@ -775,6 +816,176 @@ func (c *CLI) serverStatus() error {
 	fmt.Printf("  Storage Type: %s\n", c.config.Storage.Type)
 	fmt.Printf("  Reservations Enabled: %t\n", c.config.Domain.ReservationsEnabled)
 	fmt.Println("  Server Status: Use 'server start' to launch")
+	return nil
+}
+
+// handleKeyCommand handles SSH key management commands
+func (c *CLI) handleKeyCommand(args []string) error {
+	if len(args) == 0 {
+		fmt.Println("SSH Key Management subcommands:")
+		fmt.Println("  add <fingerprint> [tier] [comment] - Add an SSH key by fingerprint")
+		fmt.Println("  remove <fingerprint>               - Remove an SSH key")
+		fmt.Println("  list                               - List all authorized SSH keys")
+		fmt.Println("  activate <fingerprint>             - Activate a deactivated key")
+		fmt.Println("  deactivate <fingerprint>           - Deactivate a key temporarily")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  key add SHA256:abc123... beta \"John Doe\"")
+		fmt.Println("  key list")
+		fmt.Println("  key remove SHA256:abc123...")
+		return nil
+	}
+
+	subcommand := args[0]
+	args = args[1:]
+
+	switch subcommand {
+	case "add":
+		return c.addKey(args)
+	case "remove", "rm":
+		return c.removeKey(args)
+	case "list", "ls":
+		return c.listKeys()
+	case "activate":
+		return c.activateKey(args)
+	case "deactivate":
+		return c.deactivateKey(args)
+	default:
+		return fmt.Errorf("unknown key subcommand: %s", subcommand)
+	}
+}
+
+// addKey adds a new SSH key to the allowlist
+func (c *CLI) addKey(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: key add <fingerprint> [tier] [comment]")
+	}
+
+	fingerprint := args[0]
+	tier := "free" // default tier
+	comment := ""
+
+	if len(args) > 1 {
+		tier = args[1]
+	}
+	if len(args) > 2 {
+		comment = strings.Join(args[2:], " ")
+		// Remove quotes if present
+		comment = strings.Trim(comment, "\"'")
+	}
+
+	err := c.keyStore.AddKeyByFingerprint(fingerprint, comment, tier, nil)
+	if err != nil {
+		return fmt.Errorf("failed to add key: %v", err)
+	}
+
+	fmt.Printf("✅ Successfully added SSH key\n")
+	fmt.Printf("📋 Fingerprint: %s\n", fingerprint)
+	fmt.Printf("🎯 Tier: %s\n", tier)
+	if comment != "" {
+		fmt.Printf("💬 Comment: %s\n", comment)
+	}
+
+	return nil
+}
+
+// removeKey removes an SSH key from the allowlist
+func (c *CLI) removeKey(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: key remove <fingerprint>")
+	}
+
+	fingerprint := args[0]
+	err := c.keyStore.RemoveKey(fingerprint)
+	if err != nil {
+		return fmt.Errorf("failed to remove key: %v", err)
+	}
+
+	fmt.Printf("✅ Successfully removed SSH key: %s\n", fingerprint)
+	return nil
+}
+
+// listKeys lists all authorized SSH keys
+func (c *CLI) listKeys() error {
+	keys := c.keyStore.ListKeys()
+
+	if len(keys) == 0 {
+		fmt.Println("No authorized SSH keys found")
+		fmt.Println()
+		fmt.Println("Add a key with:")
+		fmt.Println("  key add SHA256:abc123... beta \"User Name\"")
+		return nil
+	}
+
+	fmt.Printf("Found %d authorized SSH key(s):\n\n", len(keys))
+	fmt.Printf("%-50s %-10s %-10s %-20s %s\n", "Fingerprint", "Tier", "Status", "Added", "Comment")
+	fmt.Println(strings.Repeat("-", 120))
+
+	for _, access := range keys {
+		status := "✅ Active"
+		if !access.Active {
+			status = "❌ Inactive"
+		}
+		if access.ExpiresAt != nil && time.Now().After(*access.ExpiresAt) {
+			status = "⏰ Expired"
+		}
+
+		// Truncate long fingerprints for display
+		displayFingerprint := access.Fingerprint
+		if len(displayFingerprint) > 47 {
+			displayFingerprint = displayFingerprint[:44] + "..."
+		}
+
+		fmt.Printf("%-50s %-10s %-10s %-20s %s\n",
+			displayFingerprint,
+			access.Tier,
+			status,
+			access.AddedAt.Format("2006-01-02 15:04:05"),
+			access.Comment,
+		)
+	}
+
+	fmt.Println()
+	
+	// Show access mode
+	accessMode := "RESTRICTED"
+	if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
+		accessMode = "OPEN ACCESS"
+	}
+	fmt.Printf("🔒 Server is in %s mode\n", accessMode)
+
+	return nil
+}
+
+// activateKey activates a deactivated SSH key
+func (c *CLI) activateKey(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: key activate <fingerprint>")
+	}
+
+	fingerprint := args[0]
+	err := c.keyStore.ActivateKey(fingerprint)
+	if err != nil {
+		return fmt.Errorf("failed to activate key: %v", err)
+	}
+
+	fmt.Printf("✅ Successfully activated SSH key: %s\n", fingerprint)
+	return nil
+}
+
+// deactivateKey deactivates an SSH key temporarily
+func (c *CLI) deactivateKey(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: key deactivate <fingerprint>")
+	}
+
+	fingerprint := args[0]
+	err := c.keyStore.DeactivateKey(fingerprint)
+	if err != nil {
+		return fmt.Errorf("failed to deactivate key: %v", err)
+	}
+
+	fmt.Printf("✅ Successfully deactivated SSH key: %s\n", fingerprint)
 	return nil
 }
 
