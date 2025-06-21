@@ -28,13 +28,12 @@ WORKDIR /app
 # Copier l'exécutable
 COPY --from=builder /app/p0rt .
 
-# Créer les répertoires nécessaires
-RUN mkdir -p data/security data/reservations && \
+# Créer les répertoires nécessaires et fichiers par défaut
+RUN mkdir -p data/security data/reservations data/stats && \
+    echo "[]" > authorized_keys.json && \
     chown -R p0rt:p0rt /app
 
-# Copier les fichiers de configuration par défaut
-COPY config.yaml ./
-COPY --chown=p0rt:p0rt config.yaml ./
+# Aucun fichier de configuration requis - tout est par variables d'environnement
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
@@ -48,19 +47,3 @@ USER p0rt
 
 # Commande par défaut
 CMD ["./p0rt", "-server", "start"]
-
-# Image de développement
-FROM builder AS development
-
-RUN apk add --no-cache bash openssh-client
-
-WORKDIR /app
-
-# Installer air pour le hot reload
-RUN go install github.com/air-verse/air@latest
-
-# Exposer les ports de dev
-EXPOSE 2222 8080
-
-# Mode développement avec hot reload
-CMD ["air", "-c", ".air.toml"]
