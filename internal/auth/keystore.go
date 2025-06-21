@@ -238,7 +238,6 @@ func (ks *KeyStore) loadKeys() error {
 		ks.keys[key.Fingerprint] = key
 	}
 
-	log.Printf("KeyStore: Loaded %d authorized keys", len(ks.keys))
 	return nil
 }
 

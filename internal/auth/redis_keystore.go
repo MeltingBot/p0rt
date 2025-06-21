@@ -275,7 +275,6 @@ func (ks *RedisKeyStore) loadKeys() error {
 		}
 	}
 
-	log.Printf("RedisKeyStore: Loaded %d authorized keys", len(ks.keys))
 	return nil
 }
 

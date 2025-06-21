@@ -2,7 +2,6 @@ package auth
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -27,7 +26,6 @@ func NewKeyStoreFromConfig() (KeyStoreInterface, error) {
 	// Check if Redis URL is provided
 	redisURL := getRedisURL()
 	if redisURL != "" {
-		log.Printf("KeyStore: Using Redis backend at %s", redisURL)
 		return NewRedisKeyStore(redisURL, "p0rt:keys:")
 	}
 
@@ -37,7 +35,6 @@ func NewKeyStoreFromConfig() (KeyStoreInterface, error) {
 		keysFile = "authorized_keys.json"
 	}
 	
-	log.Printf("KeyStore: Using JSON file backend at %s", keysFile)
 	return NewKeyStore(keysFile), nil
 }
 
