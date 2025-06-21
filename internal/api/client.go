@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/p0rt/p0rt/internal/domain"
@@ -368,4 +369,127 @@ func (c *Client) SetAccessMode(mode string) error {
 
 	_, err := c.makeRequest("POST", "/api/v1/access", body)
 	return err
+}
+
+// GetAbuseReports gets abuse reports from the API
+func (c *Client) GetAbuseReports(status string, showAll bool) (interface{}, error) {
+	url := c.baseURL + "/api/v1/abuse/reports"
+	
+	// Add query parameters
+	params := make([]string, 0)
+	if status != "" {
+		params = append(params, "status="+status)
+	}
+	if showAll {
+		params = append(params, "all=true")
+	}
+	if len(params) > 0 {
+		url += "?" + strings.Join(params, "&")
+	}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		if errMsg, ok := result["message"].(string); ok {
+			return nil, fmt.Errorf("API error: %s", errMsg)
+		}
+		return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
+	}
+
+	return result["reports"], nil
+}
+
+// ProcessAbuseReport processes an abuse report via API
+func (c *Client) ProcessAbuseReport(reportID, action string) error {
+	url := c.baseURL + "/api/v1/abuse/reports/" + reportID
+
+	reqBody := map[string]string{
+		"action": action,
+	}
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		if errMsg, ok := result["message"].(string); ok {
+			return fmt.Errorf("API error: %s", errMsg)
+		}
+		return fmt.Errorf("API request failed with status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// GetAbuseStats gets abuse statistics from the API
+func (c *Client) GetAbuseStats() (interface{}, error) {
+	url := c.baseURL + "/api/v1/abuse/stats"
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		if errMsg, ok := result["message"].(string); ok {
+			return nil, fmt.Errorf("API error: %s", errMsg)
+		}
+		return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
+	}
+
+	return result["stats"], nil
 }

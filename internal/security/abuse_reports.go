@@ -44,6 +44,21 @@ func NewAbuseReportManager() *AbuseReportManager {
 	return manager
 }
 
+// NewAbuseReportManagerWithRedis creates a new abuse report manager with provided Redis URL
+func NewAbuseReportManagerWithRedis(redisURL string) *AbuseReportManager {
+	manager := &AbuseReportManager{
+		ctx:       context.Background(),
+		keyPrefix: "p0rt:abuse:",
+	}
+	
+	if redisURL != "" {
+		manager.initRedisWithURL(redisURL)
+	} else {
+		manager.initRedis()
+	}
+	return manager
+}
+
 // initRedis initializes Redis connection
 func (arm *AbuseReportManager) initRedis() {
 	redisURL := getAbuseRedisURL()
@@ -102,6 +117,33 @@ func getAbuseRedisURL() string {
 		return fmt.Sprintf("redis://:%s@%s:%s/%s", password, host, port, db)
 	}
 	return fmt.Sprintf("redis://%s:%s/%s", host, port, db)
+}
+
+// initRedisWithURL initializes Redis connection with provided URL
+func (arm *AbuseReportManager) initRedisWithURL(redisURL string) {
+	if redisURL == "" {
+		log.Println("AbuseReportManager: No Redis URL provided, reports will only be logged")
+		return
+	}
+	
+	opts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		log.Printf("AbuseReportManager: Invalid Redis URL: %v", err)
+		return
+	}
+	
+	arm.redisClient = redis.NewClient(opts)
+	
+	// Test connection
+	if err := arm.redisClient.Ping(arm.ctx).Err(); err != nil {
+		log.Printf("AbuseReportManager: Redis connection failed: %v", err)
+		arm.redisClient.Close()
+		arm.redisClient = nil
+		return
+	}
+	
+	arm.useRedis = true
+	log.Println("AbuseReportManager: Using Redis storage for abuse reports")
 }
 
 // SubmitReport submits a new abuse report

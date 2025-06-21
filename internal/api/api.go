@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/p0rt/p0rt/internal/config"
 	"github.com/p0rt/p0rt/internal/domain"
 	"github.com/p0rt/p0rt/internal/security"
 	"github.com/p0rt/p0rt/internal/stats"
@@ -97,6 +99,11 @@ func (h *Handler) authenticateRequest(r *http.Request) bool {
 	}
 
 	return false
+}
+
+// getConfig loads the configuration (helper for API handlers)
+func (h *Handler) getConfig() (*config.Config, error) {
+	return config.Load()
 }
 
 // writeJSON writes a JSON response
@@ -537,7 +544,41 @@ func (h *Handler) handleAbuseReports(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeError(w, http.StatusNotImplemented, "Abuse report API not yet implemented - use local CLI")
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Get status filter from query parameter
+	status := r.URL.Query().Get("status")
+	showAll := r.URL.Query().Get("all") == "true"
+	
+	if !showAll && status == "" {
+		status = "pending"
+	}
+
+	// Load config to get Redis URL and create report manager
+	cfg, err := h.getConfig()
+	var reportManager *security.AbuseReportManager
+	if err == nil && cfg.Storage.RedisURL != "" {
+		reportManager = security.NewAbuseReportManagerWithRedis(cfg.Storage.RedisURL)
+	} else {
+		reportManager = security.NewAbuseReportManager()
+	}
+
+	reports, err := reportManager.ListReports(status)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to get abuse reports: %v", err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":   true,
+		"reports":   reports,
+		"count":     len(reports),
+		"status":    status,
+		"timestamp": time.Now().Format(time.RFC3339),
+	})
 }
 
 // handleAbuseReport handles /api/v1/abuse/reports/{id} endpoint
@@ -547,7 +588,69 @@ func (h *Handler) handleAbuseReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeError(w, http.StatusNotImplemented, "Abuse report processing API not yet implemented - use local CLI")
+	// Extract report ID from path
+	reportID := strings.TrimPrefix(r.URL.Path, "/api/v1/abuse/reports/")
+	if reportID == "" {
+		writeError(w, http.StatusBadRequest, "Report ID is required")
+		return
+	}
+
+	// Load config to get Redis URL and create report manager
+	cfg, err := h.getConfig()
+	var reportManager *security.AbuseReportManager
+	if err == nil && cfg.Storage.RedisURL != "" {
+		reportManager = security.NewAbuseReportManagerWithRedis(cfg.Storage.RedisURL)
+	} else {
+		reportManager = security.NewAbuseReportManager()
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		// Get specific report
+		report, err := reportManager.GetReport(reportID)
+		if err != nil {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("Report not found: %v", err))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success":   true,
+			"report":    report,
+			"timestamp": time.Now().Format(time.RFC3339),
+		})
+
+	case http.MethodPost:
+		// Process report (ban/accept)
+		var req struct {
+			Action string `json:"action"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "Invalid request body")
+			return
+		}
+
+		if req.Action != "ban" && req.Action != "accept" {
+			writeError(w, http.StatusBadRequest, "Action must be 'ban' or 'accept'")
+			return
+		}
+
+		err := reportManager.ProcessReport(reportID, req.Action, "api-admin")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("Failed to process report: %v", err))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success":   true,
+			"report_id": reportID,
+			"action":    req.Action,
+			"timestamp": time.Now().Format(time.RFC3339),
+		})
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+	}
 }
 
 // handleAbuseStats handles /api/v1/abuse/stats endpoint
@@ -557,5 +660,25 @@ func (h *Handler) handleAbuseStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeError(w, http.StatusNotImplemented, "Abuse statistics API not yet implemented - use local CLI")
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Load config to get Redis URL and create report manager
+	cfg, err := h.getConfig()
+	var reportManager *security.AbuseReportManager
+	if err == nil && cfg.Storage.RedisURL != "" {
+		reportManager = security.NewAbuseReportManagerWithRedis(cfg.Storage.RedisURL)
+	} else {
+		reportManager = security.NewAbuseReportManager()
+	}
+
+	stats := reportManager.GetStats()
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":   true,
+		"stats":     stats,
+		"timestamp": time.Now().Format(time.RFC3339),
+	})
 }
