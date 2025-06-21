@@ -287,6 +287,8 @@ func (c *CLI) processCommand(line string) error {
 		return c.handleHistoryCommand(args)
 	case "connections", "conn":
 		return c.showActiveConnections()
+	case "access", "mode":
+		return c.handleAccessCommand(args)
 	case "clear":
 		fmt.Print("\033[H\033[2J")
 		return nil
@@ -307,6 +309,7 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("  stats [domain]     - Show system statistics (or domain-specific stats)")
 		fmt.Println("  history [n]        - Show connection history (last n connections)")
 		fmt.Println("  connections        - Show active connections with bandwidth")
+		fmt.Println("  access             - Manage server access mode (open/restricted)")
 		fmt.Println("  status             - Show system status")
 		fmt.Println("  clear              - Clear the screen")
 		fmt.Println("  exit               - Exit the CLI")
@@ -405,6 +408,22 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("  - Connection duration")
 		fmt.Println("  - Real-time bandwidth usage")
 		fmt.Println("  - HTTP request count")
+	case "access", "mode":
+		fmt.Println("access - Manage server access mode")
+		fmt.Println()
+		fmt.Println("Usage:")
+		fmt.Println("  access status     - Show current access mode")
+		fmt.Println("  access open       - Switch to open access (allow all SSH keys)")
+		fmt.Println("  access restricted - Switch to restricted access (allowlist only)")
+		fmt.Println()
+		fmt.Println("Access modes:")
+		fmt.Println("  Open       - Any SSH key can create tunnels")
+		fmt.Println("  Restricted - Only pre-authorized keys allowed")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  access status")
+		fmt.Println("  access open")
+		fmt.Println("  access restricted")
 	default:
 		return fmt.Errorf("no help available for command: %s", command)
 	}
@@ -1357,6 +1376,114 @@ func truncateString(s string, max int) string {
 		return s
 	}
 	return s[:max-3] + "..."
+}
+
+// handleAccessCommand handles access mode management
+func (c *CLI) handleAccessCommand(args []string) error {
+	if len(args) == 0 {
+		fmt.Println("Access subcommands:")
+		fmt.Println("  status      - Show current access mode")
+		fmt.Println("  open        - Switch to open access (allow all SSH keys)")
+		fmt.Println("  restricted  - Switch to restricted access (allowlist only)")
+		return nil
+	}
+
+	subcommand := args[0]
+	switch subcommand {
+	case "status":
+		return c.showAccessStatus()
+	case "open":
+		return c.setAccessMode("open")
+	case "restricted":
+		return c.setAccessMode("restricted")
+	default:
+		return fmt.Errorf("unknown access subcommand: %s", subcommand)
+	}
+}
+
+// showAccessStatus shows the current access mode
+func (c *CLI) showAccessStatus() error {
+	currentMode := "restricted"
+	if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
+		currentMode = "open"
+	}
+
+	if c.jsonOutput {
+		data := map[string]interface{}{
+			"access_mode": currentMode,
+			"open_access": currentMode == "open",
+		}
+		c.outputSuccess(data, "Current access mode")
+	} else {
+		fmt.Printf("🔒 Current access mode: %s\n", strings.ToUpper(currentMode))
+		if currentMode == "open" {
+			fmt.Println("   - Any SSH key can create tunnels")
+		} else {
+			fmt.Println("   - Only pre-authorized keys allowed")
+		}
+	}
+	return nil
+}
+
+// setAccessMode changes the server access mode
+func (c *CLI) setAccessMode(mode string) error {
+	if c.useRemoteAPI {
+		return fmt.Errorf("access mode changes not supported via remote API")
+	}
+
+	oldMode := "restricted"
+	if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
+		oldMode = "open"
+	}
+
+	if oldMode == mode {
+		if c.jsonOutput {
+			data := map[string]interface{}{
+				"access_mode": mode,
+				"changed":     false,
+			}
+			c.outputSuccess(data, fmt.Sprintf("Access mode already set to %s", mode))
+		} else {
+			fmt.Printf("✅ Access mode is already set to %s\n", strings.ToUpper(mode))
+		}
+		return nil
+	}
+
+	// Set the environment variable for the current session
+	if mode == "open" {
+		os.Setenv("P0RT_OPEN_ACCESS", "true")
+	} else {
+		os.Setenv("P0RT_OPEN_ACCESS", "false")
+	}
+
+	// Update stats manager if available
+	if c.statsManager != nil {
+		c.statsManager.SetAccessMode(mode)
+	}
+
+	if c.jsonOutput {
+		data := map[string]interface{}{
+			"access_mode": mode,
+			"changed":     true,
+			"old_mode":    oldMode,
+		}
+		c.outputSuccess(data, fmt.Sprintf("Access mode changed from %s to %s", oldMode, mode))
+	} else {
+		fmt.Printf("✅ Access mode changed from %s to %s\n", strings.ToUpper(oldMode), strings.ToUpper(mode))
+		fmt.Println()
+		if mode == "open" {
+			fmt.Println("⚠️  WARNING: Server is now in OPEN ACCESS mode")
+			fmt.Println("   Any SSH key can now create tunnels")
+		} else {
+			fmt.Println("🔒 Server is now in RESTRICTED ACCESS mode")
+			fmt.Println("   Only pre-authorized keys can create tunnels")
+		}
+		fmt.Println()
+		fmt.Println("💡 Note: This change applies to the current session only.")
+		fmt.Println("   To make it permanent, update your .env file or environment variables.")
+	}
+
+	return nil
 }
 
 // getDomainCompletions returns domain completions for autocomplete

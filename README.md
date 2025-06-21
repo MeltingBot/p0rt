@@ -160,6 +160,36 @@ P0rt supports two access modes:
 - Ideal for beta programs, freemium, or VIP access
 - Support for access tiers: `beta`, `free`, `premium`, `vip`
 
+### Switching Access Modes
+
+**Check current mode:**
+```bash
+./p0rt access status
+
+# JSON output
+./p0rt access status --json
+```
+
+**Switch to open access (allow all SSH keys):**
+```bash
+./p0rt access open
+
+# Interactive CLI
+./p0rt cli
+> access open
+```
+
+**Switch to restricted access (allowlist only):**
+```bash
+./p0rt access restricted
+
+# Interactive CLI  
+./p0rt cli
+> access restricted
+```
+
+**Note:** Mode changes apply to the current session only. To make changes permanent, update your `.env` file or environment variables.
+
 ### Managing Keys
 
 **Add key by fingerprint (easiest):**
@@ -201,6 +231,9 @@ Available commands:
 - `key add <fingerprint> [tier] [comment]` - Add SSH key
 - `key list` - List all authorized keys
 - `key remove <fingerprint>` - Remove key
+- `access status` - Show current access mode
+- `access open` - Switch to open access mode
+- `access restricted` - Switch to restricted access mode
 - `server` - Start server
 - `stats` - Show statistics
 - `help` - Show all commands
@@ -220,6 +253,10 @@ All CLI commands support JSON output for automation and scripting:
 # Get SSH keys as structured data
 ./p0rt cli --json
 > key list
+
+# Check and change access mode
+./p0rt access status --json
+./p0rt access open --json
 
 # Example: Extract domain names from reservations
 ./p0rt reservation list --json | jq -r '.data[].domain'
