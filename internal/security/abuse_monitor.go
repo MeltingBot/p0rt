@@ -199,32 +199,31 @@ func (am *AbuseMonitor) CreateAbuseReportHandler() http.HandlerFunc {
 		contact := r.FormValue("contact")
 		hcaptchaResponse := r.FormValue("h-captcha-response")
 
-		// Debug logs
-		log.Printf("Abuse report submission: domain=%s, reason=%s, hcaptcha_present=%v", domain, reason, hcaptchaResponse != "")
-
+		// Validation avec messages d'erreur JSON détaillés
 		if domain == "" || reason == "" {
-			log.Printf("Abuse report error: Missing domain or reason (domain=%s, reason=%s)", domain, reason)
-			http.Error(w, "Missing domain or reason", http.StatusBadRequest)
+			am.writeErrorJSON(w, "Veuillez remplir le domaine et le type d'abus")
 			return
 		}
 
 		// Verify hCaptcha
 		if hcaptchaResponse == "" {
-			log.Printf("Abuse report error: Captcha verification required")
-			http.Error(w, "Captcha verification required", http.StatusBadRequest)
+			am.writeErrorJSON(w, "Veuillez compléter la vérification captcha")
 			return
 		}
 
 		if !am.verifyHCaptcha(hcaptchaResponse) {
-			log.Printf("Abuse report error: Captcha verification failed")
-			http.Error(w, "Captcha verification failed", http.StatusBadRequest)
+			am.writeErrorJSON(w, "Échec de la vérification captcha, veuillez réessayer")
 			return
+		}
+
+		// Auto-compléter le domaine si nécessaire
+		if !strings.Contains(domain, ".") {
+			domain = domain + ".p0rt.xyz"
 		}
 
 		// Valider le domaine
 		if !strings.HasSuffix(domain, ".p0rt.xyz") {
-			log.Printf("Abuse report error: Invalid domain format (domain=%s)", domain)
-			http.Error(w, "Invalid domain", http.StatusBadRequest)
+			am.writeErrorJSON(w, "Le domaine doit se terminer par .p0rt.xyz")
 			return
 		}
 
@@ -346,7 +345,8 @@ func (am *AbuseMonitor) serveReportForm(w http.ResponseWriter, r *http.Request) 
     <form method="POST" action="/report-abuse">
         <div class="form-group">
             <label for="domain">Suspicious Domain *</label>
-            <input type="text" id="domain" name="domain" placeholder="example-domain.p0rt.xyz" required>
+            <input type="text" id="domain" name="domain" placeholder="example-domain" required>
+            <small style="color: #888;">Entrez juste le nom (sans .p0rt.xyz)</small>
         </div>
         
         <div class="form-group">
@@ -413,14 +413,19 @@ func (am *AbuseMonitor) serveReportForm(w http.ResponseWriter, r *http.Request) 
                 if (data.status === 'reported') {
                     document.body.innerHTML = '<div style="text-align: center; padding: 4rem;"><h1 style="color: #10b981;">✓ Report Submitted</h1><p>Thank you for helping keep P0rt safe. Our security team will investigate this report.</p><p><a href="/" style="color: #60a5fa;">Back to P0rt</a></p></div>';
                 } else {
-                    throw new Error('Report failed');
+                    throw new Error(data.message || 'Report failed');
                 }
             })
             .catch(error => {
                 submitButton.textContent = 'Submit Report';
                 submitButton.disabled = false;
                 hcaptcha.reset();
-                alert('Failed to submit report. Please try again.');
+                
+                // Show specific error message if available
+                const errorMessage = error.message.includes('Report failed') ? 
+                    'Failed to submit report. Please try again.' : 
+                    error.message;
+                alert(errorMessage);
             });
         });
     </script>
@@ -468,4 +473,11 @@ func (am *AbuseMonitor) verifyHCaptcha(response string) bool {
 	}
 
 	return result.Success
+}
+
+// writeErrorJSON writes a JSON error response
+func (am *AbuseMonitor) writeErrorJSON(w http.ResponseWriter, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	fmt.Fprintf(w, `{"status":"error","message":"%s"}`, message)
 }
