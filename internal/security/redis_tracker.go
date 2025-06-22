@@ -95,8 +95,10 @@ func (rst *RedisSecurityTracker) RecordEvent(eventType EventType, ip string, det
 
 	// Increment IP event count
 	countKey := rst.keyPrefix + "count:" + ip
-	rst.client.Incr(rst.ctx, countKey)
+	newCount := rst.client.Incr(rst.ctx, countKey)
 	rst.client.Expire(rst.ctx, countKey, 30*24*time.Hour) // Expire after 30 days
+	
+	log.Printf("📈 Event count for IP %s incremented to %d (event: %s)", ip, newCount.Val(), eventType)
 
 	// Check if IP should be banned
 	rst.checkForBan(ip, eventType)
@@ -228,6 +230,7 @@ func (rst *RedisSecurityTracker) UnbanIP(ip string) {
 		result := rst.client.Del(rst.ctx, key)
 		if result.Val() > 0 {
 			deletedCount++
+			log.Printf("🗑️ Deleted Redis key: %s", key)
 		}
 	}
 	
@@ -391,6 +394,7 @@ func (rst *RedisSecurityTracker) checkForBan(ip string, eventType EventType) {
 	}
 
 	eventCount := rst.getEventCount(ip)
+	log.Printf("🔍 Security check for IP %s: event count = %d, threshold = %d, event type = %s", ip, eventCount, rst.banThreshold, eventType)
 
 	// Ban based on total event count threshold
 	if eventCount >= rst.banThreshold {
@@ -401,6 +405,7 @@ func (rst *RedisSecurityTracker) checkForBan(ip string, eventType EventType) {
 			reason = "scanning"
 		}
 
+		log.Printf("🚨 About to auto-ban IP %s for %s (event count: %d >= threshold: %d)", ip, reason, eventCount, rst.banThreshold)
 		rst.BanIP(ip, reason, rst.banDuration)
 		log.Printf("Auto-banned IP %s for %s (event count: %d)", ip, reason, eventCount)
 		return

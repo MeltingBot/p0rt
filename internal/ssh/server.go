@@ -112,13 +112,17 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 			clientIP := normalizeClientIP(conn.RemoteAddr().String())
 
 			// Check if IP is banned using SecurityTracker (skip for private IPs)
-			if !server.isPrivateIP(clientIP) && server.securityTracker.IsBanned(clientIP) {
-				server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
-					"reason": "banned_ip_attempt",
-					"user":   conn.User(),
-				})
-				log.Printf("Banned IP attempted connection: %s", clientIP)
-				return nil, fmt.Errorf("IP banned")
+			if !server.isPrivateIP(clientIP) {
+				isBanned := server.securityTracker.IsBanned(clientIP)
+				log.Printf("🔒 IP ban check for %s: banned = %t", clientIP, isBanned)
+				if isBanned {
+					server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
+						"reason": "banned_ip_attempt",
+						"user":   conn.User(),
+					})
+					log.Printf("Banned IP attempted connection: %s", clientIP)
+					return nil, fmt.Errorf("IP banned")
+				}
 			}
 
 			// Check if key is in allowlist
