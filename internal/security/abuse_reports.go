@@ -28,6 +28,7 @@ type AbuseReport struct {
 // SSHServerInterface defines the interface for SSH server operations
 type SSHServerInterface interface {
 	UnbanIP(ip string)
+	UnbanIPFromTracker(ip string)
 }
 
 // AbuseReportManager manages abuse reports with Redis storage
@@ -249,7 +250,8 @@ func (arm *AbuseReportManager) ProcessReport(reportID, action, processedBy strin
 		// If accepting, unban the reporter IP from SSH bans
 		if arm.sshServer != nil {
 			arm.sshServer.UnbanIP(report.ReporterIP)
-			log.Printf("Unbanned reporter IP %s after accepting abuse report", report.ReporterIP)
+			arm.sshServer.UnbanIPFromTracker(report.ReporterIP)
+			log.Printf("Unbanned reporter IP %s from all ban systems after accepting abuse report", report.ReporterIP)
 		}
 		
 		// Also clean up Redis keys (best effort)
