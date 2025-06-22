@@ -1901,56 +1901,91 @@ func (c *CLI) handleAbuseDelete(args []string) error {
 
 	reportID := args[0]
 
-	// Get the report first to show details
-	var report *security.AbuseReport
+	// Get report details first
+	var report map[string]interface{}
 	var err error
-
-	// Create report manager with Redis configuration
-	var reportManager *security.AbuseReportManager
+	
 	if c.useRemoteAPI {
-		// For remote API, we can't directly access the report manager, so we'll need an API endpoint
-		c.outputError("Report deletion via remote API not yet implemented. Use local CLI mode.")
-		return nil
+		// Get report via API first
+		reports, err := c.apiClient.GetAbuseReports("", true)
+		if err != nil {
+			c.outputError(fmt.Sprintf("Failed to get abuse reports: %v", err))
+			return nil
+		}
+		
+		// Find the report
+		var found bool
+		if reportsList, ok := reports.([]interface{}); ok {
+			for _, r := range reportsList {
+				if reportMap, ok := r.(map[string]interface{}); ok {
+					if id, ok := reportMap["id"].(string); ok && id == reportID {
+						report = reportMap
+						found = true
+						break
+					}
+				}
+			}
+		}
+		
+		if !found {
+			c.outputError(fmt.Sprintf("Report not found: %s", reportID))
+			return nil
+		}
+		
+		// Delete via API
+		err = c.apiClient.DeleteAbuseReport(reportID)
+		if err != nil {
+			c.outputError(fmt.Sprintf("Failed to archive report: %v", err))
+			return nil
+		}
 	} else {
 		// Create report manager with proper Redis configuration
+		var reportManager *security.AbuseReportManager
 		storageConfig := c.config.GetStorageConfig()
 		if storageConfig.Type == "redis" && storageConfig.RedisURL != "" {
 			reportManager = security.NewAbuseReportManagerWithRedis(storageConfig.RedisURL)
 		} else {
 			reportManager = security.NewAbuseReportManager()
 		}
-	}
-	
-	report, err = reportManager.GetReport(reportID)
-	if err != nil {
-		c.outputError(fmt.Sprintf("Report not found: %v", err))
-		return nil
-	}
+		
+		actualReport, err := reportManager.GetReport(reportID)
+		if err != nil {
+			c.outputError(fmt.Sprintf("Report not found: %v", err))
+			return nil
+		}
+		
+		// Convert to map for consistent display
+		report = map[string]interface{}{
+			"domain":      actualReport.Domain,
+			"status":      actualReport.Status,
+			"reporter_ip": actualReport.ReporterIP,
+		}
 
-	// Archive the report (this will perform cleanup if it was banned)
-	err = reportManager.ArchiveReport(reportID, "cli-admin")
-	if err != nil {
-		c.outputError(fmt.Sprintf("Failed to archive report: %v", err))
-		return nil
+		// Archive the report (this will perform cleanup if it was banned)
+		err = reportManager.ArchiveReport(reportID, "cli-admin")
+		if err != nil {
+			c.outputError(fmt.Sprintf("Failed to archive report: %v", err))
+			return nil
+		}
 	}
 
 	if c.jsonOutput {
 		data := map[string]interface{}{
 			"report_id": reportID,
 			"action":    "archived",
-			"domain":    report.Domain,
-			"status":    report.Status,
+			"domain":    getString(report, "domain"),
+			"status":    getString(report, "status"),
 		}
 		c.outputSuccess(data, "Report archived and cleanup performed")
 	} else {
 		fmt.Printf("✅ Report %s has been archived\n", reportID)
-		fmt.Printf("   Domain: %s\n", report.Domain)
-		fmt.Printf("   Previous Status: %s\n", report.Status)
+		fmt.Printf("   Domain: %s\n", getString(report, "domain"))
+		fmt.Printf("   Previous Status: %s\n", getString(report, "status"))
 		
-		if report.Status == "banned" {
+		if getString(report, "status") == "banned" {
 			fmt.Printf("   🔄 Cleanup performed:\n")
-			fmt.Printf("     - IP %s has been unbanned\n", report.ReporterIP)
-			fmt.Printf("     - Domain %s is no longer banned\n", report.Domain)
+			fmt.Printf("     - IP %s has been unbanned\n", getString(report, "reporter_ip"))
+			fmt.Printf("     - Domain %s is no longer banned\n", getString(report, "domain"))
 			fmt.Printf("     - Redis ban keys cleared\n")
 		}
 		

@@ -494,6 +494,40 @@ func (c *Client) GetAbuseStats() (interface{}, error) {
 	return result["stats"], nil
 }
 
+// DeleteAbuseReport archives/deletes an abuse report via API
+func (c *Client) DeleteAbuseReport(reportID string) error {
+	url := c.baseURL + "/api/v1/abuse/reports/" + reportID
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return err
+	}
+
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		if errMsg, ok := result["message"].(string); ok {
+			return fmt.Errorf("API error: %s", errMsg)
+		}
+		return fmt.Errorf("API request failed with status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
 // UnbanIP unbans an IP address via the API
 func (c *Client) UnbanIP(ip string) error {
 	path := "/api/v1/security/unban"

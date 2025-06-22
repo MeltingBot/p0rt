@@ -651,6 +651,22 @@ func (h *Handler) handleAbuseReport(w http.ResponseWriter, r *http.Request) {
 			"timestamp": time.Now().Format(time.RFC3339),
 		})
 
+	case http.MethodDelete:
+		// Archive/delete report
+		err := reportManager.ArchiveReport(reportID, "api-admin")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("Failed to archive report: %v", err))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success":   true,
+			"report_id": reportID,
+			"action":    "archived",
+			"message":   "Report archived and cleanup performed",
+			"timestamp": time.Now().Format(time.RFC3339),
+		})
+
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
