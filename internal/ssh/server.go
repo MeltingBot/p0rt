@@ -778,6 +778,46 @@ func (s *Server) GetActiveTunnelCount() int {
 	return <-countChan
 }
 
+// NotifyDomainBanned notifies SSH clients if their domain has been banned
+func (s *Server) NotifyDomainBanned(domain string) {
+	done := make(chan bool)
+	
+	s.clientOps <- func() {
+		if client, exists := s.clients[domain]; exists {
+			// Send ban notification to the client's log channel
+			banMessage := "\r\n" + strings.Repeat("=", 70) + "\r\n"
+			banMessage += "🚫 DOMAIN BANNED - IMMEDIATE ACTION REQUIRED\r\n"
+			banMessage += strings.Repeat("=", 70) + "\r\n"
+			banMessage += fmt.Sprintf("Domain: %s.%s\r\n", domain, s.baseDomain)
+			banMessage += "Reason: Abuse reports received and processed\r\n"
+			banMessage += "Action: Tunnel will be terminated in 5 seconds\r\n"
+			banMessage += "\r\n"
+			banMessage += "If you believe this is an error:\r\n"
+			banMessage += "- Contact support immediately\r\n"
+			banMessage += "- Provide your SSH key fingerprint\r\n"
+			banMessage += "- Include details about legitimate use\r\n"
+			banMessage += strings.Repeat("=", 70) + "\r\n\r\n"
+			
+			select {
+			case client.LogChannel <- banMessage:
+				log.Printf("Sent ban notification to client %s", domain)
+			default:
+				log.Printf("Failed to send ban notification to client %s (channel full)", domain)
+			}
+			
+			// Optionally close the connection after notification
+			go func() {
+				time.Sleep(5 * time.Second) // Give time for message to be sent
+				client.Conn.Close()
+				log.Printf("Closed connection for banned domain %s", domain)
+			}()
+		}
+		done <- true
+	}
+	
+	<-done
+}
+
 const hostKeyFile = "ssh_host_key"
 
 func loadOrGenerateHostKey() (ssh.Signer, error) {

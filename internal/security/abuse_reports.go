@@ -32,6 +32,7 @@ type AbuseReport struct {
 type SSHServerInterface interface {
 	UnbanIP(ip string)
 	UnbanIPFromTracker(ip string)
+	NotifyDomainBanned(domain string)
 }
 
 // globalIPUnbanService is a global service for IP unbanning
@@ -417,6 +418,12 @@ func (arm *AbuseReportManager) processReportRedis(reportID, action, processedBy 
 	if action == "ban" {
 		metrics.RecordAbuseReport(report.Reason, "banned")
 		metrics.RecordSecurityEvent("domain_ban", "high")
+		
+		// Notify active SSH clients if their domain is being banned
+		if arm.sshServer != nil {
+			log.Printf("🚨 Notifying active SSH clients that domain %s is being banned", report.Domain)
+			arm.sshServer.NotifyDomainBanned(extractSubdomain(report.Domain))
+		}
 	} else {
 		metrics.RecordAbuseReport(report.Reason, "accepted")
 		metrics.RecordSecurityEvent("report_accepted", "info")
@@ -479,6 +486,12 @@ func (arm *AbuseReportManager) processReportJSON(reportID, action, processedBy s
 	if action == "ban" {
 		metrics.RecordAbuseReport(report.Reason, "banned")
 		metrics.RecordSecurityEvent("domain_ban", "high")
+		
+		// Notify active SSH clients if their domain is being banned
+		if arm.sshServer != nil {
+			log.Printf("🚨 Notifying active SSH clients that domain %s is being banned", report.Domain)
+			arm.sshServer.NotifyDomainBanned(extractSubdomain(report.Domain))
+		}
 	} else {
 		metrics.RecordAbuseReport(report.Reason, "accepted")
 		metrics.RecordSecurityEvent("report_accepted", "info")
@@ -674,4 +687,14 @@ func (arm *AbuseReportManager) unbanReporterIP(ip string) error {
 	}
 
 	return nil
+}
+
+// extractSubdomain extracts the subdomain from a full domain name
+// e.g., "happy-cat-123.p0rt.xyz" -> "happy-cat-123"
+func extractSubdomain(fullDomain string) string {
+	parts := strings.Split(fullDomain, ".")
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	return fullDomain
 }
