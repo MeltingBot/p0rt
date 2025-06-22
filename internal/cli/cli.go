@@ -443,12 +443,14 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("  abuse report <domain> [reason]   - Submit new abuse report")
 		fmt.Println("  abuse process [report-id] ban    - Ban domain based on abuse report")
 		fmt.Println("  abuse process [report-id] accept - Accept domain (dismiss report)")
+		fmt.Println("  abuse delete [report-id]         - Delete report and unban domain/IP")
 		fmt.Println("  abuse stats                      - Show abuse report statistics")
 		fmt.Println()
 		fmt.Println("Examples:")
 		fmt.Println("  abuse report happy-cat-123.p0rt.xyz \"Testing ban notifications\"")
 		fmt.Println("  abuse list")
 		fmt.Println("  abuse process abc-123 ban")
+		fmt.Println("  abuse delete abc-123")
 		fmt.Println()
 		fmt.Println("Description:")
 		fmt.Println("  Submit, view and process abuse reports for domains.")
@@ -882,6 +884,7 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 			readline.PcItem("list"),
 			readline.PcItem("report"),
 			readline.PcItem("process"),
+			readline.PcItem("delete"),
 			readline.PcItem("stats"),
 		),
 		readline.PcItem("history"),
@@ -1680,6 +1683,8 @@ func (c *CLI) handleAbuseCommand(args []string) error {
 		return c.handleAbuseReport(subArgs)
 	case "process":
 		return c.handleAbuseProcess(subArgs)
+	case "delete", "del":
+		return c.handleAbuseDelete(subArgs)
 	case "stats":
 		return c.handleAbuseStats()
 	default:
@@ -1864,6 +1869,60 @@ func (c *CLI) handleAbuseReport(args []string) error {
 		fmt.Printf("   Status: %s\n", report.Status)
 		fmt.Printf("\n💡 Process this report with:\n")
 		fmt.Printf("   abuse process %s ban\n", report.ID)
+	}
+
+	return nil
+}
+
+// handleAbuseDelete deletes/archives an abuse report and performs cleanup
+func (c *CLI) handleAbuseDelete(args []string) error {
+	if len(args) != 1 {
+		c.outputError("Usage: abuse delete <report-id>")
+		return nil
+	}
+
+	reportID := args[0]
+
+	// Get the report first to show details
+	var report *security.AbuseReport
+	var err error
+
+	reportManager := security.NewAbuseReportManager()
+	
+	report, err = reportManager.GetReport(reportID)
+	if err != nil {
+		c.outputError(fmt.Sprintf("Report not found: %v", err))
+		return nil
+	}
+
+	// Archive the report (this will perform cleanup if it was banned)
+	err = reportManager.ArchiveReport(reportID, "cli-admin")
+	if err != nil {
+		c.outputError(fmt.Sprintf("Failed to archive report: %v", err))
+		return nil
+	}
+
+	if c.jsonOutput {
+		data := map[string]interface{}{
+			"report_id": reportID,
+			"action":    "archived",
+			"domain":    report.Domain,
+			"status":    report.Status,
+		}
+		c.outputSuccess(data, "Report archived and cleanup performed")
+	} else {
+		fmt.Printf("✅ Report %s has been archived\n", reportID)
+		fmt.Printf("   Domain: %s\n", report.Domain)
+		fmt.Printf("   Previous Status: %s\n", report.Status)
+		
+		if report.Status == "banned" {
+			fmt.Printf("   🔄 Cleanup performed:\n")
+			fmt.Printf("     - IP %s has been unbanned\n", report.ReporterIP)
+			fmt.Printf("     - Domain %s is no longer banned\n", report.Domain)
+			fmt.Printf("     - Redis ban keys cleared\n")
+		}
+		
+		fmt.Printf("   📁 Report marked as 'archived' for record keeping\n")
 	}
 
 	return nil

@@ -582,6 +582,113 @@ func (arm *AbuseReportManager) GetStats() map[string]interface{} {
 	return stats
 }
 
+// ArchiveReport archives a report and performs cleanup (unban IP/domain)
+func (arm *AbuseReportManager) ArchiveReport(reportID, archivedBy string) error {
+	if arm.useRedis {
+		return arm.archiveReportRedis(reportID, archivedBy)
+	}
+
+	return arm.archiveReportJSON(reportID, archivedBy)
+}
+
+// archiveReportRedis archives a report using Redis storage
+func (arm *AbuseReportManager) archiveReportRedis(reportID, archivedBy string) error {
+	key := arm.keyPrefix + "report:" + reportID
+	data, err := arm.redisClient.Get(arm.ctx, key).Result()
+	if err != nil {
+		return fmt.Errorf("report not found: %w", err)
+	}
+
+	var report AbuseReport
+	if err := json.Unmarshal([]byte(data), &report); err != nil {
+		return fmt.Errorf("failed to unmarshal report: %w", err)
+	}
+
+	// Perform cleanup actions
+	if err := arm.performCleanupActions(&report, archivedBy); err != nil {
+		return fmt.Errorf("failed to perform cleanup: %w", err)
+	}
+
+	// Mark as archived
+	report.Status = "archived"
+	now := time.Now()
+	report.ProcessedAt = &now
+	report.ProcessedBy = archivedBy
+
+	// Save updated report
+	if err := arm.saveReportToRedis(&report); err != nil {
+		return fmt.Errorf("failed to update report: %w", err)
+	}
+
+	log.Printf("Abuse report %s archived by %s", reportID, archivedBy)
+	return nil
+}
+
+// archiveReportJSON archives a report using JSON storage
+func (arm *AbuseReportManager) archiveReportJSON(reportID, archivedBy string) error {
+	arm.mutex.Lock()
+	defer arm.mutex.Unlock()
+
+	report, exists := arm.reports[reportID]
+	if !exists {
+		return fmt.Errorf("report not found: %s", reportID)
+	}
+
+	// Perform cleanup actions
+	if err := arm.performCleanupActions(report, archivedBy); err != nil {
+		return fmt.Errorf("failed to perform cleanup: %w", err)
+	}
+
+	// Mark as archived
+	report.Status = "archived"
+	now := time.Now()
+	report.ProcessedAt = &now
+	report.ProcessedBy = archivedBy
+
+	// Save updated report
+	if err := arm.saveToJSON(); err != nil {
+		return fmt.Errorf("failed to update report: %w", err)
+	}
+
+	log.Printf("Abuse report %s archived by %s", reportID, archivedBy)
+	return nil
+}
+
+// performCleanupActions performs unbanning and cleanup when archiving a report
+func (arm *AbuseReportManager) performCleanupActions(report *AbuseReport, archivedBy string) error {
+	// If the report was banned, unban the domain and IP
+	if report.Status == "banned" {
+		log.Printf("🔄 Archiving banned report - performing cleanup for domain %s and IP %s", report.Domain, report.ReporterIP)
+		
+		// Unban IP from SSH server
+		var unbanService SSHServerInterface
+		if arm.sshServer != nil {
+			unbanService = arm.sshServer
+		} else {
+			unbanService = GetGlobalIPUnbanService()
+		}
+
+		if unbanService != nil {
+			log.Printf("🔓 Unbanning IP %s due to report archival", report.ReporterIP)
+			unbanService.UnbanIP(report.ReporterIP)
+			unbanService.UnbanIPFromTracker(report.ReporterIP)
+		}
+
+		// Clean up Redis keys if available
+		if arm.useRedis {
+			if err := arm.unbanReporterIP(report.ReporterIP); err != nil {
+				log.Printf("Warning: failed to clean up Redis ban keys for IP %s: %v", report.ReporterIP, err)
+			}
+		}
+
+		// Record security event
+		metrics.RecordSecurityEvent("report_archived", "info")
+		log.Printf("✅ Cleanup completed for archived report %s", report.ID)
+	}
+
+	return nil
+}
+
 // IsDomainBanned checks if a domain has been banned via abuse report
 func (arm *AbuseReportManager) IsDomainBanned(domain string) bool {
 	log.Printf("🔍 Checking if domain '%s' is banned...", domain)
@@ -617,15 +724,15 @@ func (arm *AbuseReportManager) isDomainBannedRedis(domain string) bool {
 
 		log.Printf("🔍 Checking report: domain='%s', status='%s', target='%s'", report.Domain, report.Status, domain)
 
-		// Check if this domain is banned (and not accepted)
+		// Check if this domain is banned (and not accepted or archived)
 		if report.Domain == domain && report.Status == "banned" {
 			log.Printf("🚫 Domain '%s' is BANNED (found banned report)", domain)
 			return true
 		}
 
-		// If domain was accepted, it's explicitly not banned
-		if report.Domain == domain && report.Status == "accepted" {
-			log.Printf("✅ Domain '%s' is NOT banned (found accepted report)", domain)
+		// If domain was accepted or archived, it's explicitly not banned
+		if report.Domain == domain && (report.Status == "accepted" || report.Status == "archived") {
+			log.Printf("✅ Domain '%s' is NOT banned (found %s report)", domain, report.Status)
 			return false
 		}
 	}
@@ -644,15 +751,15 @@ func (arm *AbuseReportManager) isDomainBannedJSON(domain string) bool {
 	for _, report := range arm.reports {
 		log.Printf("🔍 Checking report: domain='%s', status='%s', target='%s'", report.Domain, report.Status, domain)
 
-		// Check if this domain is banned (and not accepted)
+		// Check if this domain is banned (and not accepted or archived)
 		if report.Domain == domain && report.Status == "banned" {
 			log.Printf("🚫 Domain '%s' is BANNED (found banned report)", domain)
 			return true
 		}
 
-		// If domain was accepted, it's explicitly not banned
-		if report.Domain == domain && report.Status == "accepted" {
-			log.Printf("✅ Domain '%s' is NOT banned (found accepted report)", domain)
+		// If domain was accepted or archived, it's explicitly not banned
+		if report.Domain == domain && (report.Status == "accepted" || report.Status == "archived") {
+			log.Printf("✅ Domain '%s' is NOT banned (found %s report)", domain, report.Status)
 			return false
 		}
 	}
