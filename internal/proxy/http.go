@@ -178,7 +178,7 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 	// Check if domain is banned via abuse reports
 	if p.abuseMonitor != nil && p.abuseMonitor.GetReportManager().IsDomainBanned(host) {
 		log.Printf("Blocked HTTP request to banned domain: %s from %s", host, extractClientIP(r))
-		http.Error(w, "This domain has been banned due to abuse reports", http.StatusForbidden)
+		p.serveBannedDomainPage(w, r, host)
 		return
 	}
 
@@ -584,6 +584,121 @@ func (p *HTTPProxy) serveErrorPage(w http.ResponseWriter, _ *http.Request, host 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.WriteHeader(http.StatusOK) // Return 200 to avoid CloudFlare 502
+	w.Write([]byte(html))
+}
+
+func (p *HTTPProxy) serveBannedDomainPage(w http.ResponseWriter, _ *http.Request, host string) {
+	subdomain := ""
+	if idx := strings.Index(host, "."); idx > 0 {
+		subdomain = host[:idx]
+	}
+
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Domain Banned - P0rt</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #0a0a0a;
+            color: #fafafa;
+            text-align: center;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        h1 { 
+            font-size: 2.5rem; 
+            margin-bottom: 1rem;
+            color: #ef4444;
+        }
+        .subdomain {
+            font-size: 1.5rem;
+            color: #60a5fa;
+            margin-bottom: 2rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+        .message { 
+            color: #888; 
+            font-size: 1.125rem; 
+            margin-bottom: 3rem;
+            line-height: 1.6;
+        }
+        .instructions {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 2rem 0;
+            text-align: left;
+        }
+        .instructions h2 {
+            color: #f59e0b;
+            margin-top: 0;
+            font-size: 1.25rem;
+        }
+        .instructions p {
+            margin-bottom: 1rem;
+            color: #ccc;
+        }
+        .footer {
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid #333;
+            color: #666;
+            font-size: 0.9rem;
+        }
+        .footer a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        .ban-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="ban-icon">🚫</div>
+    <h1>Domain Banned</h1>
+    <div class="subdomain">%s</div>
+    <div class="message">
+        This domain has been banned due to abuse reports and is no longer accessible.
+    </div>
+    
+    <div class="instructions">
+        <h2>What happened?</h2>
+        <p>This domain was reported for abuse and has been reviewed by our security team. Access has been blocked to protect users.</p>
+        
+        <h2>If you believe this is an error:</h2>
+        <p>• Contact our support team with details about your use case</p>
+        <p>• Provide evidence that the domain was not being used for malicious purposes</p>
+        <p>• Appeals are reviewed on a case-by-case basis</p>
+    </div>
+    
+    <div class="footer">
+        <p>
+            <a href="/">← Back to P0rt</a> | 
+            <a href="/report-abuse">Report Abuse</a>
+        </p>
+        <p>P0rt Security Team</p>
+    </div>
+</body>
+</html>`, subdomain)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("X-Error-Type", "domain-banned")
+	w.WriteHeader(http.StatusForbidden)
 	w.Write([]byte(html))
 }
 
