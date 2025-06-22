@@ -18,22 +18,20 @@ import (
 	"time"
 
 	"github.com/p0rt/p0rt/internal/auth"
-	"github.com/p0rt/p0rt/internal/domain"
 	"github.com/p0rt/p0rt/internal/security"
 	"github.com/p0rt/p0rt/internal/stats"
 	"golang.org/x/crypto/ssh"
 )
 
 type Client struct {
-	Domain       string
-	CustomDomain string
-	Port         int
-	Conn         ssh.Conn
-	Channels     <-chan ssh.NewChannel
-	Requests     <-chan *ssh.Request
-	Key          string
-	LogChannel   chan string
-	KeyAccess    *auth.KeyAccess // Store key access info
+	Domain     string
+	Port       int
+	Conn       ssh.Conn
+	Channels   <-chan ssh.NewChannel
+	Requests   <-chan *ssh.Request
+	Key        string
+	LogChannel chan string
+	KeyAccess  *auth.KeyAccess // Store key access info
 }
 
 type Server struct {
@@ -44,7 +42,6 @@ type Server struct {
 	domainGenerator DomainGenerator
 	tcpManager      TCPManager
 	abuseMonitor    *security.AbuseMonitor
-	customValidator *domain.CustomDomainValidator
 	baseDomain      string
 	statsManager    *stats.Manager
 	securityTracker security.SecurityTrackerInterface
@@ -97,7 +94,6 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 		domainGenerator:      domainGen,
 		tcpManager:           tcpManager,
 		abuseMonitor:         security.NewAbuseMonitor(),
-		customValidator:      domain.NewCustomDomainValidator(baseDomain),
 		baseDomain:           baseDomain,
 		statsManager:         statsManager,
 		securityTracker:      createSecurityTracker(),
@@ -454,10 +450,6 @@ func (s *Server) handleTCPForward(client *Client, req *ssh.Request) {
 
 	client.Port = localPort
 
-	// Stocker le domaine personnalisé si fourni
-	if customDomain != "" {
-		client.CustomDomain = customDomain
-	}
 
 	type forwardResponse struct {
 		BoundPort uint32
@@ -489,7 +481,7 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 	defer channel.Close()
 
 	var domain string
-	var customDomain string
+	var reservedDomain string
 
 	for req := range requests {
 		switch req.Type {
@@ -501,10 +493,7 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 			var env envRequest
 			if err := ssh.Unmarshal(req.Payload, &env); err == nil {
 				if env.Name == "LC_DOMAIN" {
-					customDomain = env.Value
-				} else if env.Name == "LC_CUSTOM_DOMAIN" {
-					// For external custom domains with DNS validation
-					customDomain = env.Value
+					reservedDomain = env.Value
 				}
 			}
 			if req.WantReply {
@@ -519,64 +508,15 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 			if req.Type == "shell" {
 				// Assigner le domaine si pas encore fait
 				if client.Domain == "" {
-					// Determine domain type and validate
-					isExternalDomain := false
-
-					// Check if it's a custom domain (contains dots)
-					if customDomain != "" && strings.Contains(customDomain, ".") {
-						isExternalDomain = true
-
-						// Block unauthorized p0rt.xyz subdomains
-						if strings.HasSuffix(customDomain, "."+s.baseDomain) {
-							channel.Write([]byte(fmt.Sprintf("\r\n❌ Error: Custom subdomains of %s are not allowed.\r\n", s.baseDomain)))
-							channel.Write([]byte("   Use generated domains or your own external domain.\r\n\r\n"))
-							return
-						}
-					}
-
-					if isExternalDomain {
-						// Validate external custom domain
-						// Parse the base64 encoded key
-						keyData, err := base64.StdEncoding.DecodeString(client.Key)
-						if err != nil {
-							log.Printf("Failed to decode SSH key: %v", err)
-							channel.Write([]byte(fmt.Sprintf("\r\n❌ Invalid SSH key format: %v\r\n", err)))
-							return
-						}
-
-						pubKey, err := ssh.ParsePublicKey(keyData)
-						if err != nil {
-							log.Printf("Failed to parse SSH public key: %v", err)
-							channel.Write([]byte(fmt.Sprintf("\r\n❌ Failed to parse SSH key: %v\r\n", err)))
-							return
-						}
-
-						keyFingerprint := ssh.FingerprintSHA256(pubKey)
-						cleanFingerprint := strings.TrimPrefix(keyFingerprint, "SHA256:")
-
-						err = s.customValidator.ValidateCustomDomain(customDomain, cleanFingerprint)
-						if err != nil {
-							log.Printf("Custom domain validation failed for %s: %v", customDomain, err)
-							channel.Write([]byte(fmt.Sprintf("\r\n❌ Custom domain validation failed: %v\r\n", err)))
-							channel.Write([]byte(s.customValidator.GetCustomDomainInstructions(customDomain, cleanFingerprint)))
-							return
-						}
-						domain = customDomain
-						log.Printf("Custom domain %s validated successfully", customDomain)
+					// Use reserved domain if provided, otherwise generate new one
+					if reservedDomain != "" {
+						domain = reservedDomain
 					} else {
-						// Use generated domain only
 						domain = s.domainGenerator.Generate(client.Key)
 					}
 
-					// For ban checking, use the full domain name
-					var fullDomainForBanCheck string
-					if strings.Contains(domain, ".") {
-						// Custom domain already has full name
-						fullDomainForBanCheck = domain
-					} else {
-						// Generated domain needs base domain appended
-						fullDomainForBanCheck = domain + "." + s.baseDomain
-					}
+					// For ban checking, use the full domain name (generated domain needs base domain appended)
+					fullDomainForBanCheck := domain + "." + s.baseDomain
 
 					// Check if domain is banned via abuse reports
 					isDomainBanned := s.abuseMonitor.GetReportManager().IsDomainBanned(fullDomainForBanCheck)
@@ -654,15 +594,8 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 					channel.Write([]byte(fmt.Sprintf("%s\r\n", tierMsg)))
 				}
 
-				// Determine the full URL based on domain type
-				var tunnelURL string
-				if strings.Contains(domain, ".") {
-					// External custom domain
-					tunnelURL = fmt.Sprintf("https://%s", domain)
-				} else {
-					// Standard p0rt domain
-					tunnelURL = fmt.Sprintf("https://%s.%s", domain, s.baseDomain)
-				}
+				// Generate tunnel URL using standard p0rt domain
+				tunnelURL := fmt.Sprintf("https://%s.%s", domain, s.baseDomain)
 
 				channel.Write([]byte(fmt.Sprintf("Your tunnel: %s\r\n", tunnelURL)))
 				channel.Write([]byte(fmt.Sprintf("Local server: localhost:%d\r\n", client.Port)))

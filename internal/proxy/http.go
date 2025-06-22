@@ -176,7 +176,7 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// First try exact match for custom domains
+	// Try to find client by domain
 	client := p.sshServer.GetClient(host)
 	if client == nil {
 		// If not found, try to extract subdomain for p0rt.xyz domains
@@ -1042,20 +1042,6 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
                     </p>
                 </div>
                 
-                <div class="bg-white p-6 rounded-lg shadow-sm">
-                    <h3 class="text-xl font-semibold text-gray-800 mb-3">Can I use custom domains?</h3>
-                    <p class="text-gray-600 mb-3">
-                        Yes! You can use your own domain:
-                    </p>
-                    <p class="text-gray-600">
-                        <code>LC_CUSTOM_DOMAIN=dev.example.com ssh -R 443:localhost:3000 ssh.p0rt.xyz</code>
-                        <br>→ <strong>dev.example.com</strong> (requires DNS setup)
-                    </p>
-                    <p class="text-gray-600 text-sm mt-3">
-                        <em>Note: Custom p0rt.xyz subdomains (like api.p0rt.xyz) are not available. 
-                        Use the generated three-word domains or your own external domain.</em>
-                    </p>
-                </div>
                 
                 <div class="bg-white p-6 rounded-lg shadow-sm">
                     <h3 class="text-xl font-semibold text-gray-800 mb-3">Is this production-ready?</h3>
@@ -1082,15 +1068,6 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
                     </p>
                 </div>
                 
-                <div class="bg-white p-6 rounded-lg shadow-sm">
-                    <h3 class="text-xl font-semibold text-gray-800 mb-3">How to use my own domain?</h3>
-                    <div class="text-gray-600 text-sm">
-                        <p class="mb-2"><strong>1. Add CNAME:</strong> Point your domain to <code>p0rt.xyz</code></p>
-                        <p class="mb-2"><strong>2. Add TXT:</strong> Create <code>_p0rt-authkey.yourdomain.com</code> with value <code>p0rt-authkey=YOUR_SSH_FINGERPRINT</code></p>
-                        <p class="mb-2"><strong>3. Get fingerprint:</strong> <code>ssh-keygen -lf ~/.ssh/id_rsa.pub | awk '{print $2}' | sed 's/SHA256://'</code></p>
-                        <p><strong>4. Connect:</strong> <code>LC_CUSTOM_DOMAIN=yourdomain.com ssh -R 443:localhost:3000 ssh.p0rt.xyz</code></p>
-                    </div>
-                </div>
             </div>
         </div>
     </section>
