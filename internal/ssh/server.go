@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/p0rt/p0rt/internal/auth"
+	"github.com/p0rt/p0rt/internal/metrics"
 	"github.com/p0rt/p0rt/internal/security"
 	"github.com/p0rt/p0rt/internal/stats"
 	"golang.org/x/crypto/ssh"
@@ -116,6 +117,8 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 						"reason": "banned_ip_attempt",
 						"user":   conn.User(),
 					})
+					metrics.RecordSSHConnection("banned")
+					metrics.RecordSecurityEvent("banned_ip_attempt", "high")
 					log.Printf("Banned IP attempted connection: %s", clientIP)
 					return nil, fmt.Errorf("IP banned")
 				}
@@ -132,6 +135,8 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 						"fingerprint": fingerprint,
 					})
 				}
+				metrics.RecordSSHConnection("failed")
+				metrics.RecordSecurityEvent("unauthorized_key", "medium")
 				return nil, fmt.Errorf("unauthorized key")
 			}
 
@@ -158,6 +163,9 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 			if os.Getenv("P0RT_VERBOSE") == "true" {
 				log.Printf("Successful SSH authentication from %s (key: %s, tier: %s)", clientIP, keyHash[:8], tierInfo)
 			}
+			
+			// Record successful SSH connection
+			metrics.RecordSSHConnection("success")
 
 			permissions := &ssh.Permissions{
 				Extensions: map[string]string{
@@ -295,6 +303,9 @@ func (s *Server) handleConnection(netConn net.Conn) {
 		if !s.isPrivateIP(clientIP) {
 			// Incrémenter les tentatives échouées
 			s.recordFailedAttempt(clientIP)
+			
+			// Record failed connection metric
+			metrics.RecordSSHConnection("failed")
 
 			// Log détaillé pour différents types d'erreurs et détection de scans
 			if strings.Contains(err.Error(), "no auth passed yet") {
@@ -375,6 +386,9 @@ func (s *Server) handleConnection(netConn net.Conn) {
 		if client.Port > 0 {
 			s.tcpManager.Close(client.Port)
 		}
+		
+		// Update active connections metric
+		s.updateActiveConnectionsMetric()
 	}()
 
 	// Détecter la déconnexion via Wait()
@@ -711,6 +725,29 @@ func (s *Server) updateStats() {
 	count := <-countChan
 	stats := fmt.Sprintf(`{"connected_clients": %d}`, count)
 	os.WriteFile("stats.json", []byte(stats), 0644)
+}
+
+func (s *Server) updateActiveConnectionsMetric() {
+	countChan := make(chan int)
+	tunnelsChan := make(chan int)
+
+	s.clientOps <- func() {
+		totalClients := len(s.clients)
+		activeTunnels := 0
+		for _, client := range s.clients {
+			if client.Domain != "" && client.Port > 0 {
+				activeTunnels++
+			}
+		}
+		countChan <- totalClients
+		tunnelsChan <- activeTunnels
+	}
+
+	sshConnections := <-countChan
+	tunnels := <-tunnelsChan
+	
+	// Update Prometheus metrics
+	metrics.UpdateActiveConnections(sshConnections, tunnels, 0) // WebSocket count handled separately
 }
 
 const hostKeyFile = "ssh_host_key"

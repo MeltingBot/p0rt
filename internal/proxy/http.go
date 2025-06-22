@@ -13,8 +13,10 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/p0rt/p0rt/internal/api"
 	"github.com/p0rt/p0rt/internal/domain"
+	"github.com/p0rt/p0rt/internal/metrics"
 	"github.com/p0rt/p0rt/internal/security"
 	"github.com/p0rt/p0rt/internal/stats"
 )
@@ -132,6 +134,12 @@ func (p *HTTPProxy) Start(port string) error {
 	// Endpoint pour statistiques de domaines (admin)
 	mux.HandleFunc("/domain-stats", p.handleDomainStats)
 
+	// Prometheus metrics endpoint (with basic auth)
+	if metrics.IsMetricsEnabled() {
+		mux.Handle("/metrics", metrics.BasicAuthMiddleware(promhttp.Handler()))
+		log.Println("📊 Prometheus metrics endpoint enabled at /metrics")
+	}
+
 	// Ping endpoint pour CloudFlare health checks
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
@@ -158,11 +166,27 @@ func (p *HTTPProxy) Start(port string) error {
 }
 
 func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	host := r.Host
 
 	// Ajouter des headers pour CloudFlare
 	w.Header().Set("Server", "P0rt")
 	w.Header().Set("X-Powered-By", "P0rt")
+	
+	// Track request completion for metrics
+	defer func() {
+		duration := time.Since(start).Seconds()
+		statusCode := "200" // Default, will be overridden if different
+		domainType := "tunnel"
+		
+		if host == "p0rt.xyz" || host == "www.p0rt.xyz" {
+			domainType = "homepage"
+		} else if r.URL.Path == "/health" {
+			domainType = "health"
+		}
+		
+		metrics.RecordHTTPRequest(r.Method, statusCode, domainType, duration)
+	}()
 
 	if host == "p0rt.xyz" || host == "www.p0rt.xyz" {
 		p.serveStaticContent(w, r)
@@ -293,6 +317,14 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Record HTTP request statistics
 	p.sshServer.RecordHTTPRequest(domain, bytesIn, statsWriter.bytesWritten)
+	
+	// Record bytes transferred for Prometheus
+	if bytesIn > 0 {
+		metrics.RecordBytesTransferred("in", domain, bytesIn)
+	}
+	if statsWriter.bytesWritten > 0 {
+		metrics.RecordBytesTransferred("out", domain, statsWriter.bytesWritten)
+	}
 }
 
 func (p *HTTPProxy) handleWebSocket(w http.ResponseWriter, r *http.Request, targetPort int) {
@@ -305,6 +337,7 @@ func (p *HTTPProxy) handleWebSocket(w http.ResponseWriter, r *http.Request, targ
 	clientConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		logStructured(r, "WebSocket upgrade failed: %v", err)
+		metrics.RecordSecurityEvent("websocket_upgrade_failed", "low")
 		return
 	}
 	defer clientConn.Close()
@@ -327,9 +360,13 @@ func (p *HTTPProxy) handleWebSocket(w http.ResponseWriter, r *http.Request, targ
 	targetConn, _, err := dialer.Dial(targetURL.String(), headers)
 	if err != nil {
 		logStructured(r, "Failed to connect to target WebSocket: %v", err)
+		metrics.RecordSecurityEvent("websocket_connection_failed", "low")
 		return
 	}
 	defer targetConn.Close()
+	
+	// Record successful WebSocket connection
+	metrics.RecordSecurityEvent("websocket_connection_success", "info")
 
 	errChan := make(chan error, 2)
 

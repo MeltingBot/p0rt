@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/p0rt/p0rt/internal/metrics"
 )
 
 // AbuseReport represents a single abuse report
@@ -269,6 +270,11 @@ func (arm *AbuseReportManager) SubmitReport(domain, reporterIP, reason, details 
 	}
 
 	log.Printf("Abuse report submitted: %s from %s (ID: %s)", domain, reporterIP, report.ID)
+	
+	// Record abuse report metrics
+	metrics.RecordAbuseReport(reason, "pending")
+	metrics.RecordSecurityEvent("abuse_report", "info")
+	
 	return report, nil
 }
 
@@ -406,6 +412,16 @@ func (arm *AbuseReportManager) processReportRedis(reportID, action, processedBy 
 	}
 
 	log.Printf("Abuse report %s processed: %s by %s", reportID, action, processedBy)
+	
+	// Record abuse report processing metrics
+	if action == "ban" {
+		metrics.RecordAbuseReport(report.Reason, "banned")
+		metrics.RecordSecurityEvent("domain_ban", "high")
+	} else {
+		metrics.RecordAbuseReport(report.Reason, "accepted")
+		metrics.RecordSecurityEvent("report_accepted", "info")
+	}
+	
 	return nil
 }
 
@@ -458,6 +474,16 @@ func (arm *AbuseReportManager) processReportJSON(reportID, action, processedBy s
 	}
 
 	log.Printf("Abuse report %s processed: %s by %s", reportID, action, processedBy)
+	
+	// Record abuse report processing metrics
+	if action == "ban" {
+		metrics.RecordAbuseReport(report.Reason, "banned")
+		metrics.RecordSecurityEvent("domain_ban", "high")
+	} else {
+		metrics.RecordAbuseReport(report.Reason, "accepted")
+		metrics.RecordSecurityEvent("report_accepted", "info")
+	}
+	
 	return nil
 }
 

@@ -10,6 +10,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+	
+	"github.com/p0rt/p0rt/internal/metrics"
 )
 
 // EventType represents different types of security events
@@ -144,6 +146,15 @@ func (st *SecurityTracker) RecordEvent(eventType EventType, ip string, details m
 	// Add to events list
 	st.events = append(st.events, event)
 	st.ipEventCounts[ip]++
+	
+	// Record security event metric
+	severityString := "low"
+	if event.Severity >= 8 {
+		severityString = "high"
+	} else if event.Severity >= 5 {
+		severityString = "medium"
+	}
+	metrics.RecordSecurityEvent(string(eventType), severityString)
 
 	// Trim events if we exceed max
 	if len(st.events) > st.maxEvents {
@@ -207,6 +218,9 @@ func (st *SecurityTracker) BanIP(ip, reason string, duration time.Duration) {
 
 	go st.save()
 	log.Printf("IP %s banned: %s (expires: %v)", ip, reason, time.Now().Add(duration))
+	
+	// Update banned IPs metric
+	st.updateBannedCountsMetric()
 }
 
 // UnbanIP removes a ban on an IP address
@@ -217,6 +231,9 @@ func (st *SecurityTracker) UnbanIP(ip string) {
 	delete(st.bannedIPs, ip)
 	go st.save()
 	log.Printf("IP %s unbanned", ip)
+	
+	// Update banned IPs metric
+	st.updateBannedCountsMetric()
 }
 
 // GetBannedIPs returns all currently banned IPs
@@ -489,6 +506,20 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// updateBannedCountsMetric updates Prometheus metrics for banned counts
+func (st *SecurityTracker) updateBannedCountsMetric() {
+	// This is called within a locked context, so it's safe to access bannedIPs
+	bannedIPCount := 0
+	for _, bannedIP := range st.bannedIPs {
+		if time.Now().Before(bannedIP.ExpiresAt) {
+			bannedIPCount++
+		}
+	}
+	
+	// Domain bans are handled by abuse report manager, so we pass 0 here
+	metrics.UpdateBannedCounts(bannedIPCount, 0)
 }
 
 // NewSecurityTrackerFromConfig creates a security tracker based on configuration
