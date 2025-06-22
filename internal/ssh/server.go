@@ -271,7 +271,7 @@ func (s *Server) handleConnection(netConn net.Conn) {
 		s.failedMutex.Lock()
 		s.bannedIPs[clientIP] = time.Now().Add(24 * time.Hour)
 		s.failedMutex.Unlock()
-		s.abuseMonitor.ReportAbuse("ssh-blacklist", clientIP, "Known malicious IP from blacklist")
+		log.Printf("Known malicious IP %s auto-banned for 24h (blacklist)", clientIP)
 
 		// Record in SecurityTracker
 		s.securityTracker.RecordEvent(security.EventAbuseReport, clientIP, map[string]string{
@@ -901,8 +901,7 @@ func (s *Server) detectScanPattern(ip, pattern string) {
 			delete(s.failedAttempts, ip)
 			log.Printf("IP %s auto-banned for 6h (scan pattern: %s)", ip, pattern)
 
-			// Reporter comme tentative de scan
-			s.abuseMonitor.ReportAbuse("ssh-scan", ip, fmt.Sprintf("Automated scan detected: %s", pattern))
+			// Log the security event (already tracked by SecurityTracker below)
 
 			// Also report to SecurityTracker with abuse report
 			s.securityTracker.RecordEvent(security.EventAbuseReport, ip, map[string]string{

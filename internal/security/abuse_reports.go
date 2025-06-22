@@ -197,6 +197,11 @@ func (arm *AbuseReportManager) ListReports(status string) ([]*AbuseReport, error
 			continue
 		}
 		
+		// Filter out automated SSH security events (they don't belong here)
+		if strings.HasPrefix(report.Domain, "ssh-") || report.Domain == "ssh-blacklist" {
+			continue
+		}
+		
 		reports = append(reports, &report)
 	}
 	
