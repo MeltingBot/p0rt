@@ -1635,32 +1635,72 @@ func (c *CLI) handleAbuseCommand(args []string) error {
 // handleAbuseList lists abuse reports
 func (c *CLI) handleAbuseList(args []string) error {
 	status := "pending"
+	showAll := false
 	
 	// Parse basic flags
 	for _, arg := range args {
 		if arg == "--all" || arg == "-a" {
 			status = ""
+			showAll = true
 		}
 	}
 	
-	reportManager := security.NewAbuseReportManager()
-	reports, err := reportManager.ListReports(status)
-	if err != nil {
-		c.outputError(fmt.Sprintf("Failed to get abuse reports: %v", err))
-		return nil
+	var reports interface{}
+	var err error
+	
+	if c.useRemoteAPI {
+		// Use remote API
+		reports, err = c.apiClient.GetAbuseReports(status, showAll)
+		if err != nil {
+			c.outputError(fmt.Sprintf("Failed to get abuse reports: %v", err))
+			return nil
+		}
+	} else {
+		// Use local access
+		reportManager := security.NewAbuseReportManager()
+		localReports, err := reportManager.ListReports(status)
+		if err != nil {
+			c.outputError(fmt.Sprintf("Failed to get abuse reports: %v", err))
+			return nil
+		}
+		reports = localReports
+	}
+	
+	// Handle different return types from API vs local
+	var reportsList []*security.AbuseReport
+	var count int
+	
+	if c.useRemoteAPI {
+		// reports is []interface{} from API
+		if apiReports, ok := reports.([]interface{}); ok {
+			count = len(apiReports)
+			// Convert to display format for consistency
+			reportsList = make([]*security.AbuseReport, 0, count)
+			// For remote API, we'll display differently since we can't convert to struct easily
+		} else {
+			count = 0
+		}
+	} else {
+		// reports is []*security.AbuseReport from local
+		if localReports, ok := reports.([]*security.AbuseReport); ok {
+			reportsList = localReports
+			count = len(reportsList)
+		} else {
+			count = 0
+		}
 	}
 	
 	if c.jsonOutput {
 		data := map[string]interface{}{
 			"reports": reports,
-			"count":   len(reports),
+			"count":   count,
 			"status":  status,
 		}
 		c.outputSuccess(data, "Abuse reports")
 		return nil
 	}
 	
-	if len(reports) == 0 {
+	if count == 0 {
 		if status == "" {
 			fmt.Println("No abuse reports found")
 		} else {
@@ -1675,20 +1715,38 @@ func (c *CLI) handleAbuseList(args []string) error {
 	}
 	fmt.Printf("=== Abuse Reports (%s) ===\n\n", strings.Title(statusLabel))
 	
-	for i, report := range reports {
-		fmt.Printf("%d. ID: %s\n", i+1, report.ID)
-		fmt.Printf("   Domain: %s\n", report.Domain)
-		fmt.Printf("   Reporter: %s\n", report.ReporterIP)
-		fmt.Printf("   Reason: %s\n", report.Reason)
-		fmt.Printf("   Status: %s\n", report.Status)
-		fmt.Printf("   Reported: %s\n", report.ReportedAt.Format("2006-01-02 15:04:05"))
-		if report.ProcessedAt != nil {
-			fmt.Printf("   Processed: %s\n", report.ProcessedAt.Format("2006-01-02 15:04:05"))
+	if c.useRemoteAPI {
+		// Display API results (simpler format)
+		if apiReports, ok := reports.([]interface{}); ok {
+			for i, item := range apiReports {
+				if report, ok := item.(map[string]interface{}); ok {
+					fmt.Printf("%d. ID: %s\n", i+1, getString(report, "id"))
+					fmt.Printf("   Domain: %s\n", getString(report, "domain"))
+					fmt.Printf("   Reporter: %s\n", getString(report, "reporter_ip"))
+					fmt.Printf("   Reason: %s\n", getString(report, "reason"))
+					fmt.Printf("   Status: %s\n", getString(report, "status"))
+					fmt.Printf("   Reported: %s\n", getTimeString(report, "reported_at"))
+					fmt.Println()
+				}
+			}
 		}
-		fmt.Println()
+	} else {
+		// Display local results
+		for i, report := range reportsList {
+			fmt.Printf("%d. ID: %s\n", i+1, report.ID)
+			fmt.Printf("   Domain: %s\n", report.Domain)
+			fmt.Printf("   Reporter: %s\n", report.ReporterIP)
+			fmt.Printf("   Reason: %s\n", report.Reason)
+			fmt.Printf("   Status: %s\n", report.Status)
+			fmt.Printf("   Reported: %s\n", report.ReportedAt.Format("2006-01-02 15:04:05"))
+			if report.ProcessedAt != nil {
+				fmt.Printf("   Processed: %s\n", report.ProcessedAt.Format("2006-01-02 15:04:05"))
+			}
+			fmt.Println()
+		}
 	}
 	
-	fmt.Printf("Total: %d reports\n", len(reports))
+	fmt.Printf("Total: %d reports\n", count)
 	return nil
 }
 
@@ -1707,37 +1765,46 @@ func (c *CLI) handleAbuseProcess(args []string) error {
 		return nil
 	}
 	
-	reportManager := security.NewAbuseReportManager()
+	var err error
 	
-	// Get the report first to show details
-	report, err := reportManager.GetReport(reportID)
-	if err != nil {
-		c.outputError(fmt.Sprintf("Report not found: %v", err))
-		return nil
-	}
-	
-	if report.Status != "pending" {
-		c.outputError(fmt.Sprintf("Report already processed (status: %s)", report.Status))
-		return nil
-	}
-	
-	err = reportManager.ProcessReport(reportID, action, "admin")
-	if err != nil {
-		c.outputError(fmt.Sprintf("Failed to process report: %v", err))
-		return nil
+	if c.useRemoteAPI {
+		// Use remote API
+		err = c.apiClient.ProcessAbuseReport(reportID, action)
+		if err != nil {
+			c.outputError(fmt.Sprintf("Failed to process report: %v", err))
+			return nil
+		}
+	} else {
+		// Use local access
+		reportManager := security.NewAbuseReportManager()
+		
+		// Get the report first to show details
+		report, err := reportManager.GetReport(reportID)
+		if err != nil {
+			c.outputError(fmt.Sprintf("Report not found: %v", err))
+			return nil
+		}
+		
+		if report.Status != "pending" {
+			c.outputError(fmt.Sprintf("Report already processed (status: %s)", report.Status))
+			return nil
+		}
+		
+		err = reportManager.ProcessReport(reportID, action, "admin")
+		if err != nil {
+			c.outputError(fmt.Sprintf("Failed to process report: %v", err))
+			return nil
+		}
 	}
 	
 	if c.jsonOutput {
 		data := map[string]interface{}{
 			"report_id": reportID,
 			"action":    action,
-			"domain":    report.Domain,
 		}
 		c.outputSuccess(data, fmt.Sprintf("Report %s processed", action))
 	} else {
 		fmt.Printf("✅ Report %s processed: %s\n", reportID, action)
-		fmt.Printf("   Domain: %s\n", report.Domain)
-		fmt.Printf("   Reason: %s\n", report.Reason)
 		
 		if action == "ban" {
 			fmt.Printf("   🚫 Domain has been banned\n")
@@ -1751,20 +1818,39 @@ func (c *CLI) handleAbuseProcess(args []string) error {
 
 // handleAbuseStats shows abuse report statistics
 func (c *CLI) handleAbuseStats() error {
-	reportManager := security.NewAbuseReportManager()
-	stats := reportManager.GetStats()
+	var stats interface{}
+	var err error
+	
+	if c.useRemoteAPI {
+		// Use remote API
+		stats, err = c.apiClient.GetAbuseStats()
+		if err != nil {
+			c.outputError(fmt.Sprintf("Failed to get abuse statistics: %v", err))
+			return nil
+		}
+	} else {
+		// Use local access
+		reportManager := security.NewAbuseReportManager()
+		stats = reportManager.GetStats()
+	}
 	
 	if c.jsonOutput {
 		c.outputSuccess(stats, "Abuse report statistics")
 		return nil
 	}
 	
+	statsMap, ok := stats.(map[string]interface{})
+	if !ok {
+		c.outputError("Invalid statistics format")
+		return nil
+	}
+	
 	fmt.Println("=== Abuse Report Statistics ===")
-	fmt.Printf("Total Reports: %v\n", stats["total_reports"])
-	fmt.Printf("Pending: %v\n", stats["pending_reports"])
-	fmt.Printf("Banned: %v\n", stats["banned_reports"])
-	fmt.Printf("Accepted: %v\n", stats["accepted_reports"])
-	fmt.Printf("Redis Available: %v\n", stats["redis_available"])
+	fmt.Printf("Total Reports: %v\n", statsMap["total_reports"])
+	fmt.Printf("Pending: %v\n", statsMap["pending_reports"])
+	fmt.Printf("Banned: %v\n", statsMap["banned_reports"])
+	fmt.Printf("Accepted: %v\n", statsMap["accepted_reports"])
+	fmt.Printf("Redis Available: %v\n", statsMap["redis_available"])
 	
 	return nil
 }
@@ -1777,6 +1863,25 @@ func (c *CLI) getDomainCompletions(line string) []string {
 		domains = append(domains, res.Domain)
 	}
 	return domains
+}
+
+// Helper functions for parsing API responses
+func getString(m map[string]interface{}, key string) string {
+	if val, ok := m[key].(string); ok {
+		return val
+	}
+	return ""
+}
+
+func getTimeString(m map[string]interface{}, key string) string {
+	if val, ok := m[key].(string); ok {
+		// Parse and reformat the time
+		if t, err := time.Parse(time.RFC3339, val); err == nil {
+			return t.Format("2006-01-02 15:04")
+		}
+		return val
+	}
+	return ""
 }
 
 // handleRemoteHistory handles history command via remote API
