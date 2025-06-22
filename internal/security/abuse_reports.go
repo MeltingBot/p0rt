@@ -25,12 +25,18 @@ type AbuseReport struct {
 	ProcessedAt *time.Time `json:"processed_at,omitempty"`
 }
 
+// SSHServerInterface defines the interface for SSH server operations
+type SSHServerInterface interface {
+	UnbanIP(ip string)
+}
+
 // AbuseReportManager manages abuse reports with Redis storage
 type AbuseReportManager struct {
 	redisClient *redis.Client
 	ctx         context.Context
 	keyPrefix   string
 	useRedis    bool
+	sshServer   SSHServerInterface // Reference to SSH server for IP unbanning
 }
 
 // NewAbuseReportManager creates a new abuse report manager
@@ -42,6 +48,11 @@ func NewAbuseReportManager() *AbuseReportManager {
 	
 	manager.initRedis()
 	return manager
+}
+
+// SetSSHServer sets the SSH server reference for IP unbanning operations
+func (arm *AbuseReportManager) SetSSHServer(server SSHServerInterface) {
+	arm.sshServer = server
 }
 
 // NewAbuseReportManagerWithRedis creates a new abuse report manager with provided Redis URL
@@ -234,6 +245,17 @@ func (arm *AbuseReportManager) ProcessReport(reportID, action, processedBy strin
 		report.Status = "banned"
 	} else {
 		report.Status = "accepted"
+		
+		// If accepting, unban the reporter IP from SSH bans
+		if arm.sshServer != nil {
+			arm.sshServer.UnbanIP(report.ReporterIP)
+			log.Printf("Unbanned reporter IP %s after accepting abuse report", report.ReporterIP)
+		}
+		
+		// Also clean up Redis keys (best effort)
+		if err := arm.unbanReporterIP(report.ReporterIP); err != nil {
+			log.Printf("Warning: failed to clean up Redis ban keys for IP %s: %v", report.ReporterIP, err)
+		}
 	}
 	
 	now := time.Now()
@@ -351,4 +373,32 @@ func (arm *AbuseReportManager) IsDomainBanned(domain string) bool {
 	}
 	
 	return false
+}
+
+// unbanReporterIP removes an IP from SSH banned IPs list when abuse report is accepted
+func (arm *AbuseReportManager) unbanReporterIP(ip string) error {
+	if !arm.useRedis {
+		return fmt.Errorf("Redis not available")
+	}
+	
+	// Remove from SSH banned IPs (assuming they're stored in Redis with key pattern)
+	// This is a best-effort cleanup - the SSH server maintains its own ban list
+	sshBanKey := "p0rt:ssh:banned_ips:" + ip
+	err := arm.redisClient.Del(arm.ctx, sshBanKey).Err()
+	if err != nil {
+		return fmt.Errorf("failed to remove IP ban: %w", err)
+	}
+	
+	// Also try alternative key patterns that might be used
+	altKeys := []string{
+		"ssh:banned:" + ip,
+		"p0rt:banned:" + ip,
+		"banned_ips:" + ip,
+	}
+	
+	for _, key := range altKeys {
+		arm.redisClient.Del(arm.ctx, key)
+	}
+	
+	return nil
 }

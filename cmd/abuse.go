@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 	"text/tabwriter"

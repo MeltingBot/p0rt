@@ -54,6 +54,10 @@ type Server struct {
 	failedAttempts map[string]int
 	failedMutex    sync.RWMutex
 	bannedIPs      map[string]time.Time
+	
+	// Tracking for banned domain connection attempts
+	bannedDomainAttempts map[string]int // IP -> attempt count for banned domains
+	bannedDomainMutex    sync.RWMutex
 }
 
 type DomainGenerator interface {
@@ -100,6 +104,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 		keyStore:        keyStore,
 		failedAttempts:  make(map[string]int),
 		bannedIPs:       make(map[string]time.Time),
+		bannedDomainAttempts: make(map[string]int),
 	}
 
 	config := &ssh.ServerConfig{
@@ -213,6 +218,9 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 
 	// Démarrer le nettoyage périodique des IPs bannies
 	go server.cleanupBannedIPs()
+
+	// Set SSH server reference in abuse report manager for IP unbanning
+	server.abuseMonitor.GetReportManager().SetSSHServer(server)
 
 	return server, nil
 }
@@ -561,9 +569,35 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 
 					// Check if domain is banned via abuse reports
 					if s.abuseMonitor.GetReportManager().IsDomainBanned(domain) {
-						log.Printf("Domain %s is banned, rejecting connection", domain)
-						channel.Write([]byte("\r\n❌ Error: This domain has been banned due to abuse reports.\r\n"))
-						channel.Write([]byte("Contact support if you believe this is an error.\r\n"))
+						// Get client IP for tracking attempts
+						clientIP := client.Conn.RemoteAddr().String()
+						if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
+							clientIP = clientIP[:idx]
+						}
+						
+						// Track banned domain connection attempts
+						s.bannedDomainMutex.Lock()
+						s.bannedDomainAttempts[clientIP]++
+						attempts := s.bannedDomainAttempts[clientIP]
+						s.bannedDomainMutex.Unlock()
+						
+						log.Printf("Domain %s is banned, connection attempt #%d from IP %s", domain, attempts, clientIP)
+						
+						// If more than 5 attempts, ban the IP
+						if attempts > 5 {
+							s.recordFailedAttempt(clientIP)
+							log.Printf("IP %s banned after %d attempts to access banned domain %s", clientIP, attempts, domain)
+							channel.Write([]byte("\r\n❌ Error: Your IP has been banned for repeated attempts to access banned domains.\r\n"))
+							channel.Write([]byte("Contact support if you believe this is an error.\r\n"))
+						} else {
+							// Just reject the domain access with helpful message
+							channel.Write([]byte(fmt.Sprintf("\r\n❌ Error: Domain '%s' has been banned due to abuse reports.\r\n", domain)))
+							channel.Write([]byte("This domain is currently suspended. You can:\r\n"))
+							channel.Write([]byte("- Use a different domain (disconnect and reconnect)\r\n"))
+							channel.Write([]byte("- Contact support if you believe this is an error\r\n"))
+							channel.Write([]byte(fmt.Sprintf("⚠️  Warning: %d/5 attempts. Further attempts may result in IP ban.\r\n", attempts)))
+						}
+						
 						channel.Close()
 						return
 					}
@@ -843,6 +877,22 @@ func (s *Server) isIPBanned(ip string) bool {
 	return false
 }
 
+// UnbanIP removes an IP from the banned IPs list
+func (s *Server) UnbanIP(ip string) {
+	s.failedMutex.Lock()
+	defer s.failedMutex.Unlock()
+	
+	delete(s.bannedIPs, ip)
+	delete(s.failedAttempts, ip)
+	
+	// Also clear banned domain attempts for this IP
+	s.bannedDomainMutex.Lock()
+	delete(s.bannedDomainAttempts, ip)
+	s.bannedDomainMutex.Unlock()
+	
+	log.Printf("IP %s has been unbanned and banned domain attempts cleared", ip)
+}
+
 func (s *Server) recordFailedAttempt(ip string) {
 	// Skip tracking for private IPs
 	if s.isPrivateIP(ip) {
@@ -982,8 +1032,8 @@ func (s *Server) BanIP(ip, reason string, duration time.Duration) {
 	s.securityTracker.BanIP(ip, reason, duration)
 }
 
-// UnbanIP removes a ban on an IP address
-func (s *Server) UnbanIP(ip string) {
+// UnbanIPFromTracker removes a ban on an IP address via security tracker
+func (s *Server) UnbanIPFromTracker(ip string) {
 	s.securityTracker.UnbanIP(ip)
 }
 
