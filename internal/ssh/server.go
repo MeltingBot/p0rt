@@ -568,9 +568,19 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 						domain = s.domainGenerator.Generate(client.Key)
 					}
 
+					// For ban checking, use the full domain name
+					var fullDomainForBanCheck string
+					if strings.Contains(domain, ".") {
+						// Custom domain already has full name
+						fullDomainForBanCheck = domain
+					} else {
+						// Generated domain needs base domain appended
+						fullDomainForBanCheck = domain + "." + s.baseDomain
+					}
+
 					// Check if domain is banned via abuse reports
-					isDomainBanned := s.abuseMonitor.GetReportManager().IsDomainBanned(domain)
-					log.Printf("🚫 Domain ban check for '%s': banned = %t", domain, isDomainBanned)
+					isDomainBanned := s.abuseMonitor.GetReportManager().IsDomainBanned(fullDomainForBanCheck)
+					log.Printf("🚫 Domain ban check for '%s' (full: '%s'): banned = %t", domain, fullDomainForBanCheck, isDomainBanned)
 					if isDomainBanned {
 						// Get client IP for tracking attempts
 						clientIP := normalizeClientIP(client.Conn.RemoteAddr().String())
