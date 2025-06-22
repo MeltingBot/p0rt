@@ -19,17 +19,19 @@ var (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "p0rt",
-	Short: "P0rt - Fast, free SSH tunneling service",
-	Long: `P0rt is a fast, free SSH tunneling service that allows you to expose
+	Use:     "p0rt",
+	Short:   "P0rt - Fast, free SSH tunneling service",
+	Version: "1.0.0",
+	Long: `P0rt v1.0.0 - Fast, free SSH tunneling service that allows you to expose
 local servers to the internet without installation, signup, and free forever.
 
 Key features:
 - Deterministic three-word domains from SSH keys
 - Real-time connection monitoring in your terminal
-- Enterprise-grade security with SSH encryption
+- Enterprise-grade security with SSH encryption and abuse prevention
 - Built for speed with Go
-- Interactive CLI and remote API management`,
+- Interactive CLI and remote API management
+- JSON/Redis dual storage with automatic fallback`,
 	Example: `  # Start the server
   p0rt server start
 
