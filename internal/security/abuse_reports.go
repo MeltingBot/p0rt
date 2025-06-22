@@ -250,11 +250,12 @@ func (arm *AbuseReportManager) ProcessReport(reportID, action, processedBy strin
 		
 		// If accepting, unban the reporter IP from SSH bans
 		if arm.sshServer != nil {
+			log.Printf("Processing abuse report acceptance: unbanning IP %s", report.ReporterIP)
 			arm.sshServer.UnbanIP(report.ReporterIP)
 			arm.sshServer.UnbanIPFromTracker(report.ReporterIP)
 			// Add to temporary whitelist for 10 minutes to prevent immediate re-banning
 			arm.sshServer.AddTemporaryWhitelist(report.ReporterIP, 10*time.Minute)
-			log.Printf("Unbanned reporter IP %s from all ban systems and added to temporary whitelist after accepting abuse report", report.ReporterIP)
+			log.Printf("✅ Completed unbanning IP %s from all systems and added to temporary whitelist", report.ReporterIP)
 		}
 		
 		// Also clean up Redis keys (best effort)

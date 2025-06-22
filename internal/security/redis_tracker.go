@@ -193,9 +193,19 @@ func (rst *RedisSecurityTracker) BanIP(ip, reason string, duration time.Duration
 
 // UnbanIP removes a ban on an IP address
 func (rst *RedisSecurityTracker) UnbanIP(ip string) {
-	banKey := rst.keyPrefix + "ban:" + ip
-	rst.client.Del(rst.ctx, banKey)
-	log.Printf("IP %s unbanned", ip)
+	// Remove all keys related to this IP
+	keysToDelete := []string{
+		rst.keyPrefix + "ban:" + ip,
+		rst.keyPrefix + "events:ip:" + ip,
+		rst.keyPrefix + "auth_failures:" + ip,
+		rst.keyPrefix + "event_count:" + ip,
+	}
+	
+	for _, key := range keysToDelete {
+		rst.client.Del(rst.ctx, key)
+	}
+	
+	log.Printf("IP %s unbanned and all related Redis keys cleared", ip)
 }
 
 // GetBannedIPs returns all currently banned IPs

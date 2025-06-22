@@ -270,13 +270,19 @@ func (s *Server) handleConnection(netConn net.Conn) {
 		// Private IPs are allowed without security tracking
 	} else {
 		// Vérifier si l'IP est bannie avant même d'essayer le handshake
-		if s.isIPBanned(clientIP) || s.securityTracker.IsBanned(clientIP) {
-			log.Printf("Blocked banned IP: %s", clientIP)
+		localBanned := s.isIPBanned(clientIP)
+		trackerBanned := s.securityTracker.IsBanned(clientIP)
+		whitelisted := s.IsTemporarilyWhitelisted(clientIP)
+		
+		if (localBanned || trackerBanned) && !whitelisted {
+			log.Printf("Blocked banned IP: %s (local: %t, tracker: %t, whitelisted: %t)", clientIP, localBanned, trackerBanned, whitelisted)
 			s.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
 				"reason": "banned_ip_connection_attempt",
 			})
 			netConn.Close()
 			return
+		} else if whitelisted {
+			log.Printf("Allowing temporarily whitelisted IP: %s (local: %t, tracker: %t)", clientIP, localBanned, trackerBanned)
 		}
 	}
 
