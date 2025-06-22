@@ -1638,10 +1638,25 @@ func (c *CLI) handleAbuseList(args []string) error {
 	showAll := false
 	
 	// Parse basic flags
-	for _, arg := range args {
+	for i, arg := range args {
 		if arg == "--all" || arg == "-a" {
 			status = ""
 			showAll = true
+		} else if arg == "--status" || arg == "-s" {
+			if i+1 < len(args) {
+				status = args[i+1]
+				if status == "all" {
+					status = ""
+					showAll = true
+				}
+			}
+		} else if arg == "all" && len(args) == 1 {
+			// Allow "abuse list all" shortcut
+			status = ""
+			showAll = true
+		} else if (arg == "accepted" || arg == "banned" || arg == "pending") && len(args) == 1 {
+			// Allow "abuse list accepted" shortcut
+			status = arg
 		}
 	}
 	

@@ -44,7 +44,9 @@ Abuse reports are stored in Redis for persistence.`,
 var abuseListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List abuse reports",
-	Long:  `List abuse reports, optionally filtered by status (pending, banned, accepted).`,
+	Long:  `List abuse reports, optionally filtered by status (pending, banned, accepted).
+	
+By default shows only pending reports. Use --all to see all reports or --status to filter.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		showAll, _ := cmd.Flags().GetBool("all")
 		status, _ := cmd.Flags().GetString("status")

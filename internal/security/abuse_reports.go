@@ -339,9 +339,14 @@ func (arm *AbuseReportManager) IsDomainBanned(domain string) bool {
 			continue
 		}
 		
-		// Check if this domain is banned
+		// Check if this domain is banned (and not accepted)
 		if report.Domain == domain && report.Status == "banned" {
 			return true
+		}
+		
+		// If domain was accepted, it's explicitly not banned
+		if report.Domain == domain && report.Status == "accepted" {
+			return false
 		}
 	}
 	
