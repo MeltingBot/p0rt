@@ -77,16 +77,6 @@ func (rst *RedisSecurityTracker) RecordEvent(eventType EventType, ip string, det
 	if rst.isPrivateIP(ip) {
 		return
 	}
-	
-	// Skip recording events for temporarily whitelisted IPs (abuse report accepted)
-	if globalUnbanService := GetGlobalIPUnbanService(); globalUnbanService != nil {
-		if whitelistChecker, ok := globalUnbanService.(interface{ IsTemporarilyWhitelisted(string) bool }); ok {
-			if whitelistChecker.IsTemporarilyWhitelisted(ip) {
-				log.Printf("Skipping Redis event recording for temporarily whitelisted IP: %s (event: %s)", ip, eventType)
-				return
-			}
-		}
-	}
 
 	event := SecurityEvent{
 		ID:        fmt.Sprintf("%d-%s", time.Now().UnixNano(), ip),
@@ -372,16 +362,6 @@ func (rst *RedisSecurityTracker) checkForBan(ip string, eventType EventType) {
 	// Skip banning for localhost/private IPs
 	if rst.isPrivateIP(ip) {
 		return
-	}
-	
-	// Skip banning for temporarily whitelisted IPs (abuse report accepted)
-	if globalUnbanService := GetGlobalIPUnbanService(); globalUnbanService != nil {
-		if whitelistChecker, ok := globalUnbanService.(interface{ IsTemporarilyWhitelisted(string) bool }); ok {
-			if whitelistChecker.IsTemporarilyWhitelisted(ip) {
-				log.Printf("Skipping Redis ban for temporarily whitelisted IP: %s (event: %s)", ip, eventType)
-				return
-			}
-		}
 	}
 
 	eventCount := rst.getEventCount(ip)

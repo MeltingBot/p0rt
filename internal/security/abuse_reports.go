@@ -29,7 +29,6 @@ type AbuseReport struct {
 type SSHServerInterface interface {
 	UnbanIP(ip string)
 	UnbanIPFromTracker(ip string)
-	AddTemporaryWhitelist(ip string, duration time.Duration)
 }
 
 // globalIPUnbanService is a global service for IP unbanning
@@ -274,9 +273,7 @@ func (arm *AbuseReportManager) ProcessReport(reportID, action, processedBy strin
 			log.Printf("🔓 Processing abuse report acceptance: unbanning IP %s", report.ReporterIP)
 			unbanService.UnbanIP(report.ReporterIP)
 			unbanService.UnbanIPFromTracker(report.ReporterIP)
-			// Add to temporary whitelist for 10 minutes to prevent immediate re-banning
-			unbanService.AddTemporaryWhitelist(report.ReporterIP, 10*time.Minute)
-			log.Printf("✅ Completed unbanning IP %s from all systems and added to temporary whitelist", report.ReporterIP)
+			log.Printf("✅ Completed unbanning IP %s from all ban systems", report.ReporterIP)
 		} else {
 			log.Printf("⚠️ No IP unban service available for IP %s (local: %v, global: %v)", 
 				report.ReporterIP, arm.sshServer != nil, globalIPUnbanService != nil)
