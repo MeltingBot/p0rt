@@ -271,14 +271,15 @@ func (arm *AbuseReportManager) ProcessReport(reportID, action, processedBy strin
 		}
 		
 		if unbanService != nil {
-			log.Printf("Processing abuse report acceptance: unbanning IP %s", report.ReporterIP)
+			log.Printf("🔓 Processing abuse report acceptance: unbanning IP %s", report.ReporterIP)
 			unbanService.UnbanIP(report.ReporterIP)
 			unbanService.UnbanIPFromTracker(report.ReporterIP)
 			// Add to temporary whitelist for 10 minutes to prevent immediate re-banning
 			unbanService.AddTemporaryWhitelist(report.ReporterIP, 10*time.Minute)
 			log.Printf("✅ Completed unbanning IP %s from all systems and added to temporary whitelist", report.ReporterIP)
 		} else {
-			log.Printf("⚠️ No IP unban service available for IP %s", report.ReporterIP)
+			log.Printf("⚠️ No IP unban service available for IP %s (local: %v, global: %v)", 
+				report.ReporterIP, arm.sshServer != nil, globalIPUnbanService != nil)
 		}
 		
 		// Also clean up Redis keys (best effort)
