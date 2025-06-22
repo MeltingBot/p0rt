@@ -201,29 +201,29 @@ func (am *AbuseMonitor) CreateAbuseReportHandler() http.HandlerFunc {
 
 		// Validation avec messages d'erreur JSON détaillés
 		if domain == "" || reason == "" {
-			am.writeErrorJSON(w, "Veuillez remplir le domaine et le type d'abus")
+			am.writeErrorJSON(w, "Please fill in both domain and abuse type")
 			return
 		}
 
 		// Verify hCaptcha
 		if hcaptchaResponse == "" {
-			am.writeErrorJSON(w, "Veuillez compléter la vérification captcha")
+			am.writeErrorJSON(w, "Please complete the captcha verification")
 			return
 		}
 
 		if !am.verifyHCaptcha(hcaptchaResponse) {
-			am.writeErrorJSON(w, "Échec de la vérification captcha, veuillez réessayer")
+			am.writeErrorJSON(w, "Captcha verification failed, please try again")
 			return
 		}
 
-		// Auto-compléter le domaine si nécessaire
+		// Auto-complete domain if needed (for backward compatibility)
 		if !strings.Contains(domain, ".") {
 			domain = domain + ".p0rt.xyz"
 		}
 
-		// Valider le domaine
+		// Validate domain format
 		if !strings.HasSuffix(domain, ".p0rt.xyz") {
-			am.writeErrorJSON(w, "Le domaine doit se terminer par .p0rt.xyz")
+			am.writeErrorJSON(w, "Domain must end with .p0rt.xyz")
 			return
 		}
 
@@ -345,8 +345,7 @@ func (am *AbuseMonitor) serveReportForm(w http.ResponseWriter, r *http.Request) 
     <form method="POST" action="/report-abuse">
         <div class="form-group">
             <label for="domain">Suspicious Domain *</label>
-            <input type="text" id="domain" name="domain" placeholder="example-domain" required>
-            <small style="color: #888;">Entrez juste le nom (sans .p0rt.xyz)</small>
+            <input type="text" id="domain" name="domain" placeholder="example-domain.p0rt.xyz" required>
         </div>
         
         <div class="form-group">
