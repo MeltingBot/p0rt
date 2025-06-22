@@ -1,0 +1,168 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Get version from tag
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Build binaries
+      run: |
+        # Create dist directory
+        mkdir -p dist
+        
+        # Build for multiple platforms
+        PLATFORMS=(
+          "linux/amd64"
+          "linux/arm64"
+          "darwin/amd64"
+          "darwin/arm64"
+          "windows/amd64"
+          "freebsd/amd64"
+        )
+        
+        for platform in "${PLATFORMS[@]}"; do
+          IFS='/' read -r GOOS GOARCH <<< "$platform"
+          
+          # Set binary name
+          BINARY_NAME="p0rt"
+          if [ "$GOOS" = "windows" ]; then
+            BINARY_NAME="p0rt.exe"
+          fi
+          
+          # Build
+          echo "Building for $GOOS/$GOARCH..."
+          CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build \
+            -ldflags="-w -s -X main.version=${{ steps.version.outputs.VERSION }}" \
+            -o "dist/p0rt-${{ steps.version.outputs.VERSION }}-${GOOS}-${GOARCH}${BINARY_NAME##p0rt}" \
+            cmd/main/main.go
+        done
+        
+        # Create archives
+        cd dist
+        for file in p0rt-*; do
+          if [[ "$file" == *"windows"* ]]; then
+            zip "${file%.*}.zip" "$file"
+          else
+            tar -czf "${file}.tar.gz" "$file"
+          fi
+        done
+
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        cat > release_notes.md << 'EOF'
+        ## P0rt v${{ steps.version.outputs.VERSION }} - Enhanced Monitoring and Management
+        
+        ### 🎯 New Features
+        
+        **Prometheus Metrics System**
+        - 25+ comprehensive metrics for connections, traffic, abuse, and security
+        - Protected `/metrics` endpoint with HTTP Basic Authentication  
+        - Real-time tracking of SSH connections, HTTP requests, and WebSocket upgrades
+        - Automatic metrics initialization and periodic gauge updates
+        
+        **Real-time SSH Client Notifications**
+        - Instant ban notifications sent to active SSH client consoles
+        - Automatic connection termination with 5-second warning
+        - Enhanced debug logging for troubleshooting notification delivery
+        - Dual delivery mechanism via SSH channel and LogChannel
+        
+        **Emergency IP Management**
+        - New `security unban <ip>` command for immediate access recovery
+        - Available in both CLI and command-line modes
+        - API endpoint support for remote unbanning operations
+        - Comprehensive cleanup of Redis ban keys and counters
+        
+        **Abuse Report Management**
+        - `abuse report <domain>` command for creating test reports
+        - `abuse delete <report-id>` command with automatic cleanup
+        - Archive reports instead of deletion for audit trail
+        - Automatic IP/domain unbanning when archiving banned reports
+        
+        **Enhanced CLI Experience**
+        - Improved interactive CLI with abuse report management
+        - Better autocomplete support for new commands
+        - Consistent JSON output support across all commands
+        - Comprehensive help documentation
+        
+        ### 🐛 Bug Fixes & Improvements
+        - Fixed metrics showing null/zero values through proper initialization
+        - Corrected Redis configuration detection in CLI commands
+        - Enhanced domain matching for ban notifications
+        - Added extensive debug logging for ban notification system
+        - Improved security event recording and metrics
+        
+        ### 📋 Installation
+        
+        **Docker (Recommended)**
+        ```bash
+        docker run -d --name p0rt \
+          -p 22:22 -p 80:80 \
+          -e REDIS_URL="redis://redis:6379" \
+          meltingbot/p0rt:${{ steps.version.outputs.VERSION }}
+        ```
+        
+        **Binary Download**
+        Download the appropriate binary for your platform below, make it executable, and run:
+        ```bash
+        chmod +x p0rt
+        ./p0rt server start
+        ```
+        
+        ### 🔧 Configuration
+        
+        **Metrics Authentication (New)**
+        ```bash
+        export P0RT_METRICS_USERNAME="admin"
+        export P0RT_METRICS_PASSWORD="secure-password"
+        ```
+        
+        **Redis Storage**
+        ```bash
+        export REDIS_URL="redis://localhost:6379"
+        ```
+        
+        ### 📊 Metrics Endpoint
+        Access Prometheus metrics at: `http://localhost:80/metrics`
+        (Requires basic authentication)
+        
+        ### 🚨 Breaking Changes
+        None - fully backward compatible with v1.0.x
+        
+        ### 📚 Documentation
+        - Full documentation: [GitHub Repository](https://github.com/MeltingBot/p0rt)
+        - CLI Reference: Run `./p0rt --help`
+        - Interactive Mode: Run `./p0rt cli`
+        EOF
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        body_path: release_notes.md
+        files: |
+          dist/*.tar.gz
+          dist/*.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
