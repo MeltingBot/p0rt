@@ -750,6 +750,34 @@ func (s *Server) updateActiveConnectionsMetric() {
 	metrics.UpdateActiveConnections(sshConnections, tunnels, 0) // WebSocket count handled separately
 }
 
+// GetActiveConnectionCount returns the number of active SSH connections
+func (s *Server) GetActiveConnectionCount() int {
+	countChan := make(chan int)
+	
+	s.clientOps <- func() {
+		countChan <- len(s.clients)
+	}
+	
+	return <-countChan
+}
+
+// GetActiveTunnelCount returns the number of active tunnels
+func (s *Server) GetActiveTunnelCount() int {
+	countChan := make(chan int)
+	
+	s.clientOps <- func() {
+		activeTunnels := 0
+		for _, client := range s.clients {
+			if client.Domain != "" && client.Port > 0 {
+				activeTunnels++
+			}
+		}
+		countChan <- activeTunnels
+	}
+	
+	return <-countChan
+}
+
 const hostKeyFile = "ssh_host_key"
 
 func loadOrGenerateHostKey() (ssh.Signer, error) {

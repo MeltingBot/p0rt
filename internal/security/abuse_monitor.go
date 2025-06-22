@@ -480,3 +480,33 @@ func (am *AbuseMonitor) writeErrorJSON(w http.ResponseWriter, message string) {
 	w.WriteHeader(http.StatusBadRequest)
 	fmt.Fprintf(w, `{"status":"error","message":"%s"}`, message)
 }
+
+// GetBannedIPCount returns the number of currently banned IP addresses
+func (am *AbuseMonitor) GetBannedIPCount() int {
+	if am.reportManager == nil {
+		return 0
+	}
+	
+	// Get stats from the abuse report manager's underlying systems
+	stats := am.reportManager.GetStats()
+	if bannedIPs, ok := stats["banned_ips"].(int); ok {
+		return bannedIPs
+	}
+	
+	return 0
+}
+
+// GetBannedDomainCount returns the number of currently banned domains
+func (am *AbuseMonitor) GetBannedDomainCount() int {
+	if am.reportManager == nil {
+		return 0
+	}
+	
+	// Get stats from the abuse report manager
+	stats := am.reportManager.GetStats()
+	if bannedReports, ok := stats["banned_reports"].(int); ok {
+		return bannedReports
+	}
+	
+	return 0
+}

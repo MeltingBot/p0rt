@@ -8,9 +8,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/p0rt/p0rt/internal/config"
 	"github.com/p0rt/p0rt/internal/domain"
+	"github.com/p0rt/p0rt/internal/metrics"
 	"github.com/p0rt/p0rt/internal/proxy"
 	"github.com/p0rt/p0rt/internal/security"
 	"github.com/p0rt/p0rt/internal/ssh"
@@ -262,6 +264,26 @@ func startServer(cfg *config.Config) error {
 		}
 	}
 
+	// Initialize Prometheus metrics with server start time
+	startTime := time.Now()
+	metrics.InitializeMetrics("1.1.0", "development", "unknown")
+	if !quiet {
+		log.Printf("📊 Prometheus metrics initialized")
+	}
+	
+	// Start uptime tracking goroutine
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				uptime := time.Since(startTime).Seconds()
+				metrics.SetUptime(uptime)
+			}
+		}
+	}()
+
 	domainGen, err := domain.NewGeneratorFromConfig(
 		storageConfig.Type,
 		storageConfig.DataDir,
@@ -293,6 +315,18 @@ func startServer(cfg *config.Config) error {
 		}
 	}
 	httpProxy := proxy.NewHTTPProxyWithAPI(sshServerAdapter, domainGen.GetReservationManager(), sshServer.GetStats(), apiKey)
+
+	// Start metrics updater for periodic gauge updates
+	abuseMonitor := httpProxy.GetAbuseMonitor() // Assuming this method exists or add it
+	if abuseMonitor != nil {
+		metricsUpdater := metrics.NewMetricsUpdater(sshServer, abuseMonitor)
+		metricsUpdater.Start()
+		defer metricsUpdater.Stop()
+		
+		if !quiet {
+			log.Printf("📊 Metrics updater started")
+		}
+	}
 
 	if !quiet {
 		fmt.Printf("✓ Server ready - listening for SSH connections\n")

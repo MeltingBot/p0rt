@@ -1319,3 +1319,8 @@ func (p *HTTPProxy) handleDomainStats(w http.ResponseWriter, r *http.Request) {
 	json, _ := json.Marshal(response)
 	w.Write(json)
 }
+
+// GetAbuseMonitor returns the abuse monitor instance
+func (p *HTTPProxy) GetAbuseMonitor() *security.AbuseMonitor {
+	return p.abuseMonitor
+}
