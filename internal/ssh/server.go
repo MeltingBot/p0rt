@@ -119,8 +119,8 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 				clientIP = clientIP[:idx]
 			}
 
-			// Check if IP is banned using SecurityTracker (skip for private IPs)
-			if !server.isPrivateIP(clientIP) && server.securityTracker.IsBanned(clientIP) {
+			// Check if IP is banned using SecurityTracker (skip for private IPs and whitelisted IPs)
+			if !server.isPrivateIP(clientIP) && server.securityTracker.IsBanned(clientIP) && !server.IsTemporarilyWhitelisted(clientIP) {
 				server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
 					"reason": "banned_ip_attempt",
 					"user":   conn.User(),
