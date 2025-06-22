@@ -192,6 +192,14 @@ func (s *sshServerAdapter) GetBannedIPs() []security.BannedIP {
 	return s.server.GetBannedIPs()
 }
 
+func (s *sshServerAdapter) UnbanIP(ip string) {
+	s.server.UnbanIP(ip)
+}
+
+func (s *sshServerAdapter) UnbanIPFromTracker(ip string) {
+	s.server.UnbanIPFromTracker(ip)
+}
+
 type clientPortAdapter struct {
 	client *ssh.Client
 }

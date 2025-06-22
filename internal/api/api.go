@@ -20,6 +20,8 @@ import (
 type SecurityProvider interface {
 	GetSecurityStats() security.SecurityStats
 	GetBannedIPs() []security.BannedIP
+	UnbanIP(ip string)
+	UnbanIPFromTracker(ip string)
 }
 
 // Handler handles API requests
@@ -60,6 +62,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/connections", h.handleConnections)
 	mux.HandleFunc("/api/v1/security/stats", h.handleSecurityStats)
 	mux.HandleFunc("/api/v1/security/bans", h.handleSecurityBans)
+	mux.HandleFunc("/api/v1/security/unban", h.handleSecurityUnban)
 	mux.HandleFunc("/api/v1/abuse/reports", h.handleAbuseReports)
 	mux.HandleFunc("/api/v1/abuse/reports/", h.handleAbuseReport)
 	mux.HandleFunc("/api/v1/abuse/stats", h.handleAbuseStats)
@@ -679,6 +682,51 @@ func (h *Handler) handleAbuseStats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":   true,
 		"stats":     stats,
+		"timestamp": time.Now().Format(time.RFC3339),
+	})
+}
+
+// handleSecurityUnban handles /api/v1/security/unban endpoint
+func (h *Handler) handleSecurityUnban(w http.ResponseWriter, r *http.Request) {
+	if !h.authenticateRequest(r) {
+		writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		IP string `json:"ip"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.IP == "" {
+		writeError(w, http.StatusBadRequest, "IP address is required")
+		return
+	}
+
+	// Unban the IP using the security provider
+	if h.securityProvider != nil {
+		h.securityProvider.UnbanIP(req.IP)
+		h.securityProvider.UnbanIPFromTracker(req.IP)
+		log.Printf("🔓 API: Successfully unbanned IP %s", req.IP)
+	} else {
+		writeError(w, http.StatusServiceUnavailable, "Security provider not available")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":   true,
+		"message":   fmt.Sprintf("IP %s has been unbanned", req.IP),
+		"ip":        req.IP,
 		"timestamp": time.Now().Format(time.RFC3339),
 	})
 }

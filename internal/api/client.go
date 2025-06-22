@@ -493,3 +493,14 @@ func (c *Client) GetAbuseStats() (interface{}, error) {
 
 	return result["stats"], nil
 }
+
+// UnbanIP unbans an IP address via the API
+func (c *Client) UnbanIP(ip string) error {
+	path := "/api/v1/security/unban"
+	body := map[string]string{
+		"ip": ip,
+	}
+
+	_, err := c.makeRequest("POST", path, body)
+	return err
+}

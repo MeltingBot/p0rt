@@ -62,12 +62,43 @@ var securityBansCmd = &cobra.Command{
 	},
 }
 
+var securityUnbanCmd = &cobra.Command{
+	Use:   "unban [ip]",
+	Short: "Unban an IP address from security blocks",
+	Long: `Remove an IP address from all security ban lists.
+
+This command will:
+- Remove the IP from local banned IPs cache
+- Clear the IP from Redis security tracker
+- Reset brute force attempt counters
+- Allow the IP to connect immediately
+
+This is useful for removing false positive bans or unbanning legitimate IPs
+that were blocked due to authentication failures.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		ip := args[0]
+		_, remoteURL, apiKey, _, _, _ := GetGlobalFlags()
+		
+		fmt.Printf("🔓 Unbanning IP address: %s\n", ip)
+		
+		if remoteURL != "" {
+			unbanRemoteIP(remoteURL, apiKey, ip)
+		} else {
+			fmt.Println("IP unbanning requires a running server.")
+			fmt.Println("Start the server with: p0rt server start")
+			fmt.Printf("Then use: p0rt --remote http://localhost:80 security unban %s\n", ip)
+		}
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(securityCmd)
 
 	// Add subcommands
 	securityCmd.AddCommand(securityStatsCmd)
 	securityCmd.AddCommand(securityBansCmd)
+	securityCmd.AddCommand(securityUnbanCmd)
 }
 
 func showRemoteSecurityStats(serverURL, apiKey string) {
@@ -185,4 +216,23 @@ func showRemoteBanInfo(serverURL, apiKey string) {
 	fmt.Println()
 	fmt.Println("💡 Note: Ban tracking is basic. Enhanced security monitoring")
 	fmt.Println("   can be implemented in the SSH server for automatic blocking.")
+}
+
+func unbanRemoteIP(serverURL, apiKey, ip string) {
+	client := api.NewClient(serverURL, apiKey)
+
+	if err := client.Ping(); err != nil {
+		fmt.Printf("Error: Failed to connect to remote server at %s: %v\n", serverURL, err)
+		return
+	}
+
+	// Try to unban the IP via API
+	err := client.UnbanIP(ip)
+	if err != nil {
+		fmt.Printf("Error: Failed to unban IP %s: %v\n", ip, err)
+		return
+	}
+
+	fmt.Printf("✅ Successfully unbanned IP: %s\n", ip)
+	fmt.Printf("The IP should now be able to connect to the server.\n")
 }
