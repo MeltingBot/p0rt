@@ -25,14 +25,15 @@ import (
 )
 
 type Client struct {
-	Domain     string
-	Port       int
-	Conn       ssh.Conn
-	Channels   <-chan ssh.NewChannel
-	Requests   <-chan *ssh.Request
-	Key        string
-	LogChannel chan string
-	KeyAccess  *auth.KeyAccess // Store key access info
+	Domain      string
+	Port        int
+	Conn        ssh.Conn
+	Channels    <-chan ssh.NewChannel
+	Requests    <-chan *ssh.Request
+	Key         string
+	LogChannel  chan string
+	KeyAccess   *auth.KeyAccess // Store key access info
+	SSHChannel  ssh.Channel     // Reference to the SSH channel for direct messaging
 }
 
 type Server struct {
@@ -522,6 +523,9 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 			if req.Type == "shell" {
 				// Assigner le domaine si pas encore fait
 				if client.Domain == "" {
+					// Store SSH channel reference for direct messaging
+					client.SSHChannel = channel
+					
 					// Use reserved domain if provided, otherwise generate new one
 					if reservedDomain != "" {
 						domain = reservedDomain
@@ -784,7 +788,7 @@ func (s *Server) NotifyDomainBanned(domain string) {
 	
 	s.clientOps <- func() {
 		if client, exists := s.clients[domain]; exists {
-			// Send ban notification to the client's log channel
+			// Create ban notification message
 			banMessage := "\r\n" + strings.Repeat("=", 70) + "\r\n"
 			banMessage += "🚫 DOMAIN BANNED - IMMEDIATE ACTION REQUIRED\r\n"
 			banMessage += strings.Repeat("=", 70) + "\r\n"
@@ -798,18 +802,32 @@ func (s *Server) NotifyDomainBanned(domain string) {
 			banMessage += "- Include details about legitimate use\r\n"
 			banMessage += strings.Repeat("=", 70) + "\r\n\r\n"
 			
-			select {
-			case client.LogChannel <- banMessage:
-				log.Printf("Sent ban notification to client %s", domain)
-			default:
-				log.Printf("Failed to send ban notification to client %s (channel full)", domain)
+			// Try to send via SSH channel directly first (more reliable)
+			if client.SSHChannel != nil {
+				_, err := client.SSHChannel.Write([]byte(banMessage))
+				if err == nil {
+					log.Printf("✅ Sent ban notification directly to SSH channel for client %s", domain)
+				} else {
+					log.Printf("❌ Failed to send direct SSH notification for client %s: %v", domain, err)
+				}
 			}
 			
-			// Optionally close the connection after notification
+			// Also try via LogChannel (backup method)
+			select {
+			case client.LogChannel <- banMessage:
+				log.Printf("📝 Sent ban notification to LogChannel for client %s", domain)
+			default:
+				log.Printf("⚠️ LogChannel full for client %s", domain)
+			}
+			
+			// Close the connection after notification
 			go func() {
 				time.Sleep(5 * time.Second) // Give time for message to be sent
+				if client.SSHChannel != nil {
+					client.SSHChannel.Close()
+				}
 				client.Conn.Close()
-				log.Printf("Closed connection for banned domain %s", domain)
+				log.Printf("🔌 Closed connection for banned domain %s", domain)
 			}()
 		}
 		done <- true
