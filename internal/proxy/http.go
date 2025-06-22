@@ -169,6 +169,13 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if domain is banned BEFORE checking for active client
+	if p.abuseMonitor != nil && p.abuseMonitor.GetReportManager().IsDomainBanned(host) {
+		log.Printf("Blocked HTTP request to banned domain: %s from %s", host, extractClientIP(r))
+		p.serveBannedDomainPage(w, r, host)
+		return
+	}
+
 	// First try exact match for custom domains
 	client := p.sshServer.GetClient(host)
 	if client == nil {
@@ -193,13 +200,6 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if clientIP := client.GetClientIP(); clientIP != "" {
 		w.Header().Set("X-P0rt-Origin", clientIP)
-	}
-
-	// Check if domain is banned via abuse reports
-	if p.abuseMonitor != nil && p.abuseMonitor.GetReportManager().IsDomainBanned(host) {
-		log.Printf("Blocked HTTP request to banned domain: %s from %s", host, extractClientIP(r))
-		p.serveBannedDomainPage(w, r, host)
-		return
 	}
 
 	// Logger la connexion pour le client SSH
