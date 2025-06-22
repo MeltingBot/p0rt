@@ -1903,7 +1903,6 @@ func (c *CLI) handleAbuseDelete(args []string) error {
 
 	// Get report details first
 	var report map[string]interface{}
-	var err error
 	
 	if c.useRemoteAPI {
 		// Get report via API first
