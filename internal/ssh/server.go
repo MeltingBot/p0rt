@@ -229,6 +229,9 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 
 	// Set SSH server reference in abuse report manager for IP unbanning
 	server.abuseMonitor.GetReportManager().SetSSHServer(server)
+	
+	// Register global IP unban service for API and CLI access
+	security.SetGlobalIPUnbanService(server)
 
 	return server, nil
 }

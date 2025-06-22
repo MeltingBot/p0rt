@@ -32,6 +32,9 @@ type SSHServerInterface interface {
 	AddTemporaryWhitelist(ip string, duration time.Duration)
 }
 
+// globalIPUnbanService is a global service for IP unbanning
+var globalIPUnbanService SSHServerInterface
+
 // AbuseReportManager manages abuse reports with Redis storage
 type AbuseReportManager struct {
 	redisClient *redis.Client
@@ -55,6 +58,17 @@ func NewAbuseReportManager() *AbuseReportManager {
 // SetSSHServer sets the SSH server reference for IP unbanning operations
 func (arm *AbuseReportManager) SetSSHServer(server SSHServerInterface) {
 	arm.sshServer = server
+}
+
+// SetGlobalIPUnbanService sets the global IP unban service
+func SetGlobalIPUnbanService(service SSHServerInterface) {
+	globalIPUnbanService = service
+	log.Printf("Global IP unban service registered")
+}
+
+// GetGlobalIPUnbanService returns the global IP unban service
+func GetGlobalIPUnbanService() SSHServerInterface {
+	return globalIPUnbanService
 }
 
 // NewAbuseReportManagerWithRedis creates a new abuse report manager with provided Redis URL
@@ -249,13 +263,22 @@ func (arm *AbuseReportManager) ProcessReport(reportID, action, processedBy strin
 		report.Status = "accepted"
 		
 		// If accepting, unban the reporter IP from SSH bans
+		var unbanService SSHServerInterface
 		if arm.sshServer != nil {
+			unbanService = arm.sshServer
+		} else {
+			unbanService = GetGlobalIPUnbanService()
+		}
+		
+		if unbanService != nil {
 			log.Printf("Processing abuse report acceptance: unbanning IP %s", report.ReporterIP)
-			arm.sshServer.UnbanIP(report.ReporterIP)
-			arm.sshServer.UnbanIPFromTracker(report.ReporterIP)
+			unbanService.UnbanIP(report.ReporterIP)
+			unbanService.UnbanIPFromTracker(report.ReporterIP)
 			// Add to temporary whitelist for 10 minutes to prevent immediate re-banning
-			arm.sshServer.AddTemporaryWhitelist(report.ReporterIP, 10*time.Minute)
+			unbanService.AddTemporaryWhitelist(report.ReporterIP, 10*time.Minute)
 			log.Printf("✅ Completed unbanning IP %s from all systems and added to temporary whitelist", report.ReporterIP)
+		} else {
+			log.Printf("⚠️ No IP unban service available for IP %s", report.ReporterIP)
 		}
 		
 		// Also clean up Redis keys (best effort)
