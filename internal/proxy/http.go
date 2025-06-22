@@ -37,6 +37,8 @@ type SSHServer interface {
 
 type ClientWithPort interface {
 	GetPort() int
+	GetFingerprint() string
+	GetClientIP() string
 }
 
 // statsResponseWriter wraps http.ResponseWriter to capture bytes written
@@ -183,6 +185,14 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if client == nil {
 		p.serveErrorPage(w, r, host)
 		return
+	}
+
+	// Add traceability headers
+	if fingerprint := client.GetFingerprint(); fingerprint != "" {
+		w.Header().Set("X-P0rt-Fingerprint", fingerprint)
+	}
+	if clientIP := client.GetClientIP(); clientIP != "" {
+		w.Header().Set("X-P0rt-Origin", clientIP)
 	}
 
 	// Check if domain is banned via abuse reports
