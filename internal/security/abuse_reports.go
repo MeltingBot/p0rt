@@ -367,15 +367,21 @@ func (arm *AbuseReportManager) GetStats() map[string]interface{} {
 
 // IsDomainBanned checks if a domain has been banned via abuse report
 func (arm *AbuseReportManager) IsDomainBanned(domain string) bool {
+	log.Printf("🔍 Checking if domain '%s' is banned...", domain)
+	
 	if !arm.useRedis {
+		log.Printf("🔍 Redis not available for domain ban check")
 		return false
 	}
 
 	pattern := arm.keyPrefix + "report:*"
 	keys, err := arm.redisClient.Keys(arm.ctx, pattern).Result()
 	if err != nil {
+		log.Printf("🔍 Error getting abuse report keys: %v", err)
 		return false
 	}
+
+	log.Printf("🔍 Found %d abuse reports to check", len(keys))
 
 	for _, key := range keys {
 		data, err := arm.redisClient.Get(arm.ctx, key).Result()
@@ -388,17 +394,22 @@ func (arm *AbuseReportManager) IsDomainBanned(domain string) bool {
 			continue
 		}
 
+		log.Printf("🔍 Checking report: domain='%s', status='%s', target='%s'", report.Domain, report.Status, domain)
+
 		// Check if this domain is banned (and not accepted)
 		if report.Domain == domain && report.Status == "banned" {
+			log.Printf("🚫 Domain '%s' is BANNED (found banned report)", domain)
 			return true
 		}
 
 		// If domain was accepted, it's explicitly not banned
 		if report.Domain == domain && report.Status == "accepted" {
+			log.Printf("✅ Domain '%s' is NOT banned (found accepted report)", domain)
 			return false
 		}
 	}
 
+	log.Printf("🔍 Domain '%s' not found in any abuse reports - NOT banned", domain)
 	return false
 }
 

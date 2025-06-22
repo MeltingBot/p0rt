@@ -569,7 +569,9 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 					}
 
 					// Check if domain is banned via abuse reports
-					if s.abuseMonitor.GetReportManager().IsDomainBanned(domain) {
+					isDomainBanned := s.abuseMonitor.GetReportManager().IsDomainBanned(domain)
+					log.Printf("🚫 Domain ban check for '%s': banned = %t", domain, isDomainBanned)
+					if isDomainBanned {
 						// Get client IP for tracking attempts
 						clientIP := normalizeClientIP(client.Conn.RemoteAddr().String())
 
