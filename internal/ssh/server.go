@@ -54,7 +54,7 @@ type Server struct {
 	failedAttempts map[string]int
 	failedMutex    sync.RWMutex
 	bannedIPs      map[string]time.Time
-	
+
 	// Tracking for banned domain connection attempts
 	bannedDomainAttempts map[string]int // IP -> attempt count for banned domains
 	bannedDomainMutex    sync.RWMutex
@@ -82,7 +82,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 	if err != nil {
 		return nil, fmt.Errorf("failed to create key store: %w", err)
 	}
-	
+
 	// Set access mode in stats based on key store configuration
 	if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
 		statsManager.SetAccessMode("open")
@@ -91,28 +91,25 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 	}
 
 	server := &Server{
-		clients:         make(map[string]*Client),
-		clientOps:       make(chan func(), 100),
-		port:            port,
-		domainGenerator: domainGen,
-		tcpManager:      tcpManager,
-		abuseMonitor:    security.NewAbuseMonitor(),
-		customValidator: domain.NewCustomDomainValidator(baseDomain),
-		baseDomain:      baseDomain,
-		statsManager:    statsManager,
-		securityTracker: createSecurityTracker(),
-		keyStore:        keyStore,
-		failedAttempts:  make(map[string]int),
-		bannedIPs:       make(map[string]time.Time),
+		clients:              make(map[string]*Client),
+		clientOps:            make(chan func(), 100),
+		port:                 port,
+		domainGenerator:      domainGen,
+		tcpManager:           tcpManager,
+		abuseMonitor:         security.NewAbuseMonitor(),
+		customValidator:      domain.NewCustomDomainValidator(baseDomain),
+		baseDomain:           baseDomain,
+		statsManager:         statsManager,
+		securityTracker:      createSecurityTracker(),
+		keyStore:             keyStore,
+		failedAttempts:       make(map[string]int),
+		bannedIPs:            make(map[string]time.Time),
 		bannedDomainAttempts: make(map[string]int),
 	}
 
 	config := &ssh.ServerConfig{
 		PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
-			clientIP := conn.RemoteAddr().String()
-			if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
-				clientIP = clientIP[:idx]
-			}
+			clientIP := normalizeClientIP(conn.RemoteAddr().String())
 
 			// Check if IP is banned using SecurityTracker (skip for private IPs)
 			if !server.isPrivateIP(clientIP) && server.securityTracker.IsBanned(clientIP) {
@@ -179,10 +176,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 		},
 		// Track authentication failures
 		NoClientAuthCallback: func(conn ssh.ConnMetadata) (*ssh.Permissions, error) {
-			clientIP := conn.RemoteAddr().String()
-			if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
-				clientIP = clientIP[:idx]
-			}
+			clientIP := normalizeClientIP(conn.RemoteAddr().String())
 
 			// Skip tracking for private IPs
 			if !server.isPrivateIP(clientIP) {
@@ -221,7 +215,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 
 	// Set SSH server reference in abuse report manager for IP unbanning
 	server.abuseMonitor.GetReportManager().SetSSHServer(server)
-	
+
 	// Register global IP unban service for API and CLI access
 	security.SetGlobalIPUnbanService(server)
 
@@ -255,10 +249,7 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) handleConnection(netConn net.Conn) {
-	clientIP := netConn.RemoteAddr().String()
-	if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
-		clientIP = clientIP[:idx]
-	}
+	clientIP := normalizeClientIP(netConn.RemoteAddr().String())
 
 	// Skip security checks for private IPs (Docker internal, localhost, etc.)
 	if s.isPrivateIP(clientIP) {
@@ -267,7 +258,7 @@ func (s *Server) handleConnection(netConn net.Conn) {
 		// Vérifier si l'IP est bannie avant même d'essayer le handshake
 		localBanned := s.isIPBanned(clientIP)
 		trackerBanned := s.securityTracker.IsBanned(clientIP)
-		
+
 		if localBanned || trackerBanned {
 			log.Printf("Blocked banned IP: %s (local: %t, tracker: %t)", clientIP, localBanned, trackerBanned)
 			s.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
@@ -576,19 +567,16 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 					// Check if domain is banned via abuse reports
 					if s.abuseMonitor.GetReportManager().IsDomainBanned(domain) {
 						// Get client IP for tracking attempts
-						clientIP := client.Conn.RemoteAddr().String()
-						if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
-							clientIP = clientIP[:idx]
-						}
-						
+						clientIP := normalizeClientIP(client.Conn.RemoteAddr().String())
+
 						// Track banned domain connection attempts
 						s.bannedDomainMutex.Lock()
 						s.bannedDomainAttempts[clientIP]++
 						attempts := s.bannedDomainAttempts[clientIP]
 						s.bannedDomainMutex.Unlock()
-						
+
 						log.Printf("Domain %s is banned, connection attempt #%d from IP %s", domain, attempts, clientIP)
-						
+
 						// If more than 5 attempts, ban the IP
 						if attempts > 5 {
 							s.recordFailedAttempt(clientIP)
@@ -603,7 +591,7 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 							channel.Write([]byte("- Contact support if you believe this is an error\r\n"))
 							channel.Write([]byte(fmt.Sprintf("⚠️  Warning: %d/5 attempts. Further attempts may result in IP ban.\r\n", attempts)))
 						}
-						
+
 						channel.Close()
 						return
 					}
@@ -619,12 +607,8 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 					<-done
 
 					// Get client IP and fingerprint
-					connAddr := client.Conn.RemoteAddr().String()
-					clientIP := connAddr
-					if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
-						clientIP = clientIP[:idx]
-					}
-					
+					clientIP := normalizeClientIP(client.Conn.RemoteAddr().String())
+
 					// Get fingerprint from public key
 					fingerprint := ""
 					if keyData, err := base64.StdEncoding.DecodeString(client.Key); err == nil {
@@ -632,7 +616,7 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 							fingerprint = ssh.FingerprintSHA256(pubKey)
 						}
 					}
-					
+
 					// Record tunnel connection statistics with details
 					s.statsManager.TunnelConnectedWithDetails(domain, clientIP, fingerprint)
 
@@ -887,15 +871,15 @@ func (s *Server) isIPBanned(ip string) bool {
 func (s *Server) UnbanIP(ip string) {
 	s.failedMutex.Lock()
 	defer s.failedMutex.Unlock()
-	
+
 	delete(s.bannedIPs, ip)
 	delete(s.failedAttempts, ip)
-	
+
 	// Also clear banned domain attempts for this IP
 	s.bannedDomainMutex.Lock()
 	delete(s.bannedDomainAttempts, ip)
 	s.bannedDomainMutex.Unlock()
-	
+
 	log.Printf("IP %s has been unbanned and banned domain attempts cleared", ip)
 }
 
@@ -904,7 +888,7 @@ func (s *Server) recordFailedAttempt(ip string) {
 	if s.isPrivateIP(ip) {
 		return
 	}
-	
+
 	s.failedMutex.Lock()
 	defer s.failedMutex.Unlock()
 
@@ -1058,6 +1042,20 @@ func (s *Server) isPrivateIP(ip string) bool {
 	return parsedIP.IsLoopback() || parsedIP.IsPrivate()
 }
 
+// normalizeClientIP extracts and normalizes IP from network address
+func normalizeClientIP(addr string) string {
+	// Properly extract IP from "host:port" format (works for both IPv4 and IPv6)
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		addr = host
+	}
+	
+	// Remove brackets from IPv6 addresses: [2001:db8::1] -> 2001:db8::1
+	if len(addr) > 2 && addr[0] == '[' && addr[len(addr)-1] == ']' {
+		return addr[1 : len(addr)-1]
+	}
+	return addr
+}
+
 // createSecurityTracker creates a security tracker based on environment configuration
 func createSecurityTracker() security.SecurityTrackerInterface {
 	// Check if Redis URL is available
@@ -1071,7 +1069,7 @@ func createSecurityTracker() security.SecurityTrackerInterface {
 			return tracker
 		}
 	}
-	
+
 	// Fallback to JSON storage
 	return security.NewSecurityTracker("./data/security")
 }

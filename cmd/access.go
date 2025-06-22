@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/p0rt/p0rt/internal/api"
+	"github.com/spf13/cobra"
 )
 
 // accessCmd represents the access command
@@ -68,10 +68,10 @@ func init() {
 // showAccessStatus shows the current access mode
 func showAccessStatus() {
 	remoteURL, apiKey, _, _, _, useJSON := GetGlobalFlags()
-	
+
 	var currentMode string
 	var err error
-	
+
 	if remoteURL != "" {
 		// Use remote API
 		client := api.NewClient(remoteURL, apiKey)
@@ -111,11 +111,11 @@ func showAccessStatus() {
 // setAccessMode changes the server access mode
 func setAccessMode(mode string) {
 	remoteURL, apiKey, _, _, _, useJSON := GetGlobalFlags()
-	
+
 	if remoteURL != "" {
 		// Use remote API
 		client := api.NewClient(remoteURL, apiKey)
-		
+
 		// Get current mode first
 		oldMode, err := client.GetAccessMode()
 		if err != nil {
@@ -126,7 +126,7 @@ func setAccessMode(mode string) {
 			}
 			return
 		}
-		
+
 		if oldMode == mode {
 			if useJSON {
 				data := map[string]interface{}{
@@ -139,7 +139,7 @@ func setAccessMode(mode string) {
 			}
 			return
 		}
-		
+
 		// Set new mode
 		err = client.SetAccessMode(mode)
 		if err != nil {
@@ -150,7 +150,7 @@ func setAccessMode(mode string) {
 			}
 			return
 		}
-		
+
 		if useJSON {
 			data := map[string]interface{}{
 				"access_mode": mode,

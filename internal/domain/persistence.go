@@ -32,7 +32,7 @@ func NewDomainStore(dataDir string) (*DomainStore, error) {
 	if dataDir == "" {
 		dataDir = "./data"
 	}
-	
+
 	// Ensure data directory exists
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create data directory '%s': %w", dataDir, err)

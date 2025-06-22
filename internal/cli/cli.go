@@ -68,7 +68,7 @@ func (c *CLI) output(data interface{}, message string, isError bool) {
 				result.Message = message
 			}
 		}
-		
+
 		jsonData, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
 			fmt.Printf(`{"success":false,"error":"Failed to marshal JSON: %v"}`, err)
@@ -550,7 +550,7 @@ func (c *CLI) listReservations() error {
 // showReservationStats shows reservation statistics
 func (c *CLI) showReservationStats() error {
 	stats := c.reservationManager.GetStats()
-	
+
 	if c.jsonOutput {
 		c.outputSuccess(stats, "Reservation statistics")
 	} else {
@@ -577,8 +577,8 @@ func (c *CLI) showStats() error {
 
 		if c.jsonOutput {
 			statsData := map[string]interface{}{
-				"connection":       "Remote API Connected",
-				"global_stats":     statsResponse.GlobalStats,
+				"connection":        "Remote API Connected",
+				"global_stats":      statsResponse.GlobalStats,
 				"reservation_stats": statsResponse.ReservationStats,
 			}
 			c.outputSuccess(statsData, "P0rt system statistics")
@@ -635,10 +635,10 @@ func (c *CLI) showStats() error {
 	if c.jsonOutput {
 		// Build JSON stats data
 		configStats := map[string]interface{}{
-			"storage_type":  c.config.Storage.Type,
-			"ssh_port":      c.config.GetSSHPort(),
-			"http_port":     c.config.GetHTTPPort(),
-			"domain_base":   c.config.GetDomainBase(),
+			"storage_type": c.config.Storage.Type,
+			"ssh_port":     c.config.GetSSHPort(),
+			"http_port":    c.config.GetHTTPPort(),
+			"domain_base":  c.config.GetDomainBase(),
 		}
 		if c.config.Storage.Type == "json" {
 			configStats["data_directory"] = c.config.Storage.DataDir
@@ -1175,16 +1175,16 @@ func (c *CLI) listKeys() error {
 
 	// Convert to structured data for JSON output
 	type KeyInfo struct {
-		Fingerprint string    `json:"fingerprint"`
-		Tier        string    `json:"tier"`
-		Status      string    `json:"status"`
-		Active      bool      `json:"active"`
-		Expired     bool      `json:"expired"`
-		AddedAt     time.Time `json:"added_at"`
+		Fingerprint string     `json:"fingerprint"`
+		Tier        string     `json:"tier"`
+		Status      string     `json:"status"`
+		Active      bool       `json:"active"`
+		Expired     bool       `json:"expired"`
+		AddedAt     time.Time  `json:"added_at"`
 		ExpiresAt   *time.Time `json:"expires_at,omitempty"`
-		Comment     string    `json:"comment"`
+		Comment     string     `json:"comment"`
 	}
-	
+
 	var keyList []KeyInfo
 	for _, access := range keys {
 		status := "active"
@@ -1215,7 +1215,7 @@ func (c *CLI) listKeys() error {
 		if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
 			accessMode = "open"
 		}
-		
+
 		result := map[string]interface{}{
 			"keys":        keyList,
 			"total":       len(keyList),
@@ -1252,7 +1252,7 @@ func (c *CLI) listKeys() error {
 		}
 
 		fmt.Println()
-		
+
 		// Show access mode
 		accessMode := "RESTRICTED"
 		if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
@@ -1302,7 +1302,7 @@ func (c *CLI) handleHistoryCommand(args []string) error {
 	if c.useRemoteAPI {
 		return c.handleRemoteHistory(args)
 	}
-	
+
 	if c.statsManager == nil {
 		if c.jsonOutput {
 			c.outputError("History is only available when the server is running. Start the server with 'server start'")
@@ -1312,39 +1312,39 @@ func (c *CLI) handleHistoryCommand(args []string) error {
 		}
 		return nil
 	}
-	
+
 	limit := 20
 	if len(args) > 0 {
 		if n, err := strconv.Atoi(args[0]); err == nil && n > 0 {
 			limit = n
 		}
 	}
-	
+
 	fmt.Printf("=== Connection History (Last %d) ===\n", limit)
 	fmt.Println()
-	
+
 	history := c.statsManager.GetConnectionHistory(limit)
 	if len(history) == 0 {
 		fmt.Println("No connection history available.")
 		return nil
 	}
-	
+
 	// Table header
-	fmt.Printf("%-20s %-15s %-15s %-15s %-10s %-10s %-8s\n", 
+	fmt.Printf("%-20s %-15s %-15s %-15s %-10s %-10s %-8s\n",
 		"Time", "Domain", "Trigram", "Client IP", "Duration", "Traffic", "Requests")
 	fmt.Println(strings.Repeat("-", 100))
-	
+
 	for _, conn := range history {
 		timestamp := conn.ConnectedAt.Format("2006-01-02 15:04:05")
 		duration := "Active"
 		if conn.DisconnectedAt != nil {
 			duration = conn.Duration
 		}
-		
-		traffic := fmt.Sprintf("%s/%s", 
-			stats.FormatBytes(conn.BytesIn), 
+
+		traffic := fmt.Sprintf("%s/%s",
+			stats.FormatBytes(conn.BytesIn),
 			stats.FormatBytes(conn.BytesOut))
-		
+
 		fmt.Printf("%-20s %-15s %-15s %-15s %-10s %-10s %-8d\n",
 			timestamp,
 			truncateString(conn.Domain, 15),
@@ -1355,20 +1355,20 @@ func (c *CLI) handleHistoryCommand(args []string) error {
 			conn.RequestCount,
 		)
 	}
-	
+
 	fmt.Println()
-	
+
 	// Show aggregated stats
 	connStats := c.statsManager.GetConnectionStats()
 	fmt.Println("=== Aggregated Statistics ===")
 	fmt.Printf("Total Connections: %v\n", connStats["total_connections"])
 	fmt.Printf("Active Connections: %v\n", connStats["active_connections"])
-	fmt.Printf("Total Traffic: %s in / %s out\n", 
+	fmt.Printf("Total Traffic: %s in / %s out\n",
 		stats.FormatBytes(connStats["total_bytes_in"].(int64)),
 		stats.FormatBytes(connStats["total_bytes_out"].(int64)))
 	fmt.Printf("Total Requests: %v\n", connStats["total_requests"])
 	fmt.Println()
-	
+
 	// Top trigrams
 	if topTrigrams, ok := connStats["top_trigrams"].([]map[string]interface{}); ok && len(topTrigrams) > 0 {
 		fmt.Println("Top Domain Trigrams:")
@@ -1380,7 +1380,7 @@ func (c *CLI) handleHistoryCommand(args []string) error {
 		}
 		fmt.Println()
 	}
-	
+
 	// Top client IPs
 	if topIPs, ok := connStats["top_client_ips"].([]map[string]interface{}); ok && len(topIPs) > 0 {
 		fmt.Println("Top Client IPs:")
@@ -1391,7 +1391,7 @@ func (c *CLI) handleHistoryCommand(args []string) error {
 			fmt.Printf("  %s: %v connections\n", item["value"], item["count"])
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1411,27 +1411,27 @@ func (c *CLI) showActiveConnections() error {
 		}
 		return nil
 	}
-	
+
 	fmt.Println("=== Active Connections ===")
 	fmt.Println()
-	
+
 	active := c.statsManager.GetActiveConnections()
 	if len(active) == 0 {
 		fmt.Println("No active connections.")
 		return nil
 	}
-	
+
 	// Table header
-	fmt.Printf("%-15s %-15s %-15s %-20s %-10s %-10s %-8s\n", 
+	fmt.Printf("%-15s %-15s %-15s %-20s %-10s %-10s %-8s\n",
 		"Domain", "Trigram", "Client IP", "Connected Since", "Duration", "Traffic", "Requests")
 	fmt.Println(strings.Repeat("-", 100))
-	
+
 	for _, conn := range active {
 		duration := time.Since(conn.ConnectedAt).Truncate(time.Second).String()
-		traffic := fmt.Sprintf("%s/%s", 
-			stats.FormatBytes(conn.BytesIn), 
+		traffic := fmt.Sprintf("%s/%s",
+			stats.FormatBytes(conn.BytesIn),
 			stats.FormatBytes(conn.BytesOut))
-		
+
 		fmt.Printf("%-15s %-15s %-15s %-20s %-10s %-10s %-8d\n",
 			truncateString(conn.Domain, 15),
 			conn.Trigram,
@@ -1442,9 +1442,9 @@ func (c *CLI) showActiveConnections() error {
 			conn.RequestCount,
 		)
 	}
-	
+
 	fmt.Printf("\nTotal active connections: %d\n", len(active))
-	
+
 	return nil
 }
 
@@ -1512,7 +1512,7 @@ func (c *CLI) setAccessMode(mode string) error {
 			c.outputError(fmt.Sprintf("Failed to get current access mode: %v", err))
 			return err
 		}
-		
+
 		if oldMode == mode {
 			if c.jsonOutput {
 				data := map[string]interface{}{
@@ -1525,13 +1525,13 @@ func (c *CLI) setAccessMode(mode string) error {
 			}
 			return nil
 		}
-		
+
 		err = c.apiClient.SetAccessMode(mode)
 		if err != nil {
 			c.outputError(fmt.Sprintf("Failed to change access mode: %v", err))
 			return err
 		}
-		
+
 		if c.jsonOutput {
 			data := map[string]interface{}{
 				"access_mode": mode,
@@ -1615,10 +1615,10 @@ func (c *CLI) handleAbuseCommand(args []string) error {
 		c.outputError("Abuse command requires a subcommand. Use 'help abuse' for details")
 		return nil
 	}
-	
+
 	subcommand := args[0]
 	subArgs := args[1:]
-	
+
 	switch subcommand {
 	case "list":
 		return c.handleAbuseList(subArgs)
@@ -1636,7 +1636,7 @@ func (c *CLI) handleAbuseCommand(args []string) error {
 func (c *CLI) handleAbuseList(args []string) error {
 	status := "pending"
 	showAll := false
-	
+
 	// Parse basic flags
 	for i, arg := range args {
 		if arg == "--all" || arg == "-a" {
@@ -1659,10 +1659,10 @@ func (c *CLI) handleAbuseList(args []string) error {
 			status = arg
 		}
 	}
-	
+
 	var reports interface{}
 	var err error
-	
+
 	if c.useRemoteAPI {
 		// Use remote API
 		reports, err = c.apiClient.GetAbuseReports(status, showAll)
@@ -1680,11 +1680,11 @@ func (c *CLI) handleAbuseList(args []string) error {
 		}
 		reports = localReports
 	}
-	
+
 	// Handle different return types from API vs local
 	var reportsList []*security.AbuseReport
 	var count int
-	
+
 	if c.useRemoteAPI {
 		// reports is []interface{} from API
 		if apiReports, ok := reports.([]interface{}); ok {
@@ -1704,7 +1704,7 @@ func (c *CLI) handleAbuseList(args []string) error {
 			count = 0
 		}
 	}
-	
+
 	if c.jsonOutput {
 		data := map[string]interface{}{
 			"reports": reports,
@@ -1714,7 +1714,7 @@ func (c *CLI) handleAbuseList(args []string) error {
 		c.outputSuccess(data, "Abuse reports")
 		return nil
 	}
-	
+
 	if count == 0 {
 		if status == "" {
 			fmt.Println("No abuse reports found")
@@ -1723,13 +1723,13 @@ func (c *CLI) handleAbuseList(args []string) error {
 		}
 		return nil
 	}
-	
+
 	statusLabel := status
 	if statusLabel == "" {
 		statusLabel = "all"
 	}
 	fmt.Printf("=== Abuse Reports (%s) ===\n\n", strings.Title(statusLabel))
-	
+
 	if c.useRemoteAPI {
 		// Display API results (simpler format)
 		if apiReports, ok := reports.([]interface{}); ok {
@@ -1760,7 +1760,7 @@ func (c *CLI) handleAbuseList(args []string) error {
 			fmt.Println()
 		}
 	}
-	
+
 	fmt.Printf("Total: %d reports\n", count)
 	return nil
 }
@@ -1771,17 +1771,17 @@ func (c *CLI) handleAbuseProcess(args []string) error {
 		c.outputError("Usage: abuse process [report-id] [ban|accept]")
 		return nil
 	}
-	
+
 	reportID := args[0]
 	action := args[1]
-	
+
 	if action != "ban" && action != "accept" {
 		c.outputError("Action must be 'ban' or 'accept'")
 		return nil
 	}
-	
+
 	var err error
-	
+
 	if c.useRemoteAPI {
 		// Use remote API
 		err = c.apiClient.ProcessAbuseReport(reportID, action)
@@ -1792,26 +1792,26 @@ func (c *CLI) handleAbuseProcess(args []string) error {
 	} else {
 		// Use local access
 		reportManager := security.NewAbuseReportManager()
-		
+
 		// Get the report first to show details
 		report, err := reportManager.GetReport(reportID)
 		if err != nil {
 			c.outputError(fmt.Sprintf("Report not found: %v", err))
 			return nil
 		}
-		
+
 		if report.Status != "pending" {
 			c.outputError(fmt.Sprintf("Report already processed (status: %s)", report.Status))
 			return nil
 		}
-		
+
 		err = reportManager.ProcessReport(reportID, action, "admin")
 		if err != nil {
 			c.outputError(fmt.Sprintf("Failed to process report: %v", err))
 			return nil
 		}
 	}
-	
+
 	if c.jsonOutput {
 		data := map[string]interface{}{
 			"report_id": reportID,
@@ -1820,14 +1820,14 @@ func (c *CLI) handleAbuseProcess(args []string) error {
 		c.outputSuccess(data, fmt.Sprintf("Report %s processed", action))
 	} else {
 		fmt.Printf("✅ Report %s processed: %s\n", reportID, action)
-		
+
 		if action == "ban" {
 			fmt.Printf("   🚫 Domain has been banned\n")
 		} else {
 			fmt.Printf("   ✅ Report dismissed - domain accepted\n")
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1835,7 +1835,7 @@ func (c *CLI) handleAbuseProcess(args []string) error {
 func (c *CLI) handleAbuseStats() error {
 	var stats interface{}
 	var err error
-	
+
 	if c.useRemoteAPI {
 		// Use remote API
 		stats, err = c.apiClient.GetAbuseStats()
@@ -1848,25 +1848,25 @@ func (c *CLI) handleAbuseStats() error {
 		reportManager := security.NewAbuseReportManager()
 		stats = reportManager.GetStats()
 	}
-	
+
 	if c.jsonOutput {
 		c.outputSuccess(stats, "Abuse report statistics")
 		return nil
 	}
-	
+
 	statsMap, ok := stats.(map[string]interface{})
 	if !ok {
 		c.outputError("Invalid statistics format")
 		return nil
 	}
-	
+
 	fmt.Println("=== Abuse Report Statistics ===")
 	fmt.Printf("Total Reports: %v\n", statsMap["total_reports"])
 	fmt.Printf("Pending: %v\n", statsMap["pending_reports"])
 	fmt.Printf("Banned: %v\n", statsMap["banned_reports"])
 	fmt.Printf("Accepted: %v\n", statsMap["accepted_reports"])
 	fmt.Printf("Redis Available: %v\n", statsMap["redis_available"])
-	
+
 	return nil
 }
 
@@ -1930,12 +1930,12 @@ func (c *CLI) handleRemoteHistory(args []string) error {
 
 	// Human-readable format
 	fmt.Printf("=== Connection History (Last %d) ===\n\n", limit)
-	
+
 	for i, record := range history {
 		fmt.Printf("%d. Domain: %s\n", i+1, record.Domain)
 		fmt.Printf("   Client IP: %s\n", record.ClientIP)
 		fmt.Printf("   Connected: %s\n", record.ConnectedAt.Format("2006-01-02 15:04:05"))
-		
+
 		if record.DisconnectedAt != nil {
 			fmt.Printf("   Disconnected: %s\n", record.DisconnectedAt.Format("2006-01-02 15:04:05"))
 			duration := record.DisconnectedAt.Sub(record.ConnectedAt)
@@ -1946,13 +1946,13 @@ func (c *CLI) handleRemoteHistory(args []string) error {
 			duration := time.Since(record.ConnectedAt)
 			fmt.Printf("   Duration: %s\n", duration.Round(time.Second))
 		}
-		
+
 		fmt.Printf("   Bytes In: %s\n", stats.FormatBytes(record.BytesIn))
 		fmt.Printf("   Bytes Out: %s\n", stats.FormatBytes(record.BytesOut))
 		fmt.Printf("   Requests: %d\n", record.RequestCount)
 		fmt.Println()
 	}
-	
+
 	return nil
 }
 
@@ -1980,20 +1980,20 @@ func (c *CLI) showRemoteConnections() error {
 
 	// Human-readable format
 	fmt.Printf("=== Active Connections (%d) ===\n\n", len(connections))
-	
+
 	for i, conn := range connections {
 		fmt.Printf("%d. Domain: %s\n", i+1, conn.Domain)
 		fmt.Printf("   Client IP: %s\n", conn.ClientIP)
 		fmt.Printf("   Connected: %s\n", conn.ConnectedAt.Format("2006-01-02 15:04:05"))
-		
+
 		duration := time.Since(conn.ConnectedAt)
 		fmt.Printf("   Duration: %s\n", duration.Round(time.Second))
-		
+
 		fmt.Printf("   Bandwidth In: %s\n", stats.FormatBytes(conn.BytesIn))
 		fmt.Printf("   Bandwidth Out: %s\n", stats.FormatBytes(conn.BytesOut))
 		fmt.Printf("   Requests: %d\n", conn.RequestCount)
 		fmt.Println()
 	}
-	
+
 	return nil
 }

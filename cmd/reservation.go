@@ -29,7 +29,7 @@ type OutputFormat struct {
 // outputResult prints data in the appropriate format (human-readable or JSON)
 func outputResult(data interface{}, message string, isError bool) {
 	_, _, _, _, _, useJSON := GetGlobalFlags()
-	
+
 	if useJSON {
 		result := OutputFormat{
 			Success: !isError,
@@ -42,7 +42,7 @@ func outputResult(data interface{}, message string, isError bool) {
 				result.Message = message
 			}
 		}
-		
+
 		jsonData, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
 			fmt.Printf(`{"success":false,"error":"Failed to marshal JSON: %v"}`, err)

@@ -17,8 +17,8 @@ var _ SecurityTrackerInterface = (*RedisSecurityTracker)(nil)
 
 // RedisSecurityTracker manages security events and bans using Redis
 type RedisSecurityTracker struct {
-	client   *redis.Client
-	ctx      context.Context
+	client    *redis.Client
+	ctx       context.Context
 	keyPrefix string
 
 	// Configuration
@@ -73,6 +73,9 @@ func NewRedisSecurityTracker(redisURL, password string, db int) (*RedisSecurityT
 
 // RecordEvent records a security event
 func (rst *RedisSecurityTracker) RecordEvent(eventType EventType, ip string, details map[string]string) {
+	// Normalize IP address for consistent storage
+	ip = normalizeIP(ip)
+	
 	// Skip recording events for private/local IPs
 	if rst.isPrivateIP(ip) {
 		return
@@ -112,7 +115,7 @@ func (rst *RedisSecurityTracker) storeEvent(event SecurityEvent) {
 	// Store event with timestamp as score for easy retrieval
 	eventKey := rst.keyPrefix + "events"
 	score := float64(event.Timestamp.Unix())
-	
+
 	rst.client.ZAdd(rst.ctx, eventKey, redis.Z{
 		Score:  score,
 		Member: data,
@@ -132,6 +135,9 @@ func (rst *RedisSecurityTracker) storeEvent(event SecurityEvent) {
 
 // IsBanned checks if an IP is currently banned
 func (rst *RedisSecurityTracker) IsBanned(ip string) bool {
+	// Normalize IP address for consistent lookup
+	ip = normalizeIP(ip)
+	
 	// Never consider private IPs as banned
 	if rst.isPrivateIP(ip) {
 		return false
@@ -163,6 +169,9 @@ func (rst *RedisSecurityTracker) IsBanned(ip string) bool {
 
 // BanIP manually bans an IP address
 func (rst *RedisSecurityTracker) BanIP(ip, reason string, duration time.Duration) {
+	// Normalize IP address for consistent storage
+	ip = normalizeIP(ip)
+	
 	// Don't ban private IPs
 	if rst.isPrivateIP(ip) {
 		log.Printf("Skipped banning private IP: %s", ip)
@@ -193,19 +202,36 @@ func (rst *RedisSecurityTracker) BanIP(ip, reason string, duration time.Duration
 
 // UnbanIP removes a ban on an IP address
 func (rst *RedisSecurityTracker) UnbanIP(ip string) {
-	// Remove all keys related to this IP
+	// Normalize the IP to ensure consistent format
+	normalizedIP := normalizeIP(ip)
+	
+	// Also try with brackets in case some keys were stored that way
+	bracketedIP := "[" + normalizedIP + "]"
+	
+	// Remove all keys related to this IP (try both formats)
 	keysToDelete := []string{
-		rst.keyPrefix + "ban:" + ip,
-		rst.keyPrefix + "events:ip:" + ip,
-		rst.keyPrefix + "auth_failures:" + ip,
-		rst.keyPrefix + "count:" + ip,  // Main event counter used by getEventCount
+		// Normalized IP format
+		rst.keyPrefix + "ban:" + normalizedIP,
+		rst.keyPrefix + "events:ip:" + normalizedIP,
+		rst.keyPrefix + "auth_failures:" + normalizedIP,
+		rst.keyPrefix + "count:" + normalizedIP,
+		
+		// Bracketed IP format (legacy cleanup)
+		rst.keyPrefix + "ban:" + bracketedIP,
+		rst.keyPrefix + "events:ip:" + bracketedIP,
+		rst.keyPrefix + "auth_failures:" + bracketedIP,
+		rst.keyPrefix + "count:" + bracketedIP,
 	}
 	
+	deletedCount := 0
 	for _, key := range keysToDelete {
-		rst.client.Del(rst.ctx, key)
+		result := rst.client.Del(rst.ctx, key)
+		if result.Val() > 0 {
+			deletedCount++
+		}
 	}
 	
-	log.Printf("IP %s unbanned and all related Redis keys cleared", ip)
+	log.Printf("IP %s unbanned and all related Redis keys cleared (deleted %d keys, normalized: %s)", ip, deletedCount, normalizedIP)
 }
 
 // GetBannedIPs returns all currently banned IPs
@@ -384,7 +410,7 @@ func (rst *RedisSecurityTracker) checkForBan(ip string, eventType EventType) {
 	if eventType == EventAuthFailure {
 		cutoff := time.Now().Add(-rst.bruteForceWindow).Unix()
 		ipEventKey := rst.keyPrefix + "events:ip:" + ip
-		
+
 		// Count recent auth failures
 		recentEvents, err := rst.client.ZRangeByScore(rst.ctx, ipEventKey, &redis.ZRangeBy{
 			Min: fmt.Sprintf("%d", cutoff),
@@ -442,6 +468,15 @@ func (rst *RedisSecurityTracker) isPrivateIP(ip string) bool {
 	return parsedIP.IsLoopback() || parsedIP.IsPrivate()
 }
 
+// normalizeIP removes brackets from IPv6 addresses for consistent storage
+func normalizeIP(ip string) string {
+	// Remove brackets from IPv6 addresses: [2001:db8::1] -> 2001:db8::1
+	if len(ip) > 2 && ip[0] == '[' && ip[len(ip)-1] == ']' {
+		return ip[1 : len(ip)-1]
+	}
+	return ip
+}
+
 // getCountryForIP returns country code for IP (placeholder implementation)
 func (rst *RedisSecurityTracker) getCountryForIP(ip string) string {
 	// This would use a GeoIP database in production
@@ -456,7 +491,7 @@ func (rst *RedisSecurityTracker) cleanupRoutine() {
 
 	for range ticker.C {
 		// Clean up expired bans (Redis TTL handles this automatically)
-		
+
 		// Clean up old events (keep only last 30 days)
 		cutoff := time.Now().Add(-30 * 24 * time.Hour).Unix()
 		eventKey := rst.keyPrefix + "events"

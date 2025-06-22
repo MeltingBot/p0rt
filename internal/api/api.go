@@ -431,13 +431,13 @@ func (h *Handler) handleHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	history := h.statsManager.GetConnectionHistory(limit)
-	
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success":     true,
-		"history":     history,
-		"count":       len(history),
-		"limit":       limit,
-		"timestamp":   time.Now().Format(time.RFC3339),
+		"success":   true,
+		"history":   history,
+		"count":     len(history),
+		"limit":     limit,
+		"timestamp": time.Now().Format(time.RFC3339),
 	})
 }
 
@@ -459,12 +459,12 @@ func (h *Handler) handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 
 	connections := h.statsManager.GetActiveConnections()
-	
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success":      true,
-		"connections":  connections,
-		"count":        len(connections),
-		"timestamp":    time.Now().Format(time.RFC3339),
+		"success":     true,
+		"connections": connections,
+		"count":       len(connections),
+		"timestamp":   time.Now().Format(time.RFC3339),
 	})
 }
 
@@ -552,7 +552,7 @@ func (h *Handler) handleAbuseReports(w http.ResponseWriter, r *http.Request) {
 	// Get status filter from query parameter
 	status := r.URL.Query().Get("status")
 	showAll := r.URL.Query().Get("all") == "true"
-	
+
 	if !showAll && status == "" {
 		status = "pending"
 	}

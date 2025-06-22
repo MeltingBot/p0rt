@@ -299,10 +299,10 @@ func (c *Client) GetHistory(limit int) ([]*stats.ConnectionRecord, error) {
 	}
 
 	var response struct {
-		Success bool                       `json:"success"`
+		Success bool                      `json:"success"`
 		History []*stats.ConnectionRecord `json:"history"`
-		Count   int                        `json:"count"`
-		Limit   int                        `json:"limit"`
+		Count   int                       `json:"count"`
+		Limit   int                       `json:"limit"`
 	}
 	if err := json.Unmarshal(responseBody, &response); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
@@ -323,9 +323,9 @@ func (c *Client) GetConnections() ([]*stats.ConnectionRecord, error) {
 	}
 
 	var response struct {
-		Success     bool                        `json:"success"`
-		Connections []*stats.ConnectionRecord   `json:"connections"`
-		Count       int                         `json:"count"`
+		Success     bool                      `json:"success"`
+		Connections []*stats.ConnectionRecord `json:"connections"`
+		Count       int                       `json:"count"`
 	}
 	if err := json.Unmarshal(responseBody, &response); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
@@ -374,7 +374,7 @@ func (c *Client) SetAccessMode(mode string) error {
 // GetAbuseReports gets abuse reports from the API
 func (c *Client) GetAbuseReports(status string, showAll bool) (interface{}, error) {
 	url := c.baseURL + "/api/v1/abuse/reports"
-	
+
 	// Add query parameters
 	params := make([]string, 0)
 	if status != "" {

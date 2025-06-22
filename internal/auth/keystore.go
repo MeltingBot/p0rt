@@ -44,12 +44,12 @@ func NewKeyStore(filePath string) *KeyStore {
 	if filePath == "" {
 		filePath = "authorized_keys.json"
 	}
-	
+
 	// Create directory if it doesn't exist
 	if dir := filepath.Dir(filePath); dir != "." && dir != "" {
 		os.MkdirAll(dir, 0755)
 	}
-	
+
 	ks := &KeyStore{
 		keys:      make(map[string]*KeyAccess),
 		filePath:  filePath,
@@ -334,13 +334,13 @@ func (ks *KeyStore) saveKeysAlternative(keys []*KeyAccess) error {
 
 	// Move to final location
 	defer os.Remove(tmpFile)
-	
+
 	// Read and write (works better across filesystems)
 	data, err := os.ReadFile(tmpFile)
 	if err != nil {
 		return err
 	}
-	
+
 	return os.WriteFile(ks.filePath, data, 0644)
 }
 
@@ -403,24 +403,24 @@ func (ks *KeyStore) checkAndReloadKeys() {
 	if now.Sub(ks.lastCheck) < time.Second {
 		return
 	}
-	
+
 	ks.lastCheck = now
-	
+
 	// Check file modification time
 	info, err := os.Stat(ks.filePath)
 	if err != nil {
 		// File doesn't exist or error accessing it
 		return
 	}
-	
+
 	// If file was modified after we last loaded it, reload
 	if info.ModTime().After(ks.lastCheck.Add(-2 * time.Second)) {
 		ks.mu.Lock()
 		defer ks.mu.Unlock()
-		
+
 		// Clear existing keys
 		ks.keys = make(map[string]*KeyAccess)
-		
+
 		// Reload from file
 		if err := ks.loadKeysUnsafe(); err != nil {
 			log.Printf("KeyStore: Failed to reload keys: %v", err)

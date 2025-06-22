@@ -108,7 +108,7 @@ func (m *Manager) TunnelDisconnected(domain string) {
 	if stats, exists := m.tunnelDomains[domain]; exists {
 		stats.ActiveConnections = 0
 	}
-	
+
 	m.connectionHistory.RecordDisconnection(domain)
 }
 
@@ -127,7 +127,7 @@ func (m *Manager) HTTPRequest(domain string, bytesIn, bytesOut int64) {
 		stats.BytesOut += bytesOut
 		stats.LastActivity = time.Now()
 	}
-	
+
 	// Update connection history bandwidth
 	m.connectionHistory.UpdateTraffic(domain, bytesIn, bytesOut)
 }

@@ -33,7 +33,7 @@ func NewReservationManager(dataDir string) (*ReservationManager, error) {
 	if dataDir == "" {
 		dataDir = "./data"
 	}
-	
+
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create data directory '%s': %w", dataDir, err)
 	}

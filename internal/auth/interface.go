@@ -34,7 +34,7 @@ func NewKeyStoreFromConfig() (KeyStoreInterface, error) {
 	if keysFile == "" {
 		keysFile = "authorized_keys.json"
 	}
-	
+
 	return NewKeyStore(keysFile), nil
 }
 
@@ -47,28 +47,28 @@ func getRedisURL() string {
 	if url := os.Getenv("P0RT_REDIS_URL"); url != "" {
 		return url
 	}
-	
+
 	// Build URL from components
 	host := os.Getenv("REDIS_HOST")
 	if host == "" {
 		return ""
 	}
-	
+
 	port := os.Getenv("REDIS_PORT")
 	if port == "" {
 		port = "6379"
 	}
-	
+
 	password := os.Getenv("REDIS_PASSWORD")
 	db := os.Getenv("REDIS_DB")
 	if db == "" {
 		db = "0"
 	}
-	
+
 	url := fmt.Sprintf("redis://:%s@%s:%s/%s", password, host, port, db)
 	if password == "" {
 		url = fmt.Sprintf("redis://%s:%s/%s", host, port, db)
 	}
-	
+
 	return url
 }

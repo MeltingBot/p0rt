@@ -60,11 +60,21 @@ func extractClientIP(r *http.Request) string {
 	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
 		clientIP = realIP
 	}
-	// Remove port if present
-	if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
-		clientIP = clientIP[:idx]
+	// Properly extract IP from "host:port" format (works for both IPv4 and IPv6)
+	if host, _, err := net.SplitHostPort(clientIP); err == nil {
+		clientIP = host
 	}
-	return clientIP
+	
+	return normalizeIP(clientIP)
+}
+
+// normalizeIP removes brackets from IPv6 addresses for consistent storage
+func normalizeIP(ip string) string {
+	// Remove brackets from IPv6 addresses: [2001:db8::1] -> 2001:db8::1
+	if len(ip) > 2 && ip[0] == '[' && ip[len(ip)-1] == ']' {
+		return ip[1 : len(ip)-1]
+	}
+	return ip
 }
 
 // logStructured creates a structured log with timestamp, IP, method, path and message
@@ -716,7 +726,7 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
 	accessMode := "restricted"
 	accessBadge := `<span class="bg-orange-500 text-white px-3 py-1 rounded-full text-sm font-semibold">🔒 Beta Access</span>`
 	accessSection := ""
-	
+
 	if p.statsManager != nil {
 		globalStats := p.statsManager.GetGlobalStats()
 		if globalStats.AccessMode == "open" {
@@ -724,7 +734,7 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
 			accessBadge = `<span class="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold">✨ Open Access</span>`
 		}
 	}
-	
+
 	// Create access mode section based on current mode
 	if accessMode == "restricted" {
 		accessSection = `
@@ -750,7 +760,7 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
                 </p>
             </div>`
 	}
-	
+
 	html := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
 <head>

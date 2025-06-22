@@ -7,10 +7,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/p0rt/p0rt/internal/api"
 	"github.com/p0rt/p0rt/internal/config"
 	"github.com/p0rt/p0rt/internal/security"
+	"github.com/spf13/cobra"
 )
 
 // abuseCmd represents the abuse command
@@ -43,15 +43,15 @@ Abuse reports are stored in Redis for persistence.`,
 var abuseListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List abuse reports",
-	Long:  `List abuse reports, optionally filtered by status (pending, banned, accepted).
+	Long: `List abuse reports, optionally filtered by status (pending, banned, accepted).
 	
 By default shows only pending reports. Use --all to see all reports or --status to filter.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		showAll, _ := cmd.Flags().GetBool("all")
 		status, _ := cmd.Flags().GetString("status")
-		
+
 		remoteURL, apiKey, _, _, _, useJSON := GetGlobalFlags()
-		
+
 		if remoteURL != "" {
 			showRemoteAbuseReports(remoteURL, apiKey, status, showAll, useJSON)
 		} else {
@@ -68,14 +68,14 @@ var abuseProcessCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		reportID := args[0]
 		action := args[1]
-		
+
 		if action != "ban" && action != "accept" {
 			fmt.Println("Error: Action must be 'ban' or 'accept'")
 			os.Exit(1)
 		}
-		
+
 		remoteURL, apiKey, _, _, _, useJSON := GetGlobalFlags()
-		
+
 		if remoteURL != "" {
 			processRemoteAbuseReport(remoteURL, apiKey, reportID, action, useJSON)
 		} else {
@@ -90,7 +90,7 @@ var abuseStatsCmd = &cobra.Command{
 	Long:  `Display statistics about abuse reports including counts by status.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		remoteURL, apiKey, _, _, _, useJSON := GetGlobalFlags()
-		
+
 		if remoteURL != "" {
 			showRemoteAbuseStats(remoteURL, apiKey, useJSON)
 		} else {
@@ -104,7 +104,7 @@ func init() {
 	abuseCmd.AddCommand(abuseListCmd)
 	abuseCmd.AddCommand(abuseProcessCmd)
 	abuseCmd.AddCommand(abuseStatsCmd)
-	
+
 	abuseListCmd.Flags().BoolP("all", "a", false, "Show all reports including processed ones")
 	abuseListCmd.Flags().StringP("status", "s", "", "Filter by status: pending, banned, accepted")
 }
@@ -118,11 +118,11 @@ func showLocalAbuseReports(status string, showAll bool, useJSON bool) {
 	} else {
 		reportManager = security.NewAbuseReportManager()
 	}
-	
+
 	if !showAll && status == "" {
 		status = "pending"
 	}
-	
+
 	reports, err := reportManager.ListReports(status)
 	if err != nil {
 		if useJSON {
@@ -132,7 +132,7 @@ func showLocalAbuseReports(status string, showAll bool, useJSON bool) {
 		}
 		return
 	}
-	
+
 	if useJSON {
 		data := map[string]interface{}{
 			"reports": reports,
@@ -142,7 +142,7 @@ func showLocalAbuseReports(status string, showAll bool, useJSON bool) {
 		outputSuccess(data, "Abuse reports")
 		return
 	}
-	
+
 	if len(reports) == 0 {
 		if status == "" {
 			fmt.Println("No abuse reports found")
@@ -151,13 +151,13 @@ func showLocalAbuseReports(status string, showAll bool, useJSON bool) {
 		}
 		return
 	}
-	
+
 	fmt.Printf("=== Abuse Reports (%s) ===\n\n", strings.Title(status))
-	
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "ID\tDomain\tReporter\tReason\tStatus\tReported\n")
 	fmt.Fprintf(w, "--\t------\t--------\t------\t------\t--------\n")
-	
+
 	for _, report := range reports {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			report.ID,
@@ -168,7 +168,7 @@ func showLocalAbuseReports(status string, showAll bool, useJSON bool) {
 			report.ReportedAt.Format("2006-01-02 15:04"),
 		)
 	}
-	
+
 	w.Flush()
 	fmt.Printf("\nTotal: %d reports\n", len(reports))
 }
@@ -182,7 +182,7 @@ func processLocalAbuseReport(reportID, action string, useJSON bool) {
 	} else {
 		reportManager = security.NewAbuseReportManager()
 	}
-	
+
 	// Get the report first to show details
 	report, err := reportManager.GetReport(reportID)
 	if err != nil {
@@ -193,7 +193,7 @@ func processLocalAbuseReport(reportID, action string, useJSON bool) {
 		}
 		return
 	}
-	
+
 	if report.Status != "pending" {
 		if useJSON {
 			outputError(fmt.Sprintf("Report already processed (status: %s)", report.Status))
@@ -202,7 +202,7 @@ func processLocalAbuseReport(reportID, action string, useJSON bool) {
 		}
 		return
 	}
-	
+
 	err = reportManager.ProcessReport(reportID, action, "admin")
 	if err != nil {
 		if useJSON {
@@ -212,7 +212,7 @@ func processLocalAbuseReport(reportID, action string, useJSON bool) {
 		}
 		return
 	}
-	
+
 	if useJSON {
 		data := map[string]interface{}{
 			"report_id": reportID,
@@ -224,7 +224,7 @@ func processLocalAbuseReport(reportID, action string, useJSON bool) {
 		fmt.Printf("✅ Report %s processed: %s\n", reportID, action)
 		fmt.Printf("   Domain: %s\n", report.Domain)
 		fmt.Printf("   Reason: %s\n", report.Reason)
-		
+
 		if action == "ban" {
 			fmt.Printf("   🚫 Domain has been banned\n")
 		} else {
@@ -242,14 +242,14 @@ func showLocalAbuseStats(useJSON bool) {
 	} else {
 		reportManager = security.NewAbuseReportManager()
 	}
-	
+
 	stats := reportManager.GetStats()
-	
+
 	if useJSON {
 		outputSuccess(stats, "Abuse report statistics")
 		return
 	}
-	
+
 	fmt.Println("=== Abuse Report Statistics ===")
 	fmt.Printf("Total Reports: %v\n", stats["total_reports"])
 	fmt.Printf("Pending: %v\n", stats["pending_reports"])
@@ -261,7 +261,7 @@ func showLocalAbuseStats(useJSON bool) {
 // Remote API functions
 func showRemoteAbuseReports(serverURL, apiKey, status string, showAll bool, useJSON bool) {
 	client := api.NewClient(serverURL, apiKey)
-	
+
 	reports, err := client.GetAbuseReports(status, showAll)
 	if err != nil {
 		if useJSON {
@@ -271,7 +271,7 @@ func showRemoteAbuseReports(serverURL, apiKey, status string, showAll bool, useJ
 		}
 		return
 	}
-	
+
 	// Convert interface{} to slice of reports
 	reportsList, ok := reports.([]interface{})
 	if !ok {
@@ -282,7 +282,7 @@ func showRemoteAbuseReports(serverURL, apiKey, status string, showAll bool, useJ
 		}
 		return
 	}
-	
+
 	if useJSON {
 		data := map[string]interface{}{
 			"reports": reportsList,
@@ -292,7 +292,7 @@ func showRemoteAbuseReports(serverURL, apiKey, status string, showAll bool, useJ
 		outputSuccess(data, "Abuse reports")
 		return
 	}
-	
+
 	if len(reportsList) == 0 {
 		if status == "" {
 			fmt.Println("No abuse reports found")
@@ -301,19 +301,19 @@ func showRemoteAbuseReports(serverURL, apiKey, status string, showAll bool, useJ
 		}
 		return
 	}
-	
+
 	fmt.Printf("=== Abuse Reports (%s) ===\n\n", strings.Title(status))
-	
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "ID\tDomain\tReporter\tReason\tStatus\tReported\n")
 	fmt.Fprintf(w, "--\t------\t--------\t------\t------\t--------\n")
-	
+
 	for _, item := range reportsList {
 		report, ok := item.(map[string]interface{})
 		if !ok {
 			continue
 		}
-		
+
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			getString(report, "id"),
 			getString(report, "domain"),
@@ -323,14 +323,14 @@ func showRemoteAbuseReports(serverURL, apiKey, status string, showAll bool, useJ
 			getTimeString(report, "reported_at"),
 		)
 	}
-	
+
 	w.Flush()
 	fmt.Printf("\nTotal: %d reports\n", len(reportsList))
 }
 
 func processRemoteAbuseReport(serverURL, apiKey, reportID, action string, useJSON bool) {
 	client := api.NewClient(serverURL, apiKey)
-	
+
 	err := client.ProcessAbuseReport(reportID, action)
 	if err != nil {
 		if useJSON {
@@ -340,7 +340,7 @@ func processRemoteAbuseReport(serverURL, apiKey, reportID, action string, useJSO
 		}
 		return
 	}
-	
+
 	if useJSON {
 		data := map[string]interface{}{
 			"report_id": reportID,
@@ -349,7 +349,7 @@ func processRemoteAbuseReport(serverURL, apiKey, reportID, action string, useJSO
 		outputSuccess(data, fmt.Sprintf("Report %s processed", action))
 	} else {
 		fmt.Printf("✅ Report %s processed: %s\n", reportID, action)
-		
+
 		if action == "ban" {
 			fmt.Printf("   🚫 Domain has been banned\n")
 		} else {
@@ -360,7 +360,7 @@ func processRemoteAbuseReport(serverURL, apiKey, reportID, action string, useJSO
 
 func showRemoteAbuseStats(serverURL, apiKey string, useJSON bool) {
 	client := api.NewClient(serverURL, apiKey)
-	
+
 	stats, err := client.GetAbuseStats()
 	if err != nil {
 		if useJSON {
@@ -370,18 +370,18 @@ func showRemoteAbuseStats(serverURL, apiKey string, useJSON bool) {
 		}
 		return
 	}
-	
+
 	if useJSON {
 		outputSuccess(stats, "Abuse report statistics")
 		return
 	}
-	
+
 	statsMap, ok := stats.(map[string]interface{})
 	if !ok {
 		fmt.Printf("❌ Invalid response format from API\n")
 		return
 	}
-	
+
 	fmt.Println("=== Abuse Report Statistics ===")
 	fmt.Printf("Total Reports: %v\n", statsMap["total_reports"])
 	fmt.Printf("Pending: %v\n", statsMap["pending_reports"])
@@ -408,4 +408,3 @@ func getTimeString(m map[string]interface{}, key string) string {
 	}
 	return ""
 }
-

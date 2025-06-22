@@ -93,7 +93,7 @@ func NewSecurityTracker(dataDir string) *SecurityTracker {
 	if dataDir == "" {
 		dataDir = "./data/security"
 	}
-	
+
 	tracker := &SecurityTracker{
 		events:        make([]SecurityEvent, 0),
 		bannedIPs:     make(map[string]*BannedIP),
@@ -515,23 +515,23 @@ func GetRedisURLFromEnv() string {
 	if url := os.Getenv("P0RT_REDIS_URL"); url != "" {
 		return url
 	}
-	
+
 	host := os.Getenv("REDIS_HOST")
 	if host == "" {
 		return ""
 	}
-	
+
 	port := os.Getenv("REDIS_PORT")
 	if port == "" {
 		port = "6379"
 	}
-	
+
 	password := os.Getenv("REDIS_PASSWORD")
 	db := os.Getenv("REDIS_DB")
 	if db == "" {
 		db = "0"
 	}
-	
+
 	if password != "" {
 		return fmt.Sprintf("redis://:%s@%s:%s/%s", password, host, port, db)
 	}

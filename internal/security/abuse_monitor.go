@@ -23,7 +23,7 @@ type AbuseMonitor struct {
 
 	// Alertes
 	alertCallback func(domain, reason, details string)
-	
+
 	// Abuse report manager
 	reportManager *AbuseReportManager
 }
@@ -101,14 +101,14 @@ func (am *AbuseMonitor) AnalyzeHTTPRequest(domain, path, userAgent, referer stri
 // ReportAbuse permet de signaler un abus
 func (am *AbuseMonitor) ReportAbuse(domain, reporterIP, reason string) {
 	details := fmt.Sprintf("Abuse report from %s", reporterIP)
-	
+
 	// Submit to report manager
 	report, err := am.reportManager.SubmitReport(domain, reporterIP, reason, details)
 	if err != nil {
 		log.Printf("Failed to submit abuse report: %v", err)
 		return
 	}
-	
+
 	log.Printf("Abuse reported for domain %s by %s: %s (ID: %s)", domain, reporterIP, reason, report.ID)
 
 	if am.alertCallback != nil {
@@ -433,7 +433,7 @@ func (am *AbuseMonitor) serveReportForm(w http.ResponseWriter, r *http.Request) 
 
 	// Replace placeholder with actual site key
 	finalHTML := strings.ReplaceAll(html, "%s", siteKey)
-	
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(finalHTML))

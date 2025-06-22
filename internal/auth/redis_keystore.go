@@ -23,8 +23,8 @@ type RedisKeyStore struct {
 	mu        sync.RWMutex
 	keys      map[string]*KeyAccess // fingerprint -> access (cached)
 	client    *redis.Client
-	allowAll  bool      // if true, all keys are allowed (open mode)
-	keyPrefix string    // Redis key prefix
+	allowAll  bool   // if true, all keys are allowed (open mode)
+	keyPrefix string // Redis key prefix
 	ctx       context.Context
 }
 
@@ -33,21 +33,21 @@ func NewRedisKeyStore(redisURL, keyPrefix string) (*RedisKeyStore, error) {
 	if keyPrefix == "" {
 		keyPrefix = "p0rt:keys:"
 	}
-	
+
 	// Parse Redis URL
 	opts, err := redis.ParseURL(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid Redis URL: %w", err)
 	}
-	
+
 	client := redis.NewClient(opts)
 	ctx := context.Background()
-	
+
 	// Test connection
 	if err := client.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("Redis connection failed: %w", err)
 	}
-	
+
 	ks := &RedisKeyStore{
 		keys:      make(map[string]*KeyAccess),
 		client:    client,
@@ -88,7 +88,7 @@ func (ks *RedisKeyStore) IsKeyAllowed(pubKey ssh.PublicKey) (bool, *KeyAccess) {
 		if access = ks.loadKeyFromRedis(fingerprint); access == nil {
 			return false, nil
 		}
-		
+
 		// Cache it
 		ks.mu.Lock()
 		ks.keys[fingerprint] = access
@@ -306,7 +306,7 @@ func (ks *RedisKeyStore) saveKeyToRedis(fingerprint string, access *KeyAccess) e
 	}
 
 	redisKey := ks.keyPrefix + fingerprint
-	
+
 	// Set with TTL if key has expiration
 	if access.ExpiresAt != nil {
 		ttl := time.Until(*access.ExpiresAt)
