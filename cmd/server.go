@@ -208,17 +208,17 @@ func (c *clientPortAdapter) GetFingerprint() string {
 	if c.client.Key == "" {
 		return ""
 	}
-	
+
 	keyData, err := base64.StdEncoding.DecodeString(c.client.Key)
 	if err != nil {
 		return ""
 	}
-	
+
 	pubKey, err := cryptossh.ParsePublicKey(keyData)
 	if err != nil {
 		return ""
 	}
-	
+
 	return cryptossh.FingerprintSHA256(pubKey)
 }
 
@@ -226,12 +226,12 @@ func (c *clientPortAdapter) GetClientIP() string {
 	if c.client.Conn == nil {
 		return ""
 	}
-	
+
 	clientIP := c.client.Conn.RemoteAddr().String()
 	if host, _, err := net.SplitHostPort(clientIP); err == nil {
 		clientIP = host
 	}
-	
+
 	// Remove brackets from IPv6 addresses for consistent format
 	if len(clientIP) > 2 && clientIP[0] == '[' && clientIP[len(clientIP)-1] == ']' {
 		return clientIP[1 : len(clientIP)-1]

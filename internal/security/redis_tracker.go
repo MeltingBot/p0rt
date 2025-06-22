@@ -75,7 +75,7 @@ func NewRedisSecurityTracker(redisURL, password string, db int) (*RedisSecurityT
 func (rst *RedisSecurityTracker) RecordEvent(eventType EventType, ip string, details map[string]string) {
 	// Normalize IP address for consistent storage
 	ip = normalizeIP(ip)
-	
+
 	// Skip recording events for private/local IPs
 	if rst.isPrivateIP(ip) {
 		return
@@ -97,7 +97,7 @@ func (rst *RedisSecurityTracker) RecordEvent(eventType EventType, ip string, det
 	countKey := rst.keyPrefix + "count:" + ip
 	newCount := rst.client.Incr(rst.ctx, countKey)
 	rst.client.Expire(rst.ctx, countKey, 30*24*time.Hour) // Expire after 30 days
-	
+
 	log.Printf("📈 Event count for IP %s incremented to %d (event: %s)", ip, newCount.Val(), eventType)
 
 	// Check if IP should be banned
@@ -139,7 +139,7 @@ func (rst *RedisSecurityTracker) storeEvent(event SecurityEvent) {
 func (rst *RedisSecurityTracker) IsBanned(ip string) bool {
 	// Normalize IP address for consistent lookup
 	ip = normalizeIP(ip)
-	
+
 	// Never consider private IPs as banned
 	if rst.isPrivateIP(ip) {
 		return false
@@ -173,7 +173,7 @@ func (rst *RedisSecurityTracker) IsBanned(ip string) bool {
 func (rst *RedisSecurityTracker) BanIP(ip, reason string, duration time.Duration) {
 	// Normalize IP address for consistent storage
 	ip = normalizeIP(ip)
-	
+
 	// Don't ban private IPs
 	if rst.isPrivateIP(ip) {
 		log.Printf("Skipped banning private IP: %s", ip)
@@ -206,10 +206,10 @@ func (rst *RedisSecurityTracker) BanIP(ip, reason string, duration time.Duration
 func (rst *RedisSecurityTracker) UnbanIP(ip string) {
 	// Normalize the IP to ensure consistent format
 	normalizedIP := normalizeIP(ip)
-	
+
 	// Also try with brackets in case some keys were stored that way
 	bracketedIP := "[" + normalizedIP + "]"
-	
+
 	// Remove all keys related to this IP (try both formats)
 	keysToDelete := []string{
 		// Normalized IP format
@@ -217,14 +217,14 @@ func (rst *RedisSecurityTracker) UnbanIP(ip string) {
 		rst.keyPrefix + "events:ip:" + normalizedIP,
 		rst.keyPrefix + "auth_failures:" + normalizedIP,
 		rst.keyPrefix + "count:" + normalizedIP,
-		
+
 		// Bracketed IP format (legacy cleanup)
 		rst.keyPrefix + "ban:" + bracketedIP,
 		rst.keyPrefix + "events:ip:" + bracketedIP,
 		rst.keyPrefix + "auth_failures:" + bracketedIP,
 		rst.keyPrefix + "count:" + bracketedIP,
 	}
-	
+
 	deletedCount := 0
 	for _, key := range keysToDelete {
 		result := rst.client.Del(rst.ctx, key)
@@ -233,7 +233,7 @@ func (rst *RedisSecurityTracker) UnbanIP(ip string) {
 			log.Printf("🗑️ Deleted Redis key: %s", key)
 		}
 	}
-	
+
 	log.Printf("IP %s unbanned and all related Redis keys cleared (deleted %d keys, normalized: %s)", ip, deletedCount, normalizedIP)
 }
 

@@ -66,7 +66,7 @@ func extractClientIP(r *http.Request) string {
 	if host, _, err := net.SplitHostPort(clientIP); err == nil {
 		clientIP = host
 	}
-	
+
 	return normalizeIP(clientIP)
 }
 

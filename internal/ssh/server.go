@@ -1063,7 +1063,7 @@ func normalizeClientIP(addr string) string {
 	if host, _, err := net.SplitHostPort(addr); err == nil {
 		addr = host
 	}
-	
+
 	// Remove brackets from IPv6 addresses: [2001:db8::1] -> 2001:db8::1
 	if len(addr) > 2 && addr[0] == '[' && addr[len(addr)-1] == ']' {
 		return addr[1 : len(addr)-1]
