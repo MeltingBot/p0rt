@@ -438,14 +438,20 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("abuse - Manage abuse reports")
 		fmt.Println()
 		fmt.Println("Usage:")
-		fmt.Println("  abuse list                    - List pending abuse reports")
-		fmt.Println("  abuse list --all              - List all reports (including processed)")
-		fmt.Println("  abuse process [report-id] ban - Ban domain based on abuse report")
+		fmt.Println("  abuse list                       - List pending abuse reports")
+		fmt.Println("  abuse list --all                 - List all reports (including processed)")
+		fmt.Println("  abuse report <domain> [reason]   - Submit new abuse report")
+		fmt.Println("  abuse process [report-id] ban    - Ban domain based on abuse report")
 		fmt.Println("  abuse process [report-id] accept - Accept domain (dismiss report)")
-		fmt.Println("  abuse stats                   - Show abuse report statistics")
+		fmt.Println("  abuse stats                      - Show abuse report statistics")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  abuse report happy-cat-123.p0rt.xyz \"Testing ban notifications\"")
+		fmt.Println("  abuse list")
+		fmt.Println("  abuse process abc-123 ban")
 		fmt.Println()
 		fmt.Println("Description:")
-		fmt.Println("  View and process abuse reports submitted against domains.")
+		fmt.Println("  Submit, view and process abuse reports for domains.")
 		fmt.Println("  Reports are stored in Redis and can be banned or accepted.")
 	default:
 		return fmt.Errorf("no help available for command: %s", command)
@@ -874,6 +880,7 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 		),
 		readline.PcItem("abuse",
 			readline.PcItem("list"),
+			readline.PcItem("report"),
 			readline.PcItem("process"),
 			readline.PcItem("stats"),
 		),
@@ -1669,6 +1676,8 @@ func (c *CLI) handleAbuseCommand(args []string) error {
 	switch subcommand {
 	case "list":
 		return c.handleAbuseList(subArgs)
+	case "report":
+		return c.handleAbuseReport(subArgs)
 	case "process":
 		return c.handleAbuseProcess(subArgs)
 	case "stats":
@@ -1809,6 +1818,54 @@ func (c *CLI) handleAbuseList(args []string) error {
 	}
 
 	fmt.Printf("Total: %d reports\n", count)
+	return nil
+}
+
+// handleAbuseReport submits a new abuse report
+func (c *CLI) handleAbuseReport(args []string) error {
+	if len(args) < 1 {
+		c.outputError("Usage: abuse report <domain> [reason]")
+		return nil
+	}
+
+	domain := args[0]
+	reason := "Testing - submitted via CLI"
+	if len(args) > 1 {
+		reason = strings.Join(args[1:], " ")
+		// Remove quotes if present
+		reason = strings.Trim(reason, "\"'")
+	}
+
+	// Create a local abuse report manager to submit the report
+	reportManager := security.NewAbuseReportManager()
+	
+	// Use current client IP or a default testing IP
+	reporterIP := "127.0.0.1" // Default for local testing
+	
+	report, err := reportManager.SubmitReport(domain, reporterIP, reason, "Submitted via CLI for testing")
+	if err != nil {
+		c.outputError(fmt.Sprintf("Failed to submit abuse report: %v", err))
+		return nil
+	}
+
+	if c.jsonOutput {
+		data := map[string]interface{}{
+			"report_id": report.ID,
+			"domain":    report.Domain,
+			"reason":    report.Reason,
+			"status":    report.Status,
+		}
+		c.outputSuccess(data, "Abuse report submitted")
+	} else {
+		fmt.Printf("✅ Abuse report submitted successfully\n")
+		fmt.Printf("   Report ID: %s\n", report.ID)
+		fmt.Printf("   Domain: %s\n", report.Domain)
+		fmt.Printf("   Reason: %s\n", report.Reason)
+		fmt.Printf("   Status: %s\n", report.Status)
+		fmt.Printf("\n💡 Process this report with:\n")
+		fmt.Printf("   abuse process %s ban\n", report.ID)
+	}
+
 	return nil
 }
 
