@@ -601,10 +601,9 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 							channel.Write([]byte("Contact support if you believe this is an error.\r\n"))
 						} else {
 							// Just reject the domain access with helpful message
-							channel.Write([]byte(fmt.Sprintf("\r\n❌ Error: Domain '%s' has been banned due to abuse reports.\r\n", domain)))
-							channel.Write([]byte("This domain is currently suspended. You can:\r\n"))
-							channel.Write([]byte("- Use a different domain (disconnect and reconnect)\r\n"))
-							channel.Write([]byte("- Contact support if you believe this is an error\r\n"))
+							channel.Write([]byte(fmt.Sprintf("\r\n❌ Error: Domain '%s' has been banned due to abuse reports.\r\n", fullDomainForBanCheck)))
+							channel.Write([]byte("This domain is currently suspended.\r\n"))
+							channel.Write([]byte("Contact support if you believe this is an error.\r\n"))
 							channel.Write([]byte(fmt.Sprintf("⚠️  Warning: %d/5 attempts. Further attempts may result in IP ban.\r\n", attempts)))
 						}
 
