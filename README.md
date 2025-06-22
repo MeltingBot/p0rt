@@ -95,7 +95,7 @@ git clone https://github.com/MeltingBot/p0rt.git
 cd p0rt
 
 # Build
-go build -o p0rt cmd/server/main.go
+go build -o p0rt cmd/main/main.go
 
 # Run development
 ./run.sh dev

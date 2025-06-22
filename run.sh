@@ -21,16 +21,16 @@ case "$MODE" in
         echo ""
         
         # Build si nécessaire
-        if [ ! -f "./p0rt" ] || [ "cmd/server/main.go" -nt "./p0rt" ]; then
+        if [ ! -f "./p0rt" ] || [ "cmd/main/main.go" -nt "./p0rt" ]; then
             echo "🔨 Construction..."
-            go build -o p0rt cmd/server/main.go
+            go build -o p0rt cmd/main/main.go
         fi
         
         # Lancer en mode dev avec JSON
         P0RT_OPEN_ACCESS=true \
         SSH_SERVER_PORT=2222 \
         HTTP_PORT=8080 \
-        ./p0rt -server start
+        ./p0rt server start
         ;;
         
     "dev-redis")
@@ -61,9 +61,9 @@ case "$MODE" in
         fi
         
         # Build si nécessaire
-        if [ ! -f "./p0rt" ] || [ "cmd/server/main.go" -nt "./p0rt" ]; then
+        if [ ! -f "./p0rt" ] || [ "cmd/main/main.go" -nt "./p0rt" ]; then
             echo "🔨 Construction..."
-            go build -o p0rt cmd/server/main.go
+            go build -o p0rt cmd/main/main.go
         fi
         
         # Cleanup function for Redis container
@@ -87,7 +87,7 @@ case "$MODE" in
         SSH_SERVER_PORT=2222 \
         HTTP_PORT=8080 \
         REDIS_URL="redis://localhost:6379" \
-        ./p0rt -server start
+        ./p0rt server start
         ;;
         
     "prod")
@@ -138,7 +138,7 @@ case "$MODE" in
             echo "✅ P0rt fonctionne en production!"
             echo ""
             echo "🔑 Ajouter des clés SSH:"
-            echo "  docker exec p0rt ./p0rt -key add --key-fingerprint SHA256:VOTRE_CLE --tier beta"
+            echo "  docker exec p0rt ./p0rt access add --key-fingerprint SHA256:VOTRE_CLE --tier beta"
             echo ""
             echo "📊 Vérifier Redis:"
             echo "  docker exec p0rt-redis redis-cli ping"
