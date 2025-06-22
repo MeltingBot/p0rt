@@ -58,6 +58,10 @@ type Server struct {
 	// Tracking for banned domain connection attempts
 	bannedDomainAttempts map[string]int // IP -> attempt count for banned domains
 	bannedDomainMutex    sync.RWMutex
+	
+	// Temporary whitelist for IPs that were unbanned due to accepted abuse reports
+	temporaryWhitelist map[string]time.Time // IP -> expiry time
+	whitelistMutex     sync.RWMutex
 }
 
 type DomainGenerator interface {
@@ -105,6 +109,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 		failedAttempts:  make(map[string]int),
 		bannedIPs:       make(map[string]time.Time),
 		bannedDomainAttempts: make(map[string]int),
+		temporaryWhitelist: make(map[string]time.Time),
 	}
 
 	config := &ssh.ServerConfig{
@@ -218,6 +223,9 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 
 	// Démarrer le nettoyage périodique des IPs bannies
 	go server.cleanupBannedIPs()
+
+	// Démarrer le nettoyage périodique des whitelists temporaires
+	go server.cleanupTemporaryWhitelist()
 
 	// Set SSH server reference in abuse report manager for IP unbanning
 	server.abuseMonitor.GetReportManager().SetSSHServer(server)
@@ -893,9 +901,66 @@ func (s *Server) UnbanIP(ip string) {
 	log.Printf("IP %s has been unbanned and banned domain attempts cleared", ip)
 }
 
+// AddTemporaryWhitelist adds an IP to temporary whitelist to prevent immediate re-banning
+func (s *Server) AddTemporaryWhitelist(ip string, duration time.Duration) {
+	s.whitelistMutex.Lock()
+	defer s.whitelistMutex.Unlock()
+	
+	s.temporaryWhitelist[ip] = time.Now().Add(duration)
+	log.Printf("IP %s added to temporary whitelist for %v", ip, duration)
+}
+
+// IsTemporarilyWhitelisted checks if an IP is in the temporary whitelist
+func (s *Server) IsTemporarilyWhitelisted(ip string) bool {
+	s.whitelistMutex.RLock()
+	defer s.whitelistMutex.RUnlock()
+	
+	expiry, exists := s.temporaryWhitelist[ip]
+	if !exists {
+		return false
+	}
+	
+	// Check if expired
+	if time.Now().After(expiry) {
+		// Clean up expired entry
+		s.whitelistMutex.RUnlock()
+		s.whitelistMutex.Lock()
+		delete(s.temporaryWhitelist, ip)
+		s.whitelistMutex.Unlock()
+		s.whitelistMutex.RLock()
+		return false
+	}
+	
+	return true
+}
+
+// cleanupTemporaryWhitelist periodically removes expired whitelist entries
+func (s *Server) cleanupTemporaryWhitelist() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		s.whitelistMutex.Lock()
+		now := time.Now()
+		for ip, expiry := range s.temporaryWhitelist {
+			if now.After(expiry) {
+				delete(s.temporaryWhitelist, ip)
+				log.Printf("Removed expired whitelist entry for IP: %s", ip)
+			}
+		}
+		s.whitelistMutex.Unlock()
+	}
+}
+
 func (s *Server) recordFailedAttempt(ip string) {
 	// Skip tracking for private IPs
 	if s.isPrivateIP(ip) {
+		return
+	}
+	
+	// Skip tracking for temporarily whitelisted IPs
+	if s.IsTemporarilyWhitelisted(ip) {
+		log.Printf("Skipping ban for temporarily whitelisted IP: %s", ip)
 		return
 	}
 
@@ -1039,6 +1104,11 @@ func (s *Server) UnbanIPFromTracker(ip string) {
 
 // RecordSecurityEvent records a security event
 func (s *Server) RecordSecurityEvent(eventType security.EventType, ip string, details map[string]string) {
+	// Skip recording events for temporarily whitelisted IPs to prevent immediate re-banning
+	if s.IsTemporarilyWhitelisted(ip) {
+		log.Printf("Skipping security event recording for temporarily whitelisted IP: %s (event: %s)", ip, eventType)
+		return
+	}
 	s.securityTracker.RecordEvent(eventType, ip, details)
 }
 
