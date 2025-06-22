@@ -1732,8 +1732,15 @@ func (c *CLI) handleAbuseList(args []string) error {
 			return nil
 		}
 	} else {
-		// Use local access
-		reportManager := security.NewAbuseReportManager()
+		// Use local access with proper Redis configuration
+		var reportManager *security.AbuseReportManager
+		storageConfig := c.config.GetStorageConfig()
+		if storageConfig.Type == "redis" && storageConfig.RedisURL != "" {
+			reportManager = security.NewAbuseReportManagerWithRedis(storageConfig.RedisURL)
+		} else {
+			reportManager = security.NewAbuseReportManager()
+		}
+		
 		localReports, err := reportManager.ListReports(status)
 		if err != nil {
 			c.outputError(fmt.Sprintf("Failed to get abuse reports: %v", err))
@@ -1841,8 +1848,19 @@ func (c *CLI) handleAbuseReport(args []string) error {
 		reason = strings.Trim(reason, "\"'")
 	}
 
-	// Create a local abuse report manager to submit the report
-	reportManager := security.NewAbuseReportManager()
+	// Create abuse report manager with proper Redis configuration
+	var reportManager *security.AbuseReportManager
+	if c.useRemoteAPI {
+		c.outputError("Report submission via remote API not yet implemented. Use local CLI mode.")
+		return nil
+	} else {
+		storageConfig := c.config.GetStorageConfig()
+		if storageConfig.Type == "redis" && storageConfig.RedisURL != "" {
+			reportManager = security.NewAbuseReportManagerWithRedis(storageConfig.RedisURL)
+		} else {
+			reportManager = security.NewAbuseReportManager()
+		}
+	}
 	
 	// Use current client IP or a default testing IP
 	reporterIP := "127.0.0.1" // Default for local testing
@@ -1887,7 +1905,21 @@ func (c *CLI) handleAbuseDelete(args []string) error {
 	var report *security.AbuseReport
 	var err error
 
-	reportManager := security.NewAbuseReportManager()
+	// Create report manager with Redis configuration
+	var reportManager *security.AbuseReportManager
+	if c.useRemoteAPI {
+		// For remote API, we can't directly access the report manager, so we'll need an API endpoint
+		c.outputError("Report deletion via remote API not yet implemented. Use local CLI mode.")
+		return nil
+	} else {
+		// Create report manager with proper Redis configuration
+		storageConfig := c.config.GetStorageConfig()
+		if storageConfig.Type == "redis" && storageConfig.RedisURL != "" {
+			reportManager = security.NewAbuseReportManagerWithRedis(storageConfig.RedisURL)
+		} else {
+			reportManager = security.NewAbuseReportManager()
+		}
+	}
 	
 	report, err = reportManager.GetReport(reportID)
 	if err != nil {
