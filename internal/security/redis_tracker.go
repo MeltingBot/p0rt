@@ -198,7 +198,7 @@ func (rst *RedisSecurityTracker) UnbanIP(ip string) {
 		rst.keyPrefix + "ban:" + ip,
 		rst.keyPrefix + "events:ip:" + ip,
 		rst.keyPrefix + "auth_failures:" + ip,
-		rst.keyPrefix + "event_count:" + ip,
+		rst.keyPrefix + "count:" + ip,  // Main event counter used by getEventCount
 	}
 	
 	for _, key := range keysToDelete {
