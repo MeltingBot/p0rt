@@ -379,15 +379,21 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("status - Show system status")
 		fmt.Println("  Displays current system configuration and status")
 	case "security", "sec":
-		fmt.Println("security - View security information")
+		fmt.Println("security - View and manage security information")
 		fmt.Println("  security stats    - Show security statistics")
 		fmt.Println("  security bans     - Show banned IP addresses")
+		fmt.Println("  security unban    - Unban an IP address")
 		fmt.Println()
 		fmt.Println("Displays security information including:")
 		fmt.Println("  - Authentication failures")
 		fmt.Println("  - Blocked IP addresses")
 		fmt.Println("  - Scanning attempts")
 		fmt.Println("  - Ban reasons and expiration times")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  security stats")
+		fmt.Println("  security bans")
+		fmt.Println("  security unban 192.168.1.100")
 	case "history", "hist":
 		fmt.Println("history [n] - Show connection history")
 		fmt.Println("  n - Number of connections to show (default: 20)")
@@ -849,10 +855,12 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 		readline.PcItem("security",
 			readline.PcItem("stats"),
 			readline.PcItem("bans"),
+			readline.PcItem("unban"),
 		),
 		readline.PcItem("sec",
 			readline.PcItem("stats"),
 			readline.PcItem("bans"),
+			readline.PcItem("unban"),
 		),
 		readline.PcItem("access",
 			readline.PcItem("status"),
@@ -888,6 +896,7 @@ func (c *CLI) handleSecurityCommand(args []string) error {
 		fmt.Println("Security subcommands:")
 		fmt.Println("  stats    - Show security statistics")
 		fmt.Println("  bans     - Show banned IP addresses")
+		fmt.Println("  unban    - Unban an IP address")
 		return nil
 	}
 
@@ -896,6 +905,8 @@ func (c *CLI) handleSecurityCommand(args []string) error {
 		return c.showSecurityStats()
 	case "bans":
 		return c.showSecurityBans()
+	case "unban":
+		return c.handleSecurityUnban(args[1:])
 	default:
 		return fmt.Errorf("unknown security subcommand: %s", args[0])
 	}
@@ -983,6 +994,42 @@ func (c *CLI) showSecurityBans() error {
 		fmt.Println("Ban information requires a running server.")
 		fmt.Println("Use remote mode to connect to a running server:")
 		fmt.Printf("  p0rt --remote http://localhost:%s cli\n", c.config.GetHTTPPort())
+	}
+
+	return nil
+}
+
+// handleSecurityUnban handles IP unbanning via remote API
+func (c *CLI) handleSecurityUnban(args []string) error {
+	if len(args) != 1 {
+		c.outputError("Usage: security unban <ip-address>")
+		return nil
+	}
+
+	ip := args[0]
+
+	if !c.useRemoteAPI {
+		c.outputError("IP unbanning requires remote API access. Use remote mode:")
+		fmt.Printf("  p0rt --remote http://localhost:%s cli\n", c.config.GetHTTPPort())
+		return nil
+	}
+
+	// Unban via remote API
+	err := c.apiClient.UnbanIP(ip)
+	if err != nil {
+		c.outputError(fmt.Sprintf("Failed to unban IP %s: %v", ip, err))
+		return nil
+	}
+
+	if c.jsonOutput {
+		data := map[string]interface{}{
+			"ip":     ip,
+			"action": "unbanned",
+		}
+		c.outputSuccess(data, fmt.Sprintf("IP %s has been unbanned", ip))
+	} else {
+		fmt.Printf("✅ Successfully unbanned IP: %s\n", ip)
+		fmt.Printf("   The IP should now be able to connect to the server.\n")
 	}
 
 	return nil
