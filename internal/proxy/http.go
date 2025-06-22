@@ -879,15 +879,20 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
                 <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
                     <h3 class="text-2xl font-bold text-white mb-4">🛡️ Enterprise-Grade Security</h3>
                     <p class="text-gray-300 mb-4">
-                        End-to-end encryption with SSH. Automatic HTTPS with valid certificates. Your data never touches our servers unencrypted.
+                        End-to-end encryption with SSH. Automatic HTTPS with valid certificates. Advanced abuse prevention and forensic tracking for enterprise compliance.
                     </p>
-                    <p class="text-xs text-gray-500 mb-4">
-                        *Connection logs are only visible to you in your SSH terminal
-                    </p>
-                    <div class="flex gap-4 text-gray-400">
+                    <div class="bg-gray-900 rounded p-4 mb-4">
+                        <div class="text-xs text-gray-400 mb-2">Security Headers for Traceability:</div>
+                        <div class="font-mono text-xs text-green-400">X-P0rt-Fingerprint: SHA256:abc123...</div>
+                        <div class="font-mono text-xs text-blue-400">X-P0rt-Origin: 192.168.1.100</div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-sm text-gray-400">
                         <span>✓ SSH Encrypted</span>
                         <span>✓ HTTPS Ready</span>
-                        <span>✓ Zero Logs*</span>
+                        <span>✓ Abuse Reporting</span>
+                        <span>✓ Forensic Tracking</span>
+                        <span>✓ IP Traceability</span>
+                        <span>✓ Auto Domain Banning</span>
                     </div>
                 </div>
                 
@@ -916,6 +921,65 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
                     <div class="bg-gray-900 rounded p-6 font-mono text-xs max-w-none text-left">
                         <div class="text-gray-400">[15:04:05] 192.168.1.100 /api/users</div>
                         <div class="text-gray-400">[15:04:12] 10.0.0.5 /dashboard</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Anti-Abuse Section -->
+    <section class="py-16 bg-gray-900">
+        <div class="container mx-auto max-w-7xl px-4">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-bold text-white mb-4">🚨 Advanced Anti-Abuse System</h2>
+                <p class="text-xl text-gray-300 max-w-3xl mx-auto">
+                    Built-in protection and forensic capabilities to maintain service quality and security compliance.
+                </p>
+            </div>
+            
+            <div class="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
+                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
+                    <h3 class="text-xl font-bold text-white mb-4">📝 Community Reporting</h3>
+                    <p class="text-gray-300 mb-4">
+                        Public reporting endpoint allows users to report malicious domains. Automated review and blocking system.
+                    </p>
+                    <div class="bg-gray-900 rounded p-4 text-sm">
+                        <div class="text-blue-400">POST /report-abuse</div>
+                        <div class="text-gray-500 mt-1">→ Admin review → Domain blocking</div>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
+                    <h3 class="text-xl font-bold text-white mb-4">🔍 Forensic Tracking</h3>
+                    <p class="text-gray-300 mb-4">
+                        Every HTTP response includes traceability headers linking requests to SSH users for security investigations.
+                    </p>
+                    <div class="bg-gray-900 rounded p-4 font-mono text-xs">
+                        <div class="text-green-400">X-P0rt-Fingerprint: SHA256:user-key</div>
+                        <div class="text-blue-400">X-P0rt-Origin: source-ip</div>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
+                    <h3 class="text-xl font-bold text-white mb-4">🛡️ Automated Protection</h3>
+                    <p class="text-gray-300 mb-4">
+                        Real-time IP banning, rate limiting, and domain filtering. Malicious traffic is blocked before it reaches your application.
+                    </p>
+                    <div class="flex gap-4 text-sm text-gray-400">
+                        <span>• IP Blacklisting</span>
+                        <span>• Rate Limiting</span>
+                        <span>• DDoS Protection</span>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
+                    <h3 class="text-xl font-bold text-white mb-4">📊 Admin Dashboard</h3>
+                    <p class="text-gray-300 mb-4">
+                        Comprehensive abuse report management, security analytics, and incident response tools for administrators.
+                    </p>
+                    <div class="bg-gray-900 rounded p-4 font-mono text-xs">
+                        <div class="text-cyan-400">./p0rt abuse list</div>
+                        <div class="text-yellow-400">./p0rt security stats</div>
                     </div>
                 </div>
             </div>

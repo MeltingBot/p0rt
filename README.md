@@ -370,9 +370,11 @@ graph LR
 - ✅ Automatic HTTPS with valid certificates
 - ✅ Rate limiting and DDoS protection
 - ✅ IP-based connection limits
-- ✅ Abuse detection and blocking
+- ✅ **Advanced abuse reporting system** with domain banning
+- ✅ **HTTP traceability headers** for security auditing
 - ✅ SSH key allowlist with tiers
 - ✅ Automatic key expiration support
+- ✅ **Forensic tracking** via SSH fingerprints and source IPs
 
 ## 📈 Monitoring
 
@@ -392,6 +394,49 @@ graph LR
 ```bash
 ./p0rt -cli
 > security
+```
+
+## 🚨 Anti-Abuse System
+
+P0rt includes a comprehensive abuse reporting and prevention system to protect users and maintain service quality:
+
+### 📝 Abuse Reporting
+- **Public reporting endpoint**: Users can report malicious domains via `/report-abuse`
+- **Automated review process**: Reports are processed by administrators
+- **Domain banning**: Abusive domains are blocked with custom 403 pages
+- **Appeal system**: False positives can be appealed through support
+
+### 🔍 Traceability & Security Headers
+
+Every HTTP response includes forensic headers for security tracking:
+
+```http
+X-P0rt-Fingerprint: SHA256:abc123...def  # SSH public key fingerprint
+X-P0rt-Origin: 192.168.1.100             # SSH client IP address
+```
+
+**Use cases:**
+- **Abuse investigation**: Link HTTP requests to specific SSH users
+- **Security auditing**: Track request origins and authentication
+- **Incident response**: Forensic analysis of malicious activity
+- **Compliance**: Meet traceability requirements for enterprise use
+
+### 🛡️ Protection Features
+- **IP banning**: Automatic blocking of malicious sources
+- **Rate limiting**: Prevents brute force and spam attacks
+- **Domain filtering**: Real-time blocking of reported domains
+- **Analytics**: Security statistics and monitoring
+
+### 📊 Admin Commands
+```bash
+# List abuse reports
+./p0rt abuse list
+
+# Process reports (ban/accept)
+./p0rt abuse process [report-id] [ban|accept]
+
+# View security statistics
+./p0rt security
 ```
 
 ## 🤝 Contributing
