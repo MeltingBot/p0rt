@@ -915,8 +915,10 @@ func (s *Server) AddTemporaryWhitelist(ip string, duration time.Duration) {
 	s.whitelistMutex.Lock()
 	defer s.whitelistMutex.Unlock()
 	
-	s.temporaryWhitelist[ip] = time.Now().Add(duration)
-	log.Printf("IP %s added to temporary whitelist for %v", ip, duration)
+	// Normalize IP format (remove brackets for IPv6)
+	normalizedIP := s.normalizeIP(ip)
+	s.temporaryWhitelist[normalizedIP] = time.Now().Add(duration)
+	log.Printf("IP %s (normalized: %s) added to temporary whitelist for %v", ip, normalizedIP, duration)
 }
 
 // IsTemporarilyWhitelisted checks if an IP is in the temporary whitelist
@@ -924,7 +926,9 @@ func (s *Server) IsTemporarilyWhitelisted(ip string) bool {
 	s.whitelistMutex.RLock()
 	defer s.whitelistMutex.RUnlock()
 	
-	expiry, exists := s.temporaryWhitelist[ip]
+	// Normalize IP format (remove brackets for IPv6)
+	normalizedIP := s.normalizeIP(ip)
+	expiry, exists := s.temporaryWhitelist[normalizedIP]
 	if !exists {
 		return false
 	}
@@ -934,13 +938,23 @@ func (s *Server) IsTemporarilyWhitelisted(ip string) bool {
 		// Clean up expired entry
 		s.whitelistMutex.RUnlock()
 		s.whitelistMutex.Lock()
-		delete(s.temporaryWhitelist, ip)
+		delete(s.temporaryWhitelist, normalizedIP)
 		s.whitelistMutex.Unlock()
 		s.whitelistMutex.RLock()
 		return false
 	}
 	
+	log.Printf("✅ IP %s (normalized: %s) is temporarily whitelisted until %v", ip, normalizedIP, expiry.Format("15:04:05"))
 	return true
+}
+
+// normalizeIP removes brackets from IPv6 addresses for consistent storage
+func (s *Server) normalizeIP(ip string) string {
+	// Remove brackets around IPv6 addresses
+	if strings.HasPrefix(ip, "[") && strings.HasSuffix(ip, "]") {
+		return ip[1 : len(ip)-1]
+	}
+	return ip
 }
 
 // cleanupTemporaryWhitelist periodically removes expired whitelist entries
