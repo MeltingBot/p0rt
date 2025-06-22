@@ -559,6 +559,15 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 						domain = s.domainGenerator.Generate(client.Key)
 					}
 
+					// Check if domain is banned via abuse reports
+					if s.abuseMonitor.GetReportManager().IsDomainBanned(domain) {
+						log.Printf("Domain %s is banned, rejecting connection", domain)
+						channel.Write([]byte("\r\n❌ Error: This domain has been banned due to abuse reports.\r\n"))
+						channel.Write([]byte("Contact support if you believe this is an error.\r\n"))
+						channel.Close()
+						return
+					}
+
 					client.Domain = domain
 
 					// Ajout via canal (lock-free)

@@ -315,3 +315,35 @@ func (arm *AbuseReportManager) GetStats() map[string]interface{} {
 	
 	return stats
 }
+
+// IsDomainBanned checks if a domain has been banned via abuse report
+func (arm *AbuseReportManager) IsDomainBanned(domain string) bool {
+	if !arm.useRedis {
+		return false
+	}
+	
+	pattern := arm.keyPrefix + "report:*"
+	keys, err := arm.redisClient.Keys(arm.ctx, pattern).Result()
+	if err != nil {
+		return false
+	}
+	
+	for _, key := range keys {
+		data, err := arm.redisClient.Get(arm.ctx, key).Result()
+		if err != nil {
+			continue
+		}
+		
+		var report AbuseReport
+		if err := json.Unmarshal([]byte(data), &report); err != nil {
+			continue
+		}
+		
+		// Check if this domain is banned
+		if report.Domain == domain && report.Status == "banned" {
+			return true
+		}
+	}
+	
+	return false
+}

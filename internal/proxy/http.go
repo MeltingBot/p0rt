@@ -175,6 +175,13 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if domain is banned via abuse reports
+	if p.abuseMonitor != nil && p.abuseMonitor.GetReportManager().IsDomainBanned(host) {
+		log.Printf("Blocked HTTP request to banned domain: %s from %s", host, extractClientIP(r))
+		http.Error(w, "This domain has been banned due to abuse reports", http.StatusForbidden)
+		return
+	}
+
 	// Logger la connexion pour le client SSH
 	clientIP := extractClientIP(r)
 
