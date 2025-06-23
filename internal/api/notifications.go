@@ -109,6 +109,7 @@ func (h *Handler) handleNotificationBanDomain(w http.ResponseWriter, r *http.Req
 				subdomain = parts[0]
 			}
 		}
+		log.Printf("📄 API notification: original domain='%s', extracted subdomain='%s'", req.Domain, subdomain)
 		
 		// Determine notification type and send appropriate notification
 		// Check if this is actually a ban notification (contains ban keywords) or just a general message
