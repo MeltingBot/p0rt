@@ -28,6 +28,7 @@ type SecurityProvider interface {
 // SSHNotificationProvider interface for sending notifications to SSH clients
 type SSHNotificationProvider interface {
 	NotifyDomainBanned(domain string)
+	NotifyDomain(domain, message string)
 }
 
 // Handler handles API requests

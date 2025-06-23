@@ -676,7 +676,6 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 				tunnelURL := fmt.Sprintf("https://%s.%s", domain, s.baseDomain)
 
 				channel.Write([]byte(fmt.Sprintf("Your tunnel: %s\r\n", tunnelURL)))
-				channel.Write([]byte(fmt.Sprintf("Local server: localhost:%d\r\n", client.Port)))
 				channel.Write([]byte("\r\nConnections:\r\n"))
 
 				// Démarrer le monitoring des connexions
@@ -840,6 +839,62 @@ func (s *Server) GetActiveTunnelCount() int {
 	}
 	
 	return <-countChan
+}
+
+// NotifyDomain sends a general notification to SSH clients for their domain
+func (s *Server) NotifyDomain(domain, message string) {
+	log.Printf("🔍 NotifyDomain called for domain: '%s' with message: '%s'", domain, message)
+	
+	done := make(chan bool)
+	
+	s.clientOps <- func() {
+		// Debug: List all current clients
+		log.Printf("📊 Current connected clients:")
+		clientsFound := 0
+		for clientDomain, client := range s.clients {
+			clientsFound++
+			log.Printf("  - Domain: '%s', Port: %d, HasSSHChannel: %t, HasLogChannel: %t", 
+				clientDomain, client.Port, client.SSHChannel != nil, client.LogChannel != nil)
+		}
+		
+		if clientsFound == 0 {
+			log.Printf("❌ No clients connected at all")
+		}
+		
+		log.Printf("🔍 Looking for client with exact domain: '%s'", domain)
+		if client, exists := s.clients[domain]; exists {
+			log.Printf("✅ Found client for domain '%s'", domain)
+			
+			// Create notification message for LogChannel
+			notificationLines := []string{
+				strings.Repeat("-", 50),
+				"📨 NOTIFICATION",
+				strings.Repeat("-", 50),
+				message,
+				strings.Repeat("-", 50),
+			}
+			
+			// Send via LogChannel - this works since logs are displayed to the user
+			sentCount := 0
+			for _, line := range notificationLines {
+				select {
+				case client.LogChannel <- line:
+					sentCount++
+				default:
+					log.Printf("⚠️ LogChannel full for client %s after %d lines", domain, sentCount)
+					break
+				}
+			}
+			if sentCount > 0 {
+				log.Printf("📝 Sent %d lines of notification to LogChannel for client %s", sentCount, domain)
+			}
+		} else {
+			log.Printf("❌ No client found for domain '%s'", domain)
+		}
+		done <- true
+	}
+	
+	<-done
 }
 
 // NotifyDomainBanned notifies SSH clients if their domain has been banned

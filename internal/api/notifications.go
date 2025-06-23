@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -109,8 +110,27 @@ func (h *Handler) handleNotificationBanDomain(w http.ResponseWriter, r *http.Req
 			}
 		}
 		
-		// Send real notification via SSH server
-		h.sshNotifier.NotifyDomainBanned(subdomain)
+		// Determine notification type and send appropriate notification
+		// Check if this is actually a ban notification (contains ban keywords) or just a general message
+		lowerReason := strings.ToLower(req.Reason)
+		isBanNotification := strings.Contains(lowerReason, "ban") || 
+							 strings.Contains(lowerReason, "abuse") || 
+							 strings.Contains(lowerReason, "spam") ||
+							 strings.Contains(lowerReason, "violation")
+		
+		if isBanNotification {
+			// This is a ban notification - use the ban-specific method
+			log.Printf("🚨 Sending BAN notification to domain %s: %s", subdomain, req.Reason)
+			h.sshNotifier.NotifyDomainBanned(subdomain)
+		} else {
+			// This is a general notification - use the general method
+			message := req.Reason
+			if message == "" {
+				message = "General notification for your tunnel"
+			}
+			log.Printf("📨 Sending GENERAL notification to domain %s: %s", subdomain, message)
+			h.sshNotifier.NotifyDomain(subdomain, message)
+		}
 		notificationSent = true
 	} else {
 		notificationError = "SSH notification provider not available"
