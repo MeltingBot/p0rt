@@ -269,11 +269,11 @@ func (c *CLI) processCommand(line string) error {
 	case "exit", "quit", "q":
 		os.Exit(0)
 		return nil
-	case "server", "srv":
+	case "server":
 		return c.handleServerCommand(args)
-	case "reservation", "res":
+	case "reservation":
 		return c.handleReservationCommand(args)
-	case "key", "keys":
+	case "keys":
 		return c.handleKeyCommand(args)
 	case "stats":
 		if len(args) > 0 && args[0] != "" {
@@ -282,13 +282,13 @@ func (c *CLI) processCommand(line string) error {
 		return c.showStats()
 	case "status":
 		return c.showStatus()
-	case "security", "sec":
+	case "security":
 		return c.handleSecurityCommand(args)
-	case "history", "hist":
+	case "history":
 		return c.handleHistoryCommand(args)
-	case "connections", "conn":
+	case "connections":
 		return c.showActiveConnections()
-	case "access", "mode":
+	case "access":
 		return c.handleAccessCommand(args)
 	case "abuse":
 		return c.handleAbuseCommand(args)
@@ -305,15 +305,15 @@ func (c *CLI) showHelp(args []string) error {
 	if len(args) == 0 {
 		fmt.Println("Available commands:")
 		fmt.Println("  help [command]     - Show help information")
-		fmt.Println("  server             - Start the P0rt server")
+		fmt.Println("  server             - Manage P0rt server (start, reload, status)")
 		fmt.Println("  reservation        - Manage domain reservations")
-		fmt.Println("  key                - Manage SSH key allowlist")
+		fmt.Println("  keys               - Manage SSH key allowlist")
 		fmt.Println("  security           - View security information and bans")
-		fmt.Println("  stats [domain]     - Show system statistics (or domain-specific stats)")
-		fmt.Println("  history [n]        - Show connection history (last n connections)")
-		fmt.Println("  connections        - Show active connections with bandwidth")
-		fmt.Println("  access             - Manage server access mode (open/restricted)")
-		fmt.Println("  abuse              - Manage abuse reports (list, process)")
+		fmt.Println("  stats [domain]     - Show system statistics")
+		fmt.Println("  history [n]        - Show connection history")
+		fmt.Println("  connections        - Show active connections")
+		fmt.Println("  access             - Manage server access mode")
+		fmt.Println("  abuse              - Manage abuse reports")
 		fmt.Println("  status             - Show system status")
 		fmt.Println("  clear              - Clear the screen")
 		fmt.Println("  exit               - Exit the CLI")
@@ -324,16 +324,15 @@ func (c *CLI) showHelp(args []string) error {
 
 	command := args[0]
 	switch command {
-	case "server", "srv":
-		fmt.Println("server - Start the P0rt server")
-		fmt.Println("  Starts the SSH and HTTP servers for tunneling")
+	case "server":
+		fmt.Println("server - Manage the P0rt server")
+		fmt.Println("  Control and monitor the SSH and HTTP servers")
 		fmt.Println()
 		fmt.Println("Usage:")
-		fmt.Println("  server start    - Start the server (default)")
-		fmt.Println("  server stop     - Stop the server (if running)")
-		fmt.Println("  server restart  - Restart the server")
-		fmt.Println("  server status   - Show server status")
-	case "reservation", "res":
+		fmt.Println("  server start    - Start the server (local only)")
+		fmt.Println("  server reload   - Reload configuration (local or remote)")
+		fmt.Println("  server status   - Show detailed server status (local or remote)")
+	case "reservation":
 		fmt.Println("Reservation commands:")
 		fmt.Println("  reservation add <domain> <fingerprint> [comment]")
 		fmt.Println("    - Reserve a domain for an SSH key")
@@ -348,7 +347,7 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("  reservation add happy-cat-jump SHA256:abc123... \"My personal domain\"")
 		fmt.Println("  reservation remove happy-cat-jump")
 		fmt.Println("  reservation list")
-	case "key", "keys":
+	case "keys":
 		fmt.Println("SSH Key Management commands:")
 		fmt.Println("  key add <fingerprint> [tier] [comment]")
 		fmt.Println("    - Add an SSH key by fingerprint (easiest)")
@@ -378,7 +377,7 @@ func (c *CLI) showHelp(args []string) error {
 	case "status":
 		fmt.Println("status - Show system status")
 		fmt.Println("  Displays current system configuration and status")
-	case "security", "sec":
+	case "security":
 		fmt.Println("security - View and manage security information")
 		fmt.Println("  security stats    - Show security statistics")
 		fmt.Println("  security bans     - Show banned IP addresses")
@@ -838,14 +837,7 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 		),
 		readline.PcItem("server",
 			readline.PcItem("start"),
-			readline.PcItem("stop"),
-			readline.PcItem("restart"),
-			readline.PcItem("status"),
-		),
-		readline.PcItem("srv",
-			readline.PcItem("start"),
-			readline.PcItem("stop"),
-			readline.PcItem("restart"),
+			readline.PcItem("reload"),
 			readline.PcItem("status"),
 		),
 		readline.PcItem("reservation",
@@ -853,19 +845,6 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 			readline.PcItem("remove", readline.PcItemDynamic(c.getDomainCompletions)),
 			readline.PcItem("list"),
 			readline.PcItem("stats"),
-		),
-		readline.PcItem("res",
-			readline.PcItem("add"),
-			readline.PcItem("remove", readline.PcItemDynamic(c.getDomainCompletions)),
-			readline.PcItem("list"),
-			readline.PcItem("stats"),
-		),
-		readline.PcItem("key",
-			readline.PcItem("add"),
-			readline.PcItem("remove"),
-			readline.PcItem("list"),
-			readline.PcItem("activate"),
-			readline.PcItem("deactivate"),
 		),
 		readline.PcItem("keys",
 			readline.PcItem("add"),
@@ -879,17 +858,7 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 			readline.PcItem("bans"),
 			readline.PcItem("unban"),
 		),
-		readline.PcItem("sec",
-			readline.PcItem("stats"),
-			readline.PcItem("bans"),
-			readline.PcItem("unban"),
-		),
 		readline.PcItem("access",
-			readline.PcItem("status"),
-			readline.PcItem("open"),
-			readline.PcItem("restricted"),
-		),
-		readline.PcItem("mode",
 			readline.PcItem("status"),
 			readline.PcItem("open"),
 			readline.PcItem("restricted"),
@@ -902,15 +871,11 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 			readline.PcItem("stats"),
 		),
 		readline.PcItem("history"),
-		readline.PcItem("hist"),
 		readline.PcItem("connections"),
-		readline.PcItem("conn"),
 		readline.PcItem("stats"),
 		readline.PcItem("status"),
 		readline.PcItem("clear"),
 		readline.PcItem("exit"),
-		readline.PcItem("quit"),
-		readline.PcItem("q"),
 	)
 }
 
@@ -1070,14 +1035,12 @@ func (c *CLI) handleServerCommand(args []string) error {
 	switch subcommand {
 	case "start":
 		return c.startServer()
-	case "stop":
-		return c.stopServer()
-	case "restart":
-		return c.restartServer()
+	case "reload":
+		return c.reloadServer()
 	case "status":
 		return c.serverStatus()
 	default:
-		return fmt.Errorf("unknown server subcommand: %s. Available: start, stop, restart, status", subcommand)
+		return fmt.Errorf("unknown server subcommand: %s. Available: start, reload, status", subcommand)
 	}
 }
 
@@ -1116,16 +1079,59 @@ func (c *CLI) startServer() error {
 	}
 }
 
-// stopServer stops the P0rt server (placeholder for future implementation)
-func (c *CLI) stopServer() error {
-	fmt.Println("Server stop functionality not yet implemented")
-	fmt.Println("Use Ctrl+C to stop the server if running")
-	return nil
-}
-
-// restartServer restarts the P0rt server (placeholder for future implementation)
-func (c *CLI) restartServer() error {
-	fmt.Println("Server restart functionality not yet implemented")
+// reloadServer reloads the server configuration
+func (c *CLI) reloadServer() error {
+	if c.useRemoteAPI && c.apiClient != nil {
+		// Use remote API
+		if !c.jsonOutput {
+			fmt.Println("🔄 Reloading server configuration via API...")
+		}
+		
+		details, err := c.apiClient.ReloadServer()
+		if err != nil {
+			if c.jsonOutput {
+				c.outputError(fmt.Sprintf("Failed to reload server: %v", err))
+			} else {
+				fmt.Printf("❌ Error: %v\n", err)
+			}
+			return err
+		}
+		
+		if c.jsonOutput {
+			c.outputSuccess(details, "Server configuration reloaded")
+		} else {
+			fmt.Printf("✅ Server configuration reloaded successfully!\n")
+			
+			if operations, ok := details["operations"].([]interface{}); ok {
+				fmt.Println("\n📋 Operations performed:")
+				for i, op := range operations {
+					if opMap, ok := op.(map[string]interface{}); ok {
+						operation := opMap["operation"].(string)
+						success := opMap["success"].(bool)
+						message := opMap["message"].(string)
+						
+						status := "✅"
+						if !success {
+							status = "❌"
+						}
+						
+						fmt.Printf("  %d. %s %s: %s\n", i+1, status, operation, message)
+					}
+				}
+			}
+		}
+	} else {
+		// Local mode
+		if c.jsonOutput {
+			c.outputError("Server reload requires remote API access or running server")
+		} else {
+			fmt.Println("🔄 Server reload in local mode...")
+			fmt.Println("Note: Configuration reload requires the server to be running")
+			fmt.Println("Use remote mode to reload a running server:")
+			fmt.Printf("  p0rt --remote http://localhost:%s cli\n", c.config.GetHTTPPort())
+		}
+	}
+	
 	return nil
 }
 
