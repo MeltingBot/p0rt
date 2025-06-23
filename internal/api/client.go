@@ -654,25 +654,26 @@ func (c *Client) GetServerStatus() (*ServerStatus, error) {
 	return response.Server, nil
 }
 
-// StartServer starts the server via API
-func (c *Client) StartServer() error {
-	path := "/api/v1/server/start"
-	_, err := c.makeRequest("POST", path, nil)
-	return err
-}
+// ReloadServer reloads the server configuration via API
+func (c *Client) ReloadServer() (map[string]interface{}, error) {
+	path := "/api/v1/server/reload"
+	
+	respBody, err := c.makeRequest("POST", path, nil)
+	if err != nil {
+		return nil, err
+	}
 
-// StopServer stops the server via API
-func (c *Client) StopServer() error {
-	path := "/api/v1/server/stop"
-	_, err := c.makeRequest("POST", path, nil)
-	return err
-}
+	var response struct {
+		Success   bool                   `json:"success"`
+		Message   string                 `json:"message"`
+		Details   map[string]interface{} `json:"details"`
+		Timestamp string                 `json:"timestamp"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
 
-// RestartServer restarts the server via API
-func (c *Client) RestartServer() error {
-	path := "/api/v1/server/restart"
-	_, err := c.makeRequest("POST", path, nil)
-	return err
+	return response.Details, nil
 }
 
 // NotificationResponse represents a notification response

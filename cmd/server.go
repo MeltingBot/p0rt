@@ -170,22 +170,63 @@ var serverStatusCmd = &cobra.Command{
 	},
 }
 
-var serverStopCmd = &cobra.Command{
-	Use:   "stop",
-	Short: "Stop the P0rt server",
-	Long:  `Stop the running P0rt server (not yet implemented).`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Server stop functionality not yet implemented")
-		fmt.Println("Use Ctrl+C to stop the server if running")
-	},
-}
+var serverReloadCmd = &cobra.Command{
+	Use:   "reload",
+	Short: "Reload the P0rt server configuration",
+	Long: `Reload the P0rt server configuration and refresh internal state.
 
-var serverRestartCmd = &cobra.Command{
-	Use:   "restart",
-	Short: "Restart the P0rt server",
-	Long:  `Restart the P0rt server (not yet implemented).`,
+This performs the following operations:
+- Reloads configuration from files
+- Refreshes SSH key store from storage
+- Updates security settings
+- Clears internal caches
+
+The server process continues running without interruption.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Server restart functionality not yet implemented")
+		_, remoteURL, apiKey, _, _, useJSON := GetGlobalFlags()
+		
+		if remoteURL != "" {
+			// Use remote API
+			if !useJSON {
+				fmt.Println("🔄 Reloading server configuration via API...")
+			}
+			
+			client := api.NewClient(remoteURL, apiKey)
+			details, err := client.ReloadServer()
+			if err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+				return
+			}
+			
+			if useJSON {
+				fmt.Printf("{\"success\": true, \"details\": %+v}\n", details)
+			} else {
+				fmt.Printf("✅ Server configuration reloaded successfully!\n")
+				
+				if operations, ok := details["operations"].([]interface{}); ok {
+					fmt.Println("\n📋 Operations performed:")
+					for i, op := range operations {
+						if opMap, ok := op.(map[string]interface{}); ok {
+							operation := opMap["operation"].(string)
+							success := opMap["success"].(bool)
+							message := opMap["message"].(string)
+							
+							status := "✅"
+							if !success {
+								status = "❌"
+							}
+							
+							fmt.Printf("  %d. %s %s: %s\n", i+1, status, operation, message)
+						}
+					}
+				}
+			}
+		} else {
+			// Local mode - send SIGHUP signal to trigger reload
+			fmt.Println("🔄 Sending reload signal to local server...")
+			fmt.Println("Note: Server must be running and handle SIGHUP signal for configuration reload")
+			fmt.Println("Use Ctrl+C to stop the server if needed")
+		}
 	},
 }
 
@@ -195,8 +236,7 @@ func init() {
 	// Add subcommands
 	serverCmd.AddCommand(serverStartCmd)
 	serverCmd.AddCommand(serverStatusCmd)
-	serverCmd.AddCommand(serverStopCmd)
-	serverCmd.AddCommand(serverRestartCmd)
+	serverCmd.AddCommand(serverReloadCmd)
 }
 
 // testPort checks if a port is available

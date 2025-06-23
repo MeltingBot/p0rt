@@ -81,9 +81,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	
 	// Server management endpoints
 	mux.HandleFunc("/api/v1/server/status", h.handleServerStatus)
-	mux.HandleFunc("/api/v1/server/start", h.handleServerStart)
-	mux.HandleFunc("/api/v1/server/stop", h.handleServerStop)
-	mux.HandleFunc("/api/v1/server/restart", h.handleServerRestart)
+	mux.HandleFunc("/api/v1/server/reload", h.handleServerReload)
 	
 	// Notification endpoints
 	mux.HandleFunc("/api/v1/notifications/test", h.handleNotificationTest)
