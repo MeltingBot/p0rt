@@ -194,14 +194,15 @@ func (h *Handler) formatNotificationMessage(messageType, content string) string 
 }
 
 func (h *Handler) isValidDomain(domain string) bool {
-	// Basic domain validation
+	// Basic domain validation - accept both subdomains and full domains
 	if len(domain) == 0 || len(domain) > 253 {
 		return false
 	}
 	
 	// Check for valid characters and structure
 	parts := strings.Split(domain, ".")
-	if len(parts) < 2 {
+	// Accept both single subdomain (quick-tennis-tapir) and full domain (quick-tennis-tapir.p0rt.xyz)
+	if len(parts) < 1 {
 		return false
 	}
 	
