@@ -188,7 +188,14 @@ class P0rtAdmin {
 
             // Update stat cards
             this.updateElement('active-tunnels', stats.global_stats?.active_tunnels || connections.connections?.length || 0);
-            this.updateElement('total-connections', stats.global_stats?.total_connections || '-');
+            
+            // Format total connections for readability
+            const totalConnections = stats.global_stats?.total_connections;
+            if (totalConnections !== undefined && totalConnections !== null) {
+                this.updateElement('total-connections', this.formatNumber(totalConnections));
+            } else {
+                this.updateElement('total-connections', '-');
+            }
             
             // Get security stats
             const securityStats = await this.apiCall('/api/v1/security/stats').catch(() => ({security_stats: {}}));
@@ -323,12 +330,15 @@ class P0rtAdmin {
             const response = await this.apiCall('/api/v1/reservations');
             const tbody = document.getElementById('domains-table');
             
-            if (response.reservations.length === 0) {
+            // Handle both empty arrays and missing reservations property
+            const reservations = response.reservations || [];
+            
+            if (reservations.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No reservations</td></tr>';
                 return;
             }
 
-            tbody.innerHTML = response.reservations.map(res => `
+            tbody.innerHTML = reservations.map(res => `
                 <tr>
                     <td><strong>${res.domain}</strong></td>
                     <td><code>${res.fingerprint.substring(0, 16)}...</code></td>
@@ -342,8 +352,13 @@ class P0rtAdmin {
                 </tr>
             `).join('');
         } catch (error) {
-            document.getElementById('domains-table').innerHTML = 
-                '<tr><td colspan="5" class="text-center text-danger">Loading error</td></tr>';
+            // If API returns 404 or error, show no reservations instead of error
+            const tbody = document.getElementById('domains-table');
+            if (error.status === 404) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No reservations</td></tr>';
+            } else {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Loading error</td></tr>';
+            }
         }
     }
 
@@ -829,6 +844,21 @@ class P0rtAdmin {
         const decimals = value >= 100 ? 0 : value >= 10 ? 1 : 2;
         
         return parseFloat(value.toFixed(decimals)) + ' ' + sizes[i];
+    }
+
+    formatNumber(num) {
+        if (!num || num === 0) return '0';
+        
+        // Format large numbers with K, M, B suffixes for readability
+        if (num >= 1000000000) {
+            return (num / 1000000000).toFixed(1) + 'B';
+        } else if (num >= 1000000) {
+            return (num / 1000000).toFixed(1) + 'M';
+        } else if (num >= 1000) {
+            return (num / 1000).toFixed(1) + 'K';
+        }
+        
+        return num.toLocaleString();
     }
 
     // Dark Mode functionality
