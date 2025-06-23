@@ -16,8 +16,8 @@ type HomepageHandler struct {
 
 // HomepageData contains data for the homepage template
 type HomepageData struct {
-	AccessBadge   string
-	AccessSection string
+	AccessBadge   template.HTML
+	AccessSection template.HTML
 }
 
 // NewHomepageHandler creates a new homepage handler
@@ -35,8 +35,8 @@ func NewHomepageHandler() *HomepageHandler {
 // ServeHomepage serves the homepage with dynamic content
 func (h *HomepageHandler) ServeHomepage(w http.ResponseWriter, r *http.Request, accessBadge, accessSection string) {
 	data := HomepageData{
-		AccessBadge:   accessBadge,
-		AccessSection: accessSection,
+		AccessBadge:   template.HTML(accessBadge),
+		AccessSection: template.HTML(accessSection),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
