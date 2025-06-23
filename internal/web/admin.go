@@ -2,8 +2,10 @@ package web
 
 import (
 	_ "embed"
+	"html/template"
 	"log"
 	"net/http"
+	"os"
 )
 
 //go:embed admin/static/admin.html
@@ -17,25 +19,49 @@ var adminJS []byte
 
 // AdminHandler handles the web admin interface
 type AdminHandler struct {
-	apiKey string // Optional API key for authentication
+	apiKey    string // Optional API key for authentication
+	adminURL  string // Admin URL from environment
+	template  *template.Template
+}
+
+// AdminData contains data for the admin template
+type AdminData struct {
+	AdminURL string
 }
 
 // NewAdminHandler creates a new admin handler
 func NewAdminHandler(apiKey string) *AdminHandler {
+	adminURL := os.Getenv("ADMIN_URL")
+	if adminURL == "" {
+		log.Printf("⚠️  ADMIN_URL not set in environment - web admin interface disabled")
+		return nil
+	}
+
+	tmpl, err := template.New("admin").Parse(string(adminHTML))
+	if err != nil {
+		panic("Failed to parse admin template: " + err.Error())
+	}
+
 	return &AdminHandler{
-		apiKey: apiKey,
+		apiKey:   apiKey,
+		adminURL: adminURL,
+		template: tmpl,
 	}
 }
 
 // RegisterRoutes registers admin routes
 func (h *AdminHandler) RegisterRoutes(mux *http.ServeMux) {
+	if h.adminURL == "" {
+		return // Admin interface disabled
+	}
+
 	// Main admin interface
-	mux.HandleFunc("/p0rtadmin", h.handleAdminPage)
+	mux.HandleFunc(h.adminURL, h.handleAdminPage)
 	// Admin assets (CSS, JS)
-	mux.HandleFunc("/p0rtadmin/admin.css", h.handleAdminCSS)
-	mux.HandleFunc("/p0rtadmin/admin.js", h.handleAdminJS)
+	mux.HandleFunc(h.adminURL+"/admin.css", h.handleAdminCSS)
+	mux.HandleFunc(h.adminURL+"/admin.js", h.handleAdminJS)
 	
-	log.Printf("🌐 Web admin interface available at /p0rtadmin")
+	log.Printf("🌐 Web admin interface available at %s", h.adminURL)
 }
 
 // handleAdminPage serves the main admin HTML page
@@ -46,10 +72,17 @@ func (h *AdminHandler) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-XSS-Protection", "1; mode=block")
 	w.Header().Set("Content-Security-Policy", "default-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
 	
-	// Set content type and serve HTML
+	// Set content type and serve HTML with template data
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write(adminHTML)
+	
+	data := AdminData{
+		AdminURL: h.adminURL,
+	}
+	
+	if err := h.template.Execute(w, data); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 }
 
 // handleAdminCSS serves the CSS file

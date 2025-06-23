@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tunnel Not Connected - P0rt</title>
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/layout.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/pages/error-pages.css">
+</head>
+<body class="error-page">
+    <div>
+        <div class="icon">🔌</div>
+        <h1 class="tunnel-error">Tunnel Not Connected</h1>
+        <div class="subdomain">{{.Subdomain}}.p0rt.xyz</div>
+        <p class="message">
+            This tunnel is not currently connected.<br>
+            To activate it, run the following command from your local machine:
+        </p>
+        
+        <pre class="code-block"><code>ssh -R 443:localhost:8080 ssh.p0rt.xyz</code></pre>
+        
+        <div class="help">
+            <h2>Need Help?</h2>
+            <p>Make sure you:</p>
+            <ul>
+                <li>Connect to <strong>ssh.p0rt.xyz</strong> (not p0rt.xyz)</li>
+                <li>Replace <code>localhost:8080</code> with your local server address</li>
+                <li>Your tunnel will get a unique three-word domain automatically</li>
+            </ul>
+            <div class="back-link">
+                <a href="https://p0rt.xyz">Learn more about P0rt →</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

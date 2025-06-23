@@ -1,0 +1,69 @@
+/* P0rt Layout Styles - Common Layout Patterns */
+
+/* Standard Page Layout */
+.page-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: var(--spacing-lg);
+}
+
+/* Narrow Page Layout (for forms) */
+.page-container-narrow {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: var(--spacing-lg);
+}
+
+/* Wide Page Layout (for dashboards) */
+.page-container-wide {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-lg);
+}
+
+/* Centered Error/Status Pages */
+.page-centered {
+    text-align: center;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* Message Text */
+.message {
+    color: var(--text-secondary);
+    font-size: var(--font-lg);
+    margin-bottom: var(--spacing-xl);
+    line-height: 1.6;
+}
+
+/* Subdomain Display */
+.subdomain {
+    font-size: var(--font-2xl);
+    color: var(--accent-blue);
+    margin-bottom: var(--spacing-lg);
+    font-family: 'Monaco', 'Menlo', monospace;
+}
+
+/* Large Icons */
+.icon {
+    font-size: 4rem;
+    margin-bottom: var(--spacing-sm);
+}
+
+/* Back Link */
+.back-link {
+    text-align: center;
+    margin-top: var(--spacing-lg);
+    color: var(--text-muted);
+    font-size: var(--font-sm);
+}
+
+/* Grid Layout for Stats */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--spacing-md);
+    margin: var(--spacing-lg) 0;
+}

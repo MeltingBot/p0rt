@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Domain Banned - P0rt</title>
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/layout.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/pages/error-pages.css">
+</head>
+<body class="error-page banned-domain">
+    <div class="ban-icon">🚫</div>
+    <h1 class="banned-domain">Domain Banned</h1>
+    <div class="subdomain">{{.Subdomain}}</div>
+    <div class="message">
+        This domain has been banned due to abuse reports and is no longer accessible.
+    </div>
+    
+    <div class="error-instructions">
+        <h2>What happened?</h2>
+        <p>This domain was reported for abuse and has been reviewed by our security team. Access has been blocked to protect users.</p>
+        
+        <h2>If you believe this is an error:</h2>
+        <p>• Contact our support team with details about your use case</p>
+        <p>• Provide evidence that the domain was not being used for malicious purposes</p>
+        <p>• Appeals are reviewed on a case-by-case basis</p>
+    </div>
+    
+    <div class="footer">
+        <p>
+            <a href="/">← Back to P0rt</a> | 
+            <a href="/report-abuse">Report Abuse</a>
+        </p>
+    </div>
+</body>
+</html>

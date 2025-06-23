@@ -10,6 +10,7 @@ class P0rtAdmin {
     }
 
     init() {
+        this.initTheme();
         this.setupNavigation();
         this.setupModals();
         this.setupAbuseFilters();
@@ -24,7 +25,7 @@ class P0rtAdmin {
         let apiKey = urlParams.get('api_key') || localStorage.getItem('p0rt_api_key');
         
         if (!apiKey) {
-            apiKey = prompt('Clé API P0rt requise:');
+            apiKey = prompt('P0rt API Key required:');
             if (apiKey) {
                 localStorage.setItem('p0rt_api_key', apiKey);
             }
@@ -71,41 +72,41 @@ class P0rtAdmin {
                 // Handle specific status codes
                 switch (response.status) {
                     case 401:
-                        this.showToast('🔐 Authentification échouée. Vérifiez votre clé API.', 'error');
+                        this.showToast('🔐 Authentication failed. Check your API key.', 'error');
                         localStorage.removeItem('p0rt_api_key');
                         this.apiKey = this.getApiKey();
                         throw new Error('Authentication failed');
                         
                     case 403:
-                        this.showToast('🚫 Accès refusé. Permissions insuffisantes.', 'error');
+                        this.showToast('🚫 Access denied. Insufficient permissions.', 'error');
                         break;
                         
                     case 404:
-                        this.showToast('❓ Ressource non trouvée.', 'error');
+                        this.showToast('❓ Resource not found.', 'error');
                         break;
                         
                     case 409:
-                        this.showToast(`⚠️ Conflit: ${errorMessage}`, 'error');
+                        this.showToast(`⚠️ Conflict: ${errorMessage}`, 'error');
                         break;
                         
                     case 422:
-                        this.showToast(`📝 Données invalides: ${errorMessage}`, 'error');
+                        this.showToast(`📝 Invalid data: ${errorMessage}`, 'error');
                         break;
                         
                     case 429:
-                        this.showToast('⏳ Trop de requêtes. Veuillez patienter.', 'warning');
+                        this.showToast('⏳ Too many requests. Please wait.', 'warning');
                         break;
                         
                     case 500:
-                        this.showToast('💥 Erreur serveur interne. Contactez l\'administrateur.', 'error');
+                        this.showToast('💥 Internal server error. Contact administrator.', 'error');
                         break;
                         
                     case 503:
-                        this.showToast('🔧 Service temporairement indisponible.', 'warning');
+                        this.showToast('🔧 Service temporarily unavailable.', 'warning');
                         break;
                         
                     default:
-                        this.showToast(`❌ Erreur ${response.status}: ${errorMessage}`, 'error');
+                        this.showToast(`❌ Error ${response.status}: ${errorMessage}`, 'error');
                 }
                 
                 const error = new Error(errorMessage);
@@ -118,10 +119,10 @@ class P0rtAdmin {
         } catch (error) {
             // Network errors or other fetch errors
             if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                this.showToast('🌐 Erreur de connexion. Vérifiez votre réseau.', 'error');
+                this.showToast('🌐 Connection error. Check your network.', 'error');
             } else if (!error.status) {
                 // Only show generic error if we haven't already shown a specific one
-                this.showToast(`⚠️ Erreur: ${error.message}`, 'error');
+                this.showToast(`⚠️ Error: ${error.message}`, 'error');
             }
             
             console.error('API Call failed:', error);
@@ -238,12 +239,12 @@ class P0rtAdmin {
     updateRecentActivity(connections) {
         const activityHtml = connections.length > 0 ? 
             connections.map(conn => `
-                <div class="activity-item">
-                    <strong>${conn.domain}</strong> - ${conn.client_ip}
-                    <span class="text-muted">${this.formatDate(conn.connected_at)}</span>
+                <div class="activity-item" style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
+                    <strong>${conn.domain}</strong> - ${conn.client_ip}<br>
+                    <span class="text-muted" style="font-size: 0.875rem;">${this.formatDate(conn.connected_at)}</span>
                 </div>
             `).join('') :
-            '<div class="text-muted">Aucune activité récente</div>';
+            '<div class="text-muted" style="text-align: center; padding: 2rem;">No recent activity</div>';
         
         this.updateElement('recent-activity', activityHtml);
     }
@@ -255,7 +256,7 @@ class P0rtAdmin {
             const tbody = document.getElementById('connections-table');
             
             if (response.connections.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Aucune connexion active</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No active connections</td></tr>';
                 return;
             }
 
@@ -264,13 +265,16 @@ class P0rtAdmin {
                     <td><strong>${conn.domain}</strong></td>
                     <td>${conn.client_ip}</td>
                     <td>${this.formatDate(conn.connected_at)}</td>
-                    <td>${this.formatBytes(conn.bytes_sent || 0)} / ${this.formatBytes(conn.bytes_received || 0)}</td>
-                    <td><span class="status-badge status-online">Actif</span></td>
+                    <td>
+                        <span class="text-success">↑ ${this.formatBytes(conn.bytes_sent || conn.bytes_out || 0)}</span><br>
+                        <span class="text-primary">↓ ${this.formatBytes(conn.bytes_received || conn.bytes_in || 0)}</span>
+                    </td>
+                    <td><span class="status-badge status-online">Active</span></td>
                 </tr>
             `).join('');
         } catch (error) {
             document.getElementById('connections-table').innerHTML = 
-                '<tr><td colspan="5" class="text-center text-danger">Erreur de chargement</td></tr>';
+                '<tr><td colspan="5" class="text-center text-danger">Loading error</td></tr>';
         }
     }
 
@@ -281,7 +285,7 @@ class P0rtAdmin {
             const tbody = document.getElementById('domains-table');
             
             if (response.reservations.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Aucune réservation</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No reservations</td></tr>';
                 return;
             }
 
@@ -305,11 +309,11 @@ class P0rtAdmin {
     }
 
     async deleteDomain(domain) {
-        if (!confirm(`Supprimer la réservation pour ${domain} ?`)) return;
+        if (!confirm(`Delete reservation for ${domain}?`)) return;
 
         try {
             await this.apiCall(`/api/v1/reservations/${domain}`, { method: 'DELETE' });
-            this.showToast(`Réservation ${domain} supprimée`, 'success');
+            this.showToast(`Reservation ${domain} deleted`, 'success');
             this.loadDomains();
         } catch (error) {
             // Error already handled by apiCall
@@ -363,7 +367,7 @@ class P0rtAdmin {
                 method: 'POST',
                 body: JSON.stringify({ ip })
             });
-            this.showToast(`IP ${ip} débannie`, 'success');
+            this.showToast(`IP ${ip} unbanned`, 'success');
             this.loadSecurity();
         } catch (error) {
             // Error already handled by apiCall
@@ -407,14 +411,14 @@ class P0rtAdmin {
                     <td>
                         ${report.status === 'pending' ? `
                             <button class="btn btn-danger btn-sm" onclick="p0rtAdmin.processAbuseReport('${report.id}', 'ban')">
-                                Bannir
+                                Ban
                             </button>
                             <button class="btn btn-success btn-sm" onclick="p0rtAdmin.processAbuseReport('${report.id}', 'accept')">
-                                Accepter
+                                Accept
                             </button>
                         ` : `
                             <button class="btn btn-secondary btn-sm" onclick="p0rtAdmin.viewAbuseReport('${report.id}')">
-                                Voir
+                                View
                             </button>
                         `}
                     </td>
@@ -422,20 +426,20 @@ class P0rtAdmin {
             `).join('');
         } catch (error) {
             document.getElementById('abuse-reports-table').innerHTML = 
-                '<tr><td colspan="7" class="text-center text-danger">Erreur de chargement</td></tr>';
+                '<tr><td colspan="7" class="text-center text-danger">Loading error</td></tr>';
         }
     }
 
     async processAbuseReport(reportId, action) {
-        const actionText = action === 'ban' ? 'bannir' : 'accepter';
-        if (!confirm(`${actionText} ce report d'abus ?`)) return;
+        const actionText = action === 'ban' ? 'ban' : 'accept';
+        if (!confirm(`${actionText} this abuse report?`)) return;
 
         try {
             await this.apiCall(`/api/v1/abuse/reports/${reportId}`, {
                 method: 'POST',
                 body: JSON.stringify({ action })
             });
-            this.showToast(`Report ${actionText === 'bannir' ? 'banni' : 'accepté'}`, 'success');
+            this.showToast(`Report ${actionText}ned`, 'success');
             this.loadAbuseReports();
         } catch (error) {
             // Error already handled by apiCall
@@ -523,7 +527,7 @@ class P0rtAdmin {
                 method: 'PATCH',
                 body: JSON.stringify({ active: activate })
             });
-            this.showToast(`Clé ${activate ? 'activée' : 'désactivée'}`, 'success');
+            this.showToast(`Key ${activate ? 'activated' : 'deactivated'}`, 'success');
             this.loadKeys();
         } catch (error) {
             // Error already handled by apiCall
@@ -564,15 +568,15 @@ class P0rtAdmin {
                         <input type="text" class="form-input" name="comment">
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn" onclick="closeModal()">Annuler</button>
-                        <button type="submit" class="btn btn-primary">Créer</button>
+                        <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Create</button>
                     </div>
                 </form>
             `);
         };
 
         window.showAddKeyModal = () => {
-            this.showModal('Ajouter Clé SSH', `
+            this.showModal('Add SSH Key', `
                 <form onsubmit="p0rtAdmin.addKey(event)">
                     <div class="form-group">
                         <label class="form-label">Clé SSH publique:</label>
@@ -583,8 +587,8 @@ class P0rtAdmin {
                         <input type="text" class="form-input" name="comment">
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn" onclick="closeModal()">Annuler</button>
-                        <button type="submit" class="btn btn-primary">Ajouter</button>
+                        <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add</button>
                     </div>
                 </form>
             `);
@@ -610,7 +614,7 @@ class P0rtAdmin {
                     comment: formData.get('comment')
                 })
             });
-            this.showToast('Réservation créée', 'success');
+            this.showToast('Reservation created', 'success');
             closeModal();
             this.loadDomains();
         } catch (error) {
@@ -630,7 +634,7 @@ class P0rtAdmin {
                     comment: formData.get('comment')
                 })
             });
-            this.showToast('Clé ajoutée', 'success');
+            this.showToast('Key added', 'success');
             closeModal();
             this.loadKeys();
         } catch (error) {
@@ -688,15 +692,53 @@ class P0rtAdmin {
 
     formatDate(dateString) {
         if (!dateString) return '-';
-        return new Date(dateString).toLocaleString('fr-FR');
+        return new Date(dateString).toLocaleString('en-US');
     }
 
     formatBytes(bytes) {
-        if (bytes === 0) return '0 B';
+        if (!bytes || bytes === 0) return '0 B';
+        
         const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        
+        if (i >= sizes.length) {
+            return parseFloat((bytes / Math.pow(k, sizes.length - 1)).toFixed(2)) + ' ' + sizes[sizes.length - 1];
+        }
+        
+        const value = bytes / Math.pow(k, i);
+        const decimals = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+        
+        return parseFloat(value.toFixed(decimals)) + ' ' + sizes[i];
+    }
+
+    // Dark Mode functionality
+    toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('p0rt_theme', newTheme);
+        
+        // Update theme toggle icon
+        const toggleButton = document.querySelector('.theme-toggle');
+        if (toggleButton) {
+            toggleButton.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+            toggleButton.title = newTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+        }
+    }
+
+    initTheme() {
+        // Get saved theme or default to light
+        const savedTheme = localStorage.getItem('p0rt_theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        
+        // Update theme toggle icon
+        const toggleButton = document.querySelector('.theme-toggle');
+        if (toggleButton) {
+            toggleButton.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+            toggleButton.title = savedTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+        }
     }
 }
 

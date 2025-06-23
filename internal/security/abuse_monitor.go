@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/p0rt/p0rt/internal/web"
 )
 
 type AbuseMonitor struct {
@@ -26,6 +28,9 @@ type AbuseMonitor struct {
 
 	// Abuse report manager
 	reportManager *AbuseReportManager
+
+	// Abuse report form handler
+	abuseReportHandler *web.AbuseReportHandler
 }
 
 type ConnectionLimit struct {
@@ -37,8 +42,9 @@ type ConnectionLimit struct {
 
 func NewAbuseMonitor() *AbuseMonitor {
 	monitor := &AbuseMonitor{
-		connectionLimits: make(map[string]*ConnectionLimit),
-		reportManager:    NewAbuseReportManager(),
+		connectionLimits:   make(map[string]*ConnectionLimit),
+		reportManager:      NewAbuseReportManager(),
+		abuseReportHandler: web.NewAbuseReportHandler(),
 		// Note: Content analysis removed for privacy - only connection monitoring
 	}
 
@@ -249,194 +255,13 @@ func (am *AbuseMonitor) CreateAbuseReportHandler() http.HandlerFunc {
 }
 
 func (am *AbuseMonitor) serveReportForm(w http.ResponseWriter, r *http.Request) {
-	siteKey := os.Getenv("HCAPTCHA_SITE_KEY")
-	if siteKey == "" {
-		// Use test site key for development
-		siteKey = "10000000-ffff-ffff-ffff-000000000001"
+	// Use the embedded abuse report handler
+	if am.abuseReportHandler != nil {
+		am.abuseReportHandler.ServeAbuseReportForm(w, r)
+	} else {
+		// Fallback to simple error response
+		http.Error(w, "Abuse report form not available", http.StatusInternalServerError)
 	}
-
-	html := `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Report Abuse - P0rt Security</title>
-    <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 2rem;
-            background: #0a0a0a;
-            color: #fafafa;
-            line-height: 1.6;
-        }
-        h1 {
-            color: #ef4444;
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-        label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: #60a5fa;
-            font-weight: bold;
-        }
-        input, textarea, select {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #333;
-            border-radius: 4px;
-            background: #1a1a1a;
-            color: #fafafa;
-            font-size: 1rem;
-        }
-        textarea {
-            height: 120px;
-            resize: vertical;
-        }
-        button {
-            background: #ef4444;
-            color: white;
-            padding: 0.75rem 2rem;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1rem;
-            width: 100%;
-        }
-        button:hover {
-            background: #dc2626;
-        }
-        .info {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 6px;
-            padding: 1rem;
-            margin-bottom: 2rem;
-            color: #888;
-        }
-        .back-link {
-            text-align: center;
-            margin-top: 2rem;
-        }
-        .back-link a {
-            color: #60a5fa;
-            text-decoration: none;
-        }
-        .back-link a:hover {
-            text-decoration: underline;
-        }
-    </style>
-</head>
-<body>
-    <h1>🛡️ Report Abuse</h1>
-    
-    <div class="info">
-        <strong>Help us keep P0rt safe!</strong><br>
-        Report tunnels being used for phishing, spam, scams, or other malicious activities.
-        All reports are reviewed by our security team.
-    </div>
-    
-    <form method="POST" action="/report-abuse">
-        <div class="form-group">
-            <label for="domain">Suspicious Domain *</label>
-            <input type="text" id="domain" name="domain" placeholder="example-domain.p0rt.xyz" required>
-        </div>
-        
-        <div class="form-group">
-            <label for="reason">Type of Abuse *</label>
-            <select id="reason" name="reason" required>
-                <option value="">Select abuse type...</option>
-                <option value="phishing">Phishing (fake login pages, account theft)</option>
-                <option value="spam">Spam (unwanted promotional content)</option>
-                <option value="scam">Scam (fraudulent schemes, fake offers)</option>
-                <option value="malware">Malware distribution</option>
-                <option value="copyright">Copyright infringement</option>
-                <option value="harassment">Harassment or threatening content</option>
-                <option value="other">Other malicious activity</option>
-            </select>
-        </div>
-        
-        <div class="form-group">
-            <label for="details">Additional Details</label>
-            <textarea id="details" name="details" placeholder="Describe what you observed (URLs, screenshots, etc.)"></textarea>
-        </div>
-        
-        <div class="form-group">
-            <label for="contact">Your Email (optional)</label>
-            <input type="email" id="contact" name="contact" placeholder="your-email@example.com">
-            <small style="color: #888;">Only used if we need clarification about your report</small>
-        </div>
-        
-        <div class="form-group">
-            <div class="h-captcha" data-sitekey="%s"></div>
-        </div>
-        
-        <button type="submit">Submit Report</button>
-    </form>
-    
-    <div class="back-link">
-        <a href="/">← Back to P0rt</a>
-    </div>
-    
-    <script>
-        document.querySelector('form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const submitButton = document.querySelector('button[type="submit"]');
-            
-            // Get hCaptcha response
-            const hcaptchaResponse = hcaptcha.getResponse();
-            if (!hcaptchaResponse) {
-                alert('Please complete the captcha verification.');
-                return;
-            }
-            
-            const formData = new FormData(this);
-            formData.append('h-captcha-response', hcaptchaResponse);
-            
-            submitButton.textContent = 'Submitting...';
-            submitButton.disabled = true;
-            
-            fetch('/report-abuse', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'reported') {
-                    document.body.innerHTML = '<div style="text-align: center; padding: 4rem;"><h1 style="color: #10b981;">✓ Report Submitted</h1><p>Thank you for helping keep P0rt safe. Our security team will investigate this report.</p><p><a href="/" style="color: #60a5fa;">Back to P0rt</a></p></div>';
-                } else {
-                    throw new Error(data.message || 'Report failed');
-                }
-            })
-            .catch(error => {
-                submitButton.textContent = 'Submit Report';
-                submitButton.disabled = false;
-                hcaptcha.reset();
-                
-                // Show specific error message if available
-                const errorMessage = error.message.includes('Report failed') ? 
-                    'Failed to submit report. Please try again.' : 
-                    error.message;
-                alert(errorMessage);
-            });
-        });
-    </script>
-</body>
-</html>`
-
-	// Replace placeholder with actual site key
-	finalHTML := strings.ReplaceAll(html, "%s", siteKey)
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(finalHTML))
 }
 
 // verifyHCaptcha verifies the hCaptcha response with hCaptcha service

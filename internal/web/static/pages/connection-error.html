@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Error - P0rt</title>
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/layout.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/pages/error-pages.css">
+</head>
+<body class="error-page">
+    <div>
+        <div class="icon">⚠️</div>
+        <h1 class="service-error">Service Error</h1>
+        <div class="subdomain">{{.Subdomain}}.p0rt.xyz</div>
+        <p class="message">
+            The tunnel is connected but your local service has an issue.
+        </p>
+        
+        <div class="error-details">
+            {{.ErrorMessage}}
+        </div>
+        
+        <div class="help">
+            <h2>How to Fix This</h2>
+            <ul>
+                <li>Make sure your local service is running</li>
+                <li>Check that it's listening on the correct port</li>
+                <li>Verify the port in your SSH command matches your service</li>
+                <li>Check firewall settings on your local machine</li>
+            </ul>
+            <div class="back-link">
+                <a href="https://p0rt.xyz">Back to P0rt →</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

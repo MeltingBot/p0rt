@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>P0rt Admin</title>
-    <link rel="stylesheet" href="/p0rtadmin/admin.css">
+    <link rel="stylesheet" href="{{.AdminURL}}/admin.css">
     <link rel="icon" type="image/x-icon" href="data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAFYSURBVDiNlZM9SwNBEIafgwTSWFhYWKQQwcJCG1sLwcJCG2uxsLBQsLGwsLCwsLCwsLGwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLC">
 </head>
 <body>
@@ -14,11 +14,14 @@
         </div>
         <div class="nav-links">
             <a href="#dashboard" class="nav-link active" data-section="dashboard">Dashboard</a>
-            <a href="#connections" class="nav-link" data-section="connections">Connexions</a>
-            <a href="#domains" class="nav-link" data-section="domains">Domaines</a>
-            <a href="#security" class="nav-link" data-section="security">Sécurité</a>
-            <a href="#abuse" class="nav-link" data-section="abuse">Abus</a>
-            <a href="#keys" class="nav-link" data-section="keys">Clés SSH</a>
+            <a href="#connections" class="nav-link" data-section="connections">Connections</a>
+            <a href="#domains" class="nav-link" data-section="domains">Domains</a>
+            <a href="#security" class="nav-link" data-section="security">Security</a>
+            <a href="#abuse" class="nav-link" data-section="abuse">Abuse</a>
+            <a href="#keys" class="nav-link" data-section="keys">SSH Keys</a>
+            <button class="theme-toggle" onclick="p0rtAdmin.toggleTheme()" title="Toggle theme">
+                🌙
+            </button>
         </div>
     </nav>
 
@@ -27,36 +30,36 @@
         <section id="dashboard" class="section active">
             <div class="section-header">
                 <h2>Dashboard</h2>
-                <button class="btn btn-refresh" onclick="refreshData()">↻ Actualiser</button>
+                <button class="btn btn-refresh" onclick="refreshData()">↻ Refresh</button>
             </div>
 
             <div class="cards-grid">
                 <div class="stat-card">
                     <div class="stat-value" id="active-tunnels">-</div>
-                    <div class="stat-label">Tunnels Actifs</div>
+                    <div class="stat-label">Active Tunnels</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="total-connections">-</div>
-                    <div class="stat-label">Connexions Totales</div>
+                    <div class="stat-label">Total Connections</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="banned-ips">-</div>
-                    <div class="stat-label">IPs Bannies</div>
+                    <div class="stat-label">Banned IPs</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="abuse-reports">-</div>
-                    <div class="stat-label">Reports d'Abus</div>
+                    <div class="stat-label">Abuse Reports</div>
                 </div>
             </div>
 
             <div class="charts-grid">
                 <div class="chart-card">
-                    <h3>Serveur Status</h3>
-                    <div id="server-status">Chargement...</div>
+                    <h3>Server Status</h3>
+                    <div id="server-status">Loading...</div>
                 </div>
                 <div class="chart-card">
-                    <h3>Activité Récente</h3>
-                    <div id="recent-activity">Chargement...</div>
+                    <h3>Recent Activity</h3>
+                    <div id="recent-activity">Loading...</div>
                 </div>
             </div>
         </section>
@@ -64,22 +67,22 @@
         <!-- Connections Section -->
         <section id="connections" class="section">
             <div class="section-header">
-                <h2>Connexions Actives</h2>
-                <button class="btn btn-refresh" onclick="loadConnections()">↻ Actualiser</button>
+                <h2>Active Connections</h2>
+                <button class="btn btn-refresh" onclick="loadConnections()">↻ Refresh</button>
             </div>
             <div class="table-container">
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Domaine</th>
-                            <th>IP Client</th>
-                            <th>Connecté depuis</th>
-                            <th>Trafic</th>
+                            <th>Domain</th>
+                            <th>Client IP</th>
+                            <th>Connected Since</th>
+                            <th>Traffic (↑Sent/↓Received)</th>
                             <th>Status</th>
                         </tr>
                     </thead>
                     <tbody id="connections-table">
-                        <tr><td colspan="5" class="loading">Chargement des connexions...</td></tr>
+                        <tr><td colspan="5" class="loading">Loading connections...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -88,22 +91,22 @@
         <!-- Domains Section -->
         <section id="domains" class="section">
             <div class="section-header">
-                <h2>Réservations de Domaines</h2>
-                <button class="btn btn-primary" onclick="showAddDomainModal()">+ Nouvelle Réservation</button>
+                <h2>Domain Reservations</h2>
+                <button class="btn btn-primary" onclick="showAddDomainModal()">+ New Reservation</button>
             </div>
             <div class="table-container">
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Domaine</th>
-                            <th>Empreinte SSH</th>
-                            <th>Commentaire</th>
+                            <th>Domain</th>
+                            <th>SSH Fingerprint</th>
+                            <th>Comment</th>
                             <th>Date</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="domains-table">
-                        <tr><td colspan="5" class="loading">Chargement des domaines...</td></tr>
+                        <tr><td colspan="5" class="loading">Loading domains...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -112,35 +115,35 @@
         <!-- Security Section -->
         <section id="security" class="section">
             <div class="section-header">
-                <h2>Sécurité</h2>
-                <button class="btn btn-refresh" onclick="loadSecurity()">↻ Actualiser</button>
+                <h2>Security</h2>
+                <button class="btn btn-refresh" onclick="loadSecurity()">↻ Refresh</button>
             </div>
 
             <div class="cards-grid">
                 <div class="stat-card warn">
                     <div class="stat-value" id="auth-failures">-</div>
-                    <div class="stat-label">Échecs d'Auth (24h)</div>
+                    <div class="stat-label">Auth Failures (24h)</div>
                 </div>
                 <div class="stat-card danger">
                     <div class="stat-value" id="scan-attempts">-</div>
-                    <div class="stat-label">Tentatives de Scan</div>
+                    <div class="stat-label">Scan Attempts</div>
                 </div>
             </div>
 
             <div class="table-container">
-                <h3>IPs Bannies</h3>
+                <h3>Banned IPs</h3>
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Adresse IP</th>
-                            <th>Raison</th>
-                            <th>Date de Ban</th>
-                            <th>Expire</th>
+                            <th>IP Address</th>
+                            <th>Reason</th>
+                            <th>Ban Date</th>
+                            <th>Expires</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="banned-ips-table">
-                        <tr><td colspan="5" class="loading">Chargement des IPs bannies...</td></tr>
+                        <tr><td colspan="5" class="loading">Loading banned IPs...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -149,11 +152,11 @@
         <!-- Abuse Section -->
         <section id="abuse" class="section">
             <div class="section-header">
-                <h2>Reports d'Abus</h2>
+                <h2>Abuse Reports</h2>
                 <div class="filter-tabs">
-                    <button class="filter-tab active" data-status="pending">En Attente</button>
-                    <button class="filter-tab" data-status="processed">Traités</button>
-                    <button class="filter-tab" data-status="">Tous</button>
+                    <button class="filter-tab active" data-status="pending">Pending</button>
+                    <button class="filter-tab" data-status="processed">Processed</button>
+                    <button class="filter-tab" data-status="">All</button>
                 </div>
             </div>
 
@@ -171,7 +174,7 @@
                         </tr>
                     </thead>
                     <tbody id="abuse-reports-table">
-                        <tr><td colspan="7" class="loading">Chargement des reports...</td></tr>
+                        <tr><td colspan="7" class="loading">Loading des reports...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -180,23 +183,23 @@
         <!-- SSH Keys Section -->
         <section id="keys" class="section">
             <div class="section-header">
-                <h2>Clés SSH Autorisées</h2>
-                <button class="btn btn-primary" onclick="showAddKeyModal()">+ Ajouter Clé</button>
+                <h2>Authorized SSH Keys</h2>
+                <button class="btn btn-primary" onclick="showAddKeyModal()">+ Add Key</button>
             </div>
             <div class="table-container">
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Empreinte</th>
+                            <th>Fingerprint</th>
                             <th>Type</th>
-                            <th>Commentaire</th>
-                            <th>Actif</th>
-                            <th>Ajouté</th>
+                            <th>Comment</th>
+                            <th>Active</th>
+                            <th>Added</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="keys-table">
-                        <tr><td colspan="6" class="loading">Chargement des clés...</td></tr>
+                        <tr><td colspan="6" class="loading">Loading des clés...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -219,6 +222,6 @@
     <!-- Toast notifications -->
     <div id="toast-container" class="toast-container"></div>
 
-    <script src="/p0rtadmin/admin.js"></script>
+    <script src="{{.AdminURL}}/admin.js"></script>
 </body>
 </html>

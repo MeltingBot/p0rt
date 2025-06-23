@@ -1,0 +1,82 @@
+/* P0rt Error Pages - Specific Styling for Error/Status Pages */
+
+/* Error Page Specific Layouts */
+.error-page {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: var(--spacing-lg);
+    text-align: center;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* Error Page Headers */
+.error-page h1 {
+    font-size: var(--font-3xl);
+    margin-bottom: var(--spacing-sm);
+}
+
+.error-page h1.service-error {
+    color: var(--warning);
+}
+
+.error-page h1.tunnel-error {
+    color: var(--error);
+}
+
+.error-page h1.banned-domain {
+    color: var(--error);
+}
+
+/* Pre-formatted Code in Error Pages */
+.error-page pre {
+    text-align: left;
+    max-width: 600px;
+    margin: 0 auto var(--spacing-lg);
+}
+
+.error-page pre code {
+    color: var(--accent-blue);
+}
+
+/* Error Page Specific Instructions */
+.error-instructions {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    margin: var(--spacing-lg) 0;
+    text-align: left;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.error-instructions h2 {
+    color: var(--warning);
+    margin-top: 0;
+    font-size: var(--font-xl);
+}
+
+.error-instructions p {
+    margin-bottom: var(--spacing-sm);
+    color: #ccc;
+}
+
+.error-instructions ul {
+    text-align: left;
+    display: inline-block;
+    margin: 0 auto;
+}
+
+/* Ban Page Specific Styles */
+.ban-icon {
+    font-size: 4rem;
+    margin-bottom: var(--spacing-sm);
+}
+
+.banned-domain .subdomain {
+    color: var(--error);
+}

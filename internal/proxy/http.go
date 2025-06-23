@@ -27,6 +27,8 @@ type HTTPProxy struct {
 	abuseMonitor       *security.AbuseMonitor
 	apiHandler         *api.Handler
 	adminHandler       *web.AdminHandler
+	homepageHandler    *web.HomepageHandler
+	errorPageHandler   *web.ErrorPageHandler
 	reservationManager domain.ReservationManagerInterface
 	statsManager       *stats.Manager
 }
@@ -93,8 +95,10 @@ func logStructured(r *http.Request, message string, args ...interface{}) {
 
 func NewHTTPProxy(sshServer SSHServer) *HTTPProxy {
 	return &HTTPProxy{
-		sshServer:    sshServer,
-		abuseMonitor: security.NewAbuseMonitor(),
+		sshServer:        sshServer,
+		abuseMonitor:     security.NewAbuseMonitor(),
+		homepageHandler:  web.NewHomepageHandler(),
+		errorPageHandler: web.NewErrorPageHandler(),
 	}
 }
 
@@ -103,6 +107,8 @@ func NewHTTPProxyWithAPI(sshServer SSHServer, reservationManager domain.Reservat
 	proxy := &HTTPProxy{
 		sshServer:          sshServer,
 		abuseMonitor:       security.NewAbuseMonitor(),
+		homepageHandler:    web.NewHomepageHandler(),
+		errorPageHandler:   web.NewErrorPageHandler(),
 		reservationManager: reservationManager,
 		statsManager:       statsManager,
 	}
@@ -136,11 +142,30 @@ func (p *HTTPProxy) Start(port string) error {
 		p.adminHandler.RegisterRoutes(mux)
 	}
 
+	// Register CSS static files
+	if p.errorPageHandler != nil {
+		mux.HandleFunc("/static/css/base.css", func(w http.ResponseWriter, r *http.Request) {
+			p.errorPageHandler.ServeCSSFile(w, "base.css")
+		})
+		mux.HandleFunc("/static/css/layout.css", func(w http.ResponseWriter, r *http.Request) {
+			p.errorPageHandler.ServeCSSFile(w, "layout.css")
+		})
+		mux.HandleFunc("/static/css/components.css", func(w http.ResponseWriter, r *http.Request) {
+			p.errorPageHandler.ServeCSSFile(w, "components.css")
+		})
+		mux.HandleFunc("/static/css/pages/error-pages.css", func(w http.ResponseWriter, r *http.Request) {
+			p.errorPageHandler.ServeCSSFile(w, "error-pages.css")
+		})
+		mux.HandleFunc("/static/css/pages/forms.css", func(w http.ResponseWriter, r *http.Request) {
+			p.errorPageHandler.ServeCSSFile(w, "forms.css")
+		})
+		// Note: dashboard.css removed - security dashboard is in admin interface only
+	}
+
 	// Endpoint pour signaler des abus
 	mux.HandleFunc("/report-abuse", p.abuseMonitor.CreateAbuseReportHandler())
 
-	// Endpoint pour statistiques de sécurité (admin)
-	mux.HandleFunc("/security-stats", p.handleSecurityStats)
+	// Note: Security stats moved to admin interface - no public endpoint needed
 
 	// Endpoint pour statistiques de domaines (admin)
 	mux.HandleFunc("/domain-stats", p.handleDomainStats)
@@ -438,108 +463,7 @@ func (p *HTTPProxy) serveConnectionErrorPage(w http.ResponseWriter, _ *http.Requ
 		errorMsg = "Unable to connect to the local service."
 	}
 
-	html := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Error - P0rt</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 2rem;
-            background: #0a0a0a;
-            color: #fafafa;
-            text-align: center;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        h1 { 
-            font-size: 2.5rem; 
-            margin-bottom: 1rem;
-            color: #f59e0b;
-        }
-        .subdomain {
-            font-size: 1.5rem;
-            color: #60a5fa;
-            margin-bottom: 2rem;
-            font-family: 'Monaco', 'Menlo', monospace;
-        }
-        .message { 
-            color: #888; 
-            font-size: 1.125rem; 
-            margin-bottom: 3rem;
-            line-height: 1.6;
-        }
-        .error-details {
-            background: #1a1a1a;
-            border: 1px solid #f59e0b;
-            border-radius: 6px;
-            padding: 1rem;
-            margin: 2rem auto;
-            max-width: 600px;
-            color: #f59e0b;
-        }
-        .help {
-            margin-top: 2rem;
-            padding-top: 2rem;
-            border-top: 1px solid #333;
-        }
-        .help h2 {
-            font-size: 1.25rem;
-            margin-bottom: 1rem;
-        }
-        a { 
-            color: #60a5fa; 
-            text-decoration: none;
-        }
-        a:hover { 
-            text-decoration: underline;
-        }
-        .icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-        }
-    </style>
-</head>
-<body>
-    <div>
-        <div class="icon">⚠️</div>
-        <h1>Service Error</h1>
-        <div class="subdomain">%s.p0rt.xyz</div>
-        <p class="message">
-            The tunnel is connected but your local service has an issue.
-        </p>
-        
-        <div class="error-details">
-            %s
-        </div>
-        
-        <div class="help">
-            <h2>How to Fix This</h2>
-            <ul style="text-align: left; display: inline-block;">
-                <li>Make sure your local service is running</li>
-                <li>Check that it's listening on the correct port</li>
-                <li>Verify the port in your SSH command matches your service</li>
-                <li>Check firewall settings on your local machine</li>
-            </ul>
-            <p style="margin-top: 2rem;">
-                <a href="https://p0rt.xyz">Back to P0rt →</a>
-            </p>
-        </div>
-    </div>
-</body>
-</html>`, subdomain, errorMsg)
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.Header().Set("X-Error-Type", "service-error")
-	w.WriteHeader(http.StatusOK) // Return 200 to avoid CloudFlare errors
-	w.Write([]byte(html))
+	p.errorPageHandler.ServeConnectionError(w, subdomain, errorMsg)
 }
 
 func (p *HTTPProxy) serveErrorPage(w http.ResponseWriter, _ *http.Request, host string) {
@@ -548,111 +472,7 @@ func (p *HTTPProxy) serveErrorPage(w http.ResponseWriter, _ *http.Request, host 
 		subdomain = host[:idx]
 	}
 
-	html := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tunnel Not Connected - P0rt</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 2rem;
-            background: #0a0a0a;
-            color: #fafafa;
-            text-align: center;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        h1 { 
-            font-size: 2.5rem; 
-            margin-bottom: 1rem;
-            color: #ef4444;
-        }
-        .subdomain {
-            font-size: 1.5rem;
-            color: #60a5fa;
-            margin-bottom: 2rem;
-            font-family: 'Monaco', 'Menlo', monospace;
-        }
-        .message { 
-            color: #888; 
-            font-size: 1.125rem; 
-            margin-bottom: 3rem;
-            line-height: 1.6;
-        }
-        pre {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 6px;
-            padding: 1.5rem;
-            overflow-x: auto;
-            text-align: left;
-            max-width: 600px;
-            margin: 0 auto 2rem;
-        }
-        code { 
-            font-family: 'Monaco', 'Menlo', monospace;
-            color: #60a5fa;
-        }
-        .help {
-            margin-top: 2rem;
-            padding-top: 2rem;
-            border-top: 1px solid #333;
-        }
-        .help h2 {
-            font-size: 1.25rem;
-            margin-bottom: 1rem;
-        }
-        a { 
-            color: #60a5fa; 
-            text-decoration: none;
-        }
-        a:hover { 
-            text-decoration: underline;
-        }
-        .icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-        }
-    </style>
-</head>
-<body>
-    <div>
-        <div class="icon">🔌</div>
-        <h1>Tunnel Not Connected</h1>
-        <div class="subdomain">%s.p0rt.xyz</div>
-        <p class="message">
-            This tunnel is not currently connected.<br>
-            To activate it, run the following command from your local machine:
-        </p>
-        
-        <pre><code>ssh -R 443:localhost:8080 ssh.p0rt.xyz</code></pre>
-        
-        <div class="help">
-            <h2>Need Help?</h2>
-            <p>Make sure you:</p>
-            <ul style="text-align: left; display: inline-block;">
-                <li>Connect to <strong>ssh.p0rt.xyz</strong> (not p0rt.xyz)</li>
-                <li>Replace <code>localhost:8080</code> with your local server address</li>
-                <li>Your tunnel will get a unique three-word domain automatically</li>
-            </ul>
-            <p style="margin-top: 2rem;">
-                <a href="https://p0rt.xyz">Learn more about P0rt →</a>
-            </p>
-        </div>
-    </div>
-</body>
-</html>`, subdomain)
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.WriteHeader(http.StatusOK) // Return 200 to avoid CloudFlare 502
-	w.Write([]byte(html))
+	p.errorPageHandler.ServeTunnelError(w, subdomain)
 }
 
 func (p *HTTPProxy) serveBannedDomainPage(w http.ResponseWriter, _ *http.Request, host string) {
@@ -661,113 +481,7 @@ func (p *HTTPProxy) serveBannedDomainPage(w http.ResponseWriter, _ *http.Request
 		subdomain = host[:idx]
 	}
 
-	html := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Domain Banned - P0rt</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 2rem;
-            background: #0a0a0a;
-            color: #fafafa;
-            text-align: center;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        h1 { 
-            font-size: 2.5rem; 
-            margin-bottom: 1rem;
-            color: #ef4444;
-        }
-        .subdomain {
-            font-size: 1.5rem;
-            color: #60a5fa;
-            margin-bottom: 2rem;
-            font-family: 'Monaco', 'Menlo', monospace;
-        }
-        .message { 
-            color: #888; 
-            font-size: 1.125rem; 
-            margin-bottom: 3rem;
-            line-height: 1.6;
-        }
-        .instructions {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 2rem;
-            margin: 2rem 0;
-            text-align: left;
-        }
-        .instructions h2 {
-            color: #f59e0b;
-            margin-top: 0;
-            font-size: 1.25rem;
-        }
-        .instructions p {
-            margin-bottom: 1rem;
-            color: #ccc;
-        }
-        .footer {
-            margin-top: 3rem;
-            padding-top: 2rem;
-            border-top: 1px solid #333;
-            color: #666;
-            font-size: 0.9rem;
-        }
-        .footer a {
-            color: #60a5fa;
-            text-decoration: none;
-        }
-        .footer a:hover {
-            text-decoration: underline;
-        }
-        .ban-icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-        }
-    </style>
-</head>
-<body>
-    <div class="ban-icon">🚫</div>
-    <h1>Domain Banned</h1>
-    <div class="subdomain">%s</div>
-    <div class="message">
-        This domain has been banned due to abuse reports and is no longer accessible.
-    </div>
-    
-    <div class="instructions">
-        <h2>What happened?</h2>
-        <p>This domain was reported for abuse and has been reviewed by our security team. Access has been blocked to protect users.</p>
-        
-        <h2>If you believe this is an error:</h2>
-        <p>• Contact our support team with details about your use case</p>
-        <p>• Provide evidence that the domain was not being used for malicious purposes</p>
-        <p>• Appeals are reviewed on a case-by-case basis</p>
-    </div>
-    
-    <div class="footer">
-        <p>
-            <a href="/">← Back to P0rt</a> | 
-            <a href="/report-abuse">Report Abuse</a>
-        </p>
-        <p>P0rt Security Team</p>
-    </div>
-</body>
-</html>`, subdomain)
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.Header().Set("X-Error-Type", "domain-banned")
-	w.WriteHeader(http.StatusForbidden)
-	w.Write([]byte(html))
+	p.errorPageHandler.ServeBannedDomain(w, subdomain)
 }
 
 func (p *HTTPProxy) serveStaticContent(w http.ResponseWriter, r *http.Request) {
@@ -779,7 +493,7 @@ func (p *HTTPProxy) serveStaticContent(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
+func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, r *http.Request) {
 	// Get access mode from stats if available
 	accessMode := "restricted"
 	accessBadge := `<span class="bg-orange-500 text-white px-3 py-1 rounded-full text-sm font-semibold">🔒 Beta Access</span>`
@@ -819,322 +533,13 @@ func (p *HTTPProxy) serveHomePage(w http.ResponseWriter, _ *http.Request) {
             </div>`
 	}
 
-	html := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>P0rt.xyz - Expose Local Servers to the Internet</title>
-    <meta name="description" content="P0rt.xyz allows you to expose local servers to the internet without installation, signup, and free forever.">
-    <meta name="keywords" content="P0rt.xyz, expose local servers, internet, free, ngrok alternative, ssh tunneling">
-    <meta name="author" content="P0rt">
-    
-    <!-- Open Graph meta tags for social sharing -->
-    <meta property="og:title" content="P0rt.xyz - Expose Local Servers to the Internet">
-    <meta property="og:description" content="P0rt.xyz allows you to expose local servers to the internet without installation, signup, and free forever.">
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://p0rt.xyz">
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:400,700" rel="stylesheet" />
-    <style>
-        .gradient {
-            background: linear-gradient(90deg, #0fffc1, #7e0fff);
-        }
-        .code-block {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 8px;
-            font-family: 'Monaco', 'Menlo', monospace;
-        }
-        .glow {
-            box-shadow: 0 0 20px rgba(126, 15, 255, 0.3);
-        }
-    </style>
-</head>
-<body class="leading-normal tracking-normal text-white gradient" style="font-family: 'Source Sans Pro', sans-serif;">
-    <!-- Header -->
-    <nav id="header" class="w-full text-white">
-        <div class="w-full container mx-auto flex flex-wrap items-center justify-between mt-0 py-3">
-            <div class="text-white no-underline hover:no-underline font-bold text-2xl lg:text-4xl mt-2">
-                <span class="text-4xl">🚀</span> P0rt.xyz
-            </div>
-            <div class="mt-2">
-                %s
-            </div>
-        </div>
-    </nav>
-
-    <!-- Hero Section -->
-    <div class="container mx-auto px-4 py-16">
-        <div class="text-center max-w-4xl mx-auto">
-            <h1 class="text-4xl md:text-6xl font-bold mb-6">
-                <span class="text-white">Localhost to </span><span class="text-cyan-300">HTTPS</span><span class="text-white"> in seconds</span>
-            </h1>
-            <p class="text-2xl md:text-3xl text-gray-200 mb-12">
-                One SSH command. Zero config. Three-word domains.
-            </p>
-            
-            <div class="bg-black/50 backdrop-blur-sm rounded-xl p-8 mb-8 max-w-2xl mx-auto">
-                <div class="text-left code-block p-6 text-xl">
-                    <span class="text-green-400">$</span> <span class="text-white">ssh -R 443:localhost:3000 ssh.p0rt.xyz</span>
-                </div>
-                <div class="mt-6 text-center">
-                    <p class="text-gray-300 text-lg">Your app is now live at:</p>
-                    <p class="text-3xl font-bold text-cyan-400 mt-2">whale-guitar-fox.p0rt.xyz</p>
-                </div>
-            </div>
-            
-            %s
-            
-            <div class="grid grid-cols-3 gap-8 max-w-2xl mx-auto text-white">
-                <div>
-                    <div class="text-5xl mb-2">⚡</div>
-                    <p class="font-semibold">Instant</p>
-                </div>
-                <div>
-                    <div class="text-5xl mb-2">🔒</div>
-                    <p class="font-semibold">Secure</p>
-                </div>
-                <div>
-                    <div class="text-5xl mb-2">🎯</div>
-                    <p class="font-semibold">Persistent</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Features Section -->
-    <section class="bg-gray-900 py-16">
-        <div class="container max-w-6xl mx-auto px-4">
-            <h2 class="text-4xl md:text-5xl font-bold text-center text-white mb-16">
-                Why developers love P0rt
-            </h2>
-            
-            <div class="grid md:grid-cols-2 gap-12">
-                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
-                    <h3 class="text-2xl font-bold text-white mb-4">🧠 Smart Domain Generation</h3>
-                    <p class="text-gray-300 mb-4">
-                        Your SSH key fingerprint generates a unique three-word domain. Always get the same domain with the same key.
-                    </p>
-                    <div class="bg-gray-900 rounded p-4 font-mono text-sm">
-                        <div class="text-green-400">SSH Key → SHA256 → 3 Words</div>
-                        <div class="text-gray-500 mt-2">304 million unique combinations</div>
-                    </div>
-                </div>
-                
-                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
-                    <h3 class="text-2xl font-bold text-white mb-4">🛡️ Enterprise-Grade Security</h3>
-                    <p class="text-gray-300 mb-4">
-                        End-to-end encryption with SSH. Automatic HTTPS with valid certificates. Advanced abuse prevention and forensic tracking for enterprise compliance.
-                    </p>
-                    <div class="bg-gray-900 rounded p-4 mb-4">
-                        <div class="text-xs text-gray-400 mb-2">Security Headers for Traceability:</div>
-                        <div class="font-mono text-xs text-green-400">X-P0rt-Fingerprint: SHA256:abc123...</div>
-                        <div class="font-mono text-xs text-blue-400">X-P0rt-Origin: 192.168.1.100</div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 text-sm text-gray-400">
-                        <span>✓ SSH Encrypted</span>
-                        <span>✓ HTTPS Ready</span>
-                        <span>✓ Abuse Reporting</span>
-                        <span>✓ Forensic Tracking</span>
-                        <span>✓ IP Traceability</span>
-                        <span>✓ Auto Domain Banning</span>
-                    </div>
-                </div>
-                
-                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
-                    <h3 class="text-2xl font-bold text-white mb-4">⚡ Built for Speed</h3>
-                    <p class="text-gray-300 mb-4">
-                        Written in Go for blazing fast performance. Handles thousands of concurrent connections with minimal resource usage.
-                    </p>
-                    <div class="flex gap-6 text-gray-400">
-                        <div>
-                            <div class="text-2xl text-cyan-400 font-bold">&lt; 50ms</div>
-                            <div class="text-sm">Latency</div>
-                        </div>
-                        <div>
-                            <div class="text-2xl text-cyan-400 font-bold">99.9%%</div>
-                            <div class="text-sm">Uptime</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
-                    <h3 class="text-2xl font-bold text-white mb-4">🔄 Live Connection Monitoring</h3>
-                    <p class="text-gray-300 mb-4">
-                        See real-time connections directly in your SSH terminal. Know who's accessing your tunnel and when.
-                    </p>
-                    <div class="bg-gray-900 rounded p-6 font-mono text-xs max-w-none text-left">
-                        <div class="text-gray-400">[15:04:05] 192.168.1.100 /api/users</div>
-                        <div class="text-gray-400">[15:04:12] 10.0.0.5 /dashboard</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Anti-Abuse Section -->
-    <section class="py-16 bg-gray-900">
-        <div class="container mx-auto max-w-7xl px-4">
-            <div class="text-center mb-12">
-                <h2 class="text-4xl font-bold text-white mb-4">🚨 Advanced Anti-Abuse System</h2>
-                <p class="text-xl text-gray-300 max-w-3xl mx-auto">
-                    Built-in protection and forensic capabilities to maintain service quality and security compliance.
-                </p>
-            </div>
-            
-            <div class="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
-                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
-                    <h3 class="text-xl font-bold text-white mb-4">📝 Community Reporting</h3>
-                    <p class="text-gray-300 mb-4">
-                        Public reporting endpoint allows users to report malicious domains. Automated review and blocking system.
-                    </p>
-                    <div class="bg-gray-900 rounded p-4 text-sm">
-                        <div class="text-blue-400">POST /report-abuse</div>
-                        <div class="text-gray-500 mt-1">→ Admin review → Domain blocking</div>
-                    </div>
-                </div>
-                
-                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
-                    <h3 class="text-xl font-bold text-white mb-4">🔍 Forensic Tracking</h3>
-                    <p class="text-gray-300 mb-4">
-                        Every HTTP response includes traceability headers linking requests to SSH users for security investigations.
-                    </p>
-                    <div class="bg-gray-900 rounded p-4 font-mono text-xs">
-                        <div class="text-green-400">X-P0rt-Fingerprint: SHA256:user-key</div>
-                        <div class="text-blue-400">X-P0rt-Origin: source-ip</div>
-                    </div>
-                </div>
-                
-                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
-                    <h3 class="text-xl font-bold text-white mb-4">🛡️ Automated Protection</h3>
-                    <p class="text-gray-300 mb-4">
-                        Real-time IP banning, rate limiting, and domain filtering. Malicious traffic is blocked before it reaches your application.
-                    </p>
-                    <div class="flex gap-4 text-sm text-gray-400">
-                        <span>• IP Blacklisting</span>
-                        <span>• Rate Limiting</span>
-                        <span>• DDoS Protection</span>
-                    </div>
-                </div>
-                
-                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
-                    <h3 class="text-xl font-bold text-white mb-4">📊 Admin Dashboard</h3>
-                    <p class="text-gray-300 mb-4">
-                        Comprehensive abuse report management, security analytics, and incident response tools for administrators.
-                    </p>
-                    <div class="bg-gray-900 rounded p-4 font-mono text-xs">
-                        <div class="text-cyan-400">./p0rt abuse list</div>
-                        <div class="text-yellow-400">./p0rt security stats</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- How It Works Section -->
-    <section class="bg-white py-16">
-        <div class="container mx-auto max-w-7xl px-4">
-            <h2 class="text-4xl font-bold text-center text-gray-800 mb-16">
-                Get online in 3 steps
-            </h2>
-            
-            <div class="grid md:grid-cols-3 gap-12 max-w-7xl mx-auto">
-                <div class="text-center">
-                    <div class="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-6">1</div>
-                    <h3 class="text-xl font-bold text-gray-800 mb-4">Run SSH Command</h3>
-                    <div class="bg-gray-900 text-green-400 p-6 rounded-lg font-mono text-xs mb-4 max-w-none text-left">
-                        ssh -R 443:localhost:3000 ssh.p0rt.xyz
-                    </div>
-                    <p class="text-gray-600">Point P0rt to your local development server</p>
-                </div>
-                
-                <div class="text-center">
-                    <div class="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-6">2</div>
-                    <h3 class="text-xl font-bold text-gray-800 mb-4">Get Your Domain</h3>
-                    <div class="bg-blue-50 p-4 rounded-lg mb-4">
-                        <div class="text-xl font-bold text-blue-600">whale-guitar-fox.p0rt.xyz</div>
-                        <div class="text-sm text-gray-500 mt-1">Generated from your SSH key</div>
-                    </div>
-                    <p class="text-gray-600">Instantly receive a memorable HTTPS domain</p>
-                </div>
-                
-                <div class="text-center">
-                    <div class="w-16 h-16 bg-purple-500 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-6">3</div>
-                    <h3 class="text-xl font-bold text-gray-800 mb-4">Share & Monitor</h3>
-                    <div class="bg-gray-900 text-green-400 p-6 rounded-lg font-mono text-xs mb-4 max-w-none text-left">
-                        [15:04:05] 192.168.1.100 /api/users<br>[15:04:12] 10.0.0.5 /dashboard
-                    </div>
-                    <p class="text-gray-600">Watch real-time traffic in your terminal</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- FAQ Section -->
-    <section class="bg-gray-50 py-16">
-        <div class="container mx-auto max-w-4xl px-4">
-            <h2 class="text-4xl font-bold text-center text-gray-800 mb-12">
-                Common Questions
-            </h2>
-            
-            <div class="space-y-8">
-                <div class="bg-white p-6 rounded-lg shadow-sm">
-                    <h3 class="text-xl font-semibold text-gray-800 mb-3">What makes P0rt different?</h3>
-                    <p class="text-gray-600">
-                        P0rt focuses on simplicity and developer experience. Three-word domains are memorable, 
-                        real-time monitoring shows you exactly who's using your tunnel, and everything works 
-                        with just SSH - no additional tools required.
-                    </p>
-                </div>
-                
-                
-                <div class="bg-white p-6 rounded-lg shadow-sm">
-                    <h3 class="text-xl font-semibold text-gray-800 mb-3">Is this production-ready?</h3>
-                    <p class="text-gray-600">
-                        P0rt is perfect for development, demos, and sharing prototypes. For production workloads, 
-                        consider running your own instance or using dedicated infrastructure.
-                    </p>
-                </div>
-                
-                <div class="bg-white p-6 rounded-lg shadow-sm">
-                    <h3 class="text-xl font-semibold text-gray-800 mb-3">How do I monitor connections?</h3>
-                    <p class="text-gray-600">
-                        Connection logs appear directly in your SSH terminal in real-time. 
-                        See visitor IPs, user agents, and timestamps without leaving your terminal.
-                    </p>
-                </div>
-                
-                <div class="bg-white p-6 rounded-lg shadow-sm">
-                    <h3 class="text-xl font-semibold text-gray-800 mb-3">How do you prevent abuse?</h3>
-                    <p class="text-gray-600">
-                        P0rt includes automated security monitoring for phishing, spam, and scam patterns. 
-                        Suspicious domains are automatically blocked. Rate limiting prevents excessive use.
-                        <a href="/report-abuse" class="text-blue-600 hover:text-blue-800 ml-1">Report abuse here</a>.
-                    </p>
-                </div>
-                
-            </div>
-        </div>
-    </section>
-
-    <!-- Footer -->
-    <footer class="bg-gray-800 text-white py-8">
-        <div class="container mx-auto text-center px-4">
-            <p class="text-lg mb-4">Made with ❤️ for developers</p>
-            <p class="text-gray-400 text-sm mt-4">
-                P0rt.xyz - Fast, free SSH tunneling service
-            </p>
-        </div>
-    </footer>
-</body>
-</html>`, accessBadge, accessSection)
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
-	w.Write([]byte(html))
+	// Use the embedded homepage handler
+	if p.homepageHandler != nil {
+		p.homepageHandler.ServeHomepage(w, r, accessBadge, accessSection)
+	} else {
+		// Fallback to simple response if handler not available
+		http.Error(w, "Homepage handler not available", http.StatusInternalServerError)
+	}
 }
 
 type TCPProxy struct {
@@ -1186,127 +591,7 @@ func (p *TCPProxy) handleConnection(clientConn net.Conn) {
 	<-errChan
 }
 
-func (p *HTTPProxy) handleSecurityStats(w http.ResponseWriter, r *http.Request) {
-	// Simple protection : seulement si la requête vient de localhost
-	if r.Header.Get("X-Forwarded-For") != "" || !strings.HasPrefix(r.RemoteAddr, "127.0.0.1") {
-		http.Error(w, "Access denied", http.StatusForbidden)
-		return
-	}
-
-	html := `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>P0rt Security Statistics</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem;
-            background: #0a0a0a;
-            color: #fafafa;
-            line-height: 1.6;
-        }
-        h1, h2 {
-            color: #60a5fa;
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
-            margin: 2rem 0;
-        }
-        .stat-card {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 1.5rem;
-        }
-        .stat-number {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #10b981;
-        }
-        .stat-label {
-            color: #888;
-            margin-top: 0.5rem;
-        }
-        .refresh-btn {
-            background: #60a5fa;
-            color: white;
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-bottom: 2rem;
-        }
-        .refresh-btn:hover {
-            background: #3b82f6;
-        }
-    </style>
-</head>
-<body>
-    <h1>🛡️ P0rt Security Dashboard</h1>
-    
-    <button class="refresh-btn" onclick="location.reload()">🔄 Refresh</button>
-    
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-number" id="total-blocks">Loading...</div>
-            <div class="stat-label">Total IP Blocks Today</div>
-        </div>
-        
-        <div class="stat-card">
-            <div class="stat-number" id="active-tunnels">Loading...</div>
-            <div class="stat-label">Active Tunnels</div>
-        </div>
-        
-        <div class="stat-card">
-            <div class="stat-number" id="abuse-reports">Loading...</div>
-            <div class="stat-label">Abuse Reports Today</div>
-        </div>
-        
-        <div class="stat-card">
-            <div class="stat-number" id="scan-attempts">Loading...</div>
-            <div class="stat-label">Scan Attempts Blocked</div>
-        </div>
-    </div>
-    
-    <h2>Recent Security Events</h2>
-    <div id="recent-events" style="background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 1rem; font-family: monospace; font-size: 0.9rem;">
-        Loading events...
-    </div>
-    
-    <div style="margin-top: 2rem; text-align: center;">
-        <a href="/" style="color: #60a5fa;">← Back to P0rt</a>
-    </div>
-    
-    <script>
-        // Simuler des données (dans une vraie implémentation, ces données viendraient d'une API)
-        document.getElementById('total-blocks').textContent = Math.floor(Math.random() * 50 + 10);
-        document.getElementById('active-tunnels').textContent = Math.floor(Math.random() * 20 + 5);
-        document.getElementById('abuse-reports').textContent = Math.floor(Math.random() * 5);
-        document.getElementById('scan-attempts').textContent = Math.floor(Math.random() * 100 + 20);
-        
-        const events = [
-            '[' + new Date().toLocaleTimeString() + '] IP 165.232.95.247 auto-banned (scan pattern: immediate_disconnect)',
-            '[' + new Date(Date.now() - 300000).toLocaleTimeString() + '] Known malicious IP 103.183.157.25 blocked',
-            '[' + new Date(Date.now() - 600000).toLocaleTimeString() + '] SSH bruteforce detected from 78.128.112.74',
-            '[' + new Date(Date.now() - 900000).toLocaleTimeString() + '] Suspicious HTTP request blocked for domain test-phishing',
-            '[' + new Date(Date.now() - 1200000).toLocaleTimeString() + '] IP 5.228.183.178 banned for 6h (scan pattern: no_auth)'
-        ];
-        
-        document.getElementById('recent-events').innerHTML = events.join('<br>');
-    </script>
-</body>
-</html>`
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(html))
-}
+// Note: handleSecurityStats removed - security stats are now in admin interface only
 
 func (p *HTTPProxy) handleDomainStats(w http.ResponseWriter, r *http.Request) {
 	// Simple protection : seulement si la requête vient de localhost

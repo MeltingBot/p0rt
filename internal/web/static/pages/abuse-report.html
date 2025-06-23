@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report Abuse - P0rt Security</title>
+    <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/layout.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/pages/forms.css">
+</head>
+<body class="form-page">
+    <h1>🛡️ Report Abuse</h1>
+    
+    <div class="form-info">
+        <strong>Help us keep P0rt safe!</strong><br>
+        Report tunnels being used for phishing, spam, scams, or other malicious activities.
+        All reports are reviewed by our security team.
+    </div>
+    
+    <form class="abuse-report-form" method="POST" action="/report-abuse">
+        <div class="form-group">
+            <label class="form-label" for="domain">Suspicious Domain *</label>
+            <input class="form-input" type="text" id="domain" name="domain" placeholder="example-domain.p0rt.xyz" required>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label" for="reason">Type of Abuse *</label>
+            <select class="form-select" id="reason" name="reason" required>
+                <option value="">Select abuse type...</option>
+                <option value="phishing">Phishing (fake login pages, account theft)</option>
+                <option value="spam">Spam (unwanted promotional content)</option>
+                <option value="scam">Scam (fraudulent schemes, fake offers)</option>
+                <option value="malware">Malware distribution</option>
+                <option value="copyright">Copyright infringement</option>
+                <option value="harassment">Harassment or threatening content</option>
+                <option value="other">Other malicious activity</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label" for="details">Additional Details</label>
+            <textarea class="form-textarea" id="details" name="details" placeholder="Describe what you observed (URLs, screenshots, etc.)"></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label" for="contact">Your Email (optional)</label>
+            <input class="form-input" type="email" id="contact" name="contact" placeholder="your-email@example.com">
+            <div class="form-help">Only used if we need clarification about your report</div>
+        </div>
+        
+        <div class="form-group captcha-container">
+            <div class="h-captcha" data-sitekey="{{.SiteKey}}"></div>
+        </div>
+        
+        <button class="btn btn-danger form-submit" type="submit">Submit Report</button>
+    </form>
+    
+    <div class="back-link">
+        <a href="/">← Back to P0rt</a>
+    </div>
+    
+    <script>
+        document.querySelector('form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const submitButton = document.querySelector('button[type="submit"]');
+            
+            // Get hCaptcha response
+            const hcaptchaResponse = hcaptcha.getResponse();
+            if (!hcaptchaResponse) {
+                alert('Please complete the captcha verification.');
+                return;
+            }
+            
+            const formData = new FormData(this);
+            formData.append('h-captcha-response', hcaptchaResponse);
+            
+            submitButton.textContent = 'Submitting...';
+            submitButton.disabled = true;
+            
+            fetch('/report-abuse', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'reported') {
+                    document.body.innerHTML = '<div style="text-align: center; padding: 4rem;"><h1 style="color: #10b981;">✓ Report Submitted</h1><p>Thank you for helping keep P0rt safe. Our security team will investigate this report.</p><p><a href="/" style="color: #60a5fa;">Back to P0rt</a></p></div>';
+                } else {
+                    throw new Error(data.message || 'Report failed');
+                }
+            })
+            .catch(error => {
+                submitButton.textContent = 'Submit Report';
+                submitButton.disabled = false;
+                hcaptcha.reset();
+                
+                // Show specific error message if available
+                const errorMessage = error.message.includes('Report failed') ? 
+                    'Failed to submit report. Please try again.' : 
+                    error.message;
+                alert(errorMessage);
+            });
+        });
+    </script>
+</body>
+</html>

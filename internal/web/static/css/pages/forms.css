@@ -1,0 +1,58 @@
+/* P0rt Forms - Specific Styling for Form Pages */
+
+/* Form Page Layout */
+.form-page {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: var(--spacing-lg);
+    line-height: 1.6;
+}
+
+/* Form Page Headers */
+.form-page h1 {
+    color: var(--error);
+    text-align: center;
+    margin-bottom: var(--spacing-lg);
+}
+
+/* Abuse Report Specific Styles */
+.abuse-report-form .form-textarea {
+    height: 120px;
+    resize: vertical;
+}
+
+/* Submit Button Styles for Forms */
+.form-submit {
+    width: 100%;
+    margin-top: var(--spacing-sm);
+}
+
+/* Form Info Boxes */
+.form-info {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm);
+    margin-bottom: var(--spacing-lg);
+    color: var(--text-secondary);
+}
+
+.form-info strong {
+    color: var(--text-primary);
+}
+
+/* Captcha Container */
+.captcha-container {
+    margin: var(--spacing-md) 0;
+}
+
+/* Form Actions */
+.form-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-lg);
+}
+
+.form-actions .btn {
+    flex: 1;
+}

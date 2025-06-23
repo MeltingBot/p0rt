@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>P0rt.xyz - Expose Local Servers to the Internet</title>
+    <meta name="description" content="P0rt.xyz allows you to expose local servers to the internet without installation, signup, and free forever.">
+    <meta name="keywords" content="P0rt.xyz, expose local servers, internet, free, ngrok alternative, ssh tunneling">
+    <meta name="author" content="P0rt">
+    
+    <!-- Open Graph meta tags for social sharing -->
+    <meta property="og:title" content="P0rt.xyz - Expose Local Servers to the Internet">
+    <meta property="og:description" content="P0rt.xyz allows you to expose local servers to the internet without installation, signup, and free forever.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://p0rt.xyz">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:400,700" rel="stylesheet" />
+    <style>
+        .gradient {
+            background: linear-gradient(90deg, #0fffc1, #7e0fff);
+        }
+        .code-block {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+        .glow {
+            box-shadow: 0 0 20px rgba(126, 15, 255, 0.3);
+        }
+    </style>
+</head>
+<body class="leading-normal tracking-normal text-white gradient" style="font-family: 'Source Sans Pro', sans-serif;">
+    <!-- Header -->
+    <nav id="header" class="w-full text-white">
+        <div class="w-full container mx-auto flex flex-wrap items-center justify-between mt-0 py-3">
+            <div class="text-white no-underline hover:no-underline font-bold text-2xl lg:text-4xl mt-2">
+                <span class="text-4xl">🚪</span> p0rt.xyz
+            </div>
+            <div class="mt-2">
+                {{.AccessBadge}}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <div class="container mx-auto px-4 py-16">
+        <div class="text-center max-w-4xl mx-auto">
+            <h1 class="text-4xl md:text-6xl font-bold mb-6">
+                <span class="text-white">Localhost to </span><span class="text-cyan-300">HTTPS</span><span class="text-white"> in seconds</span>
+            </h1>
+            <p class="text-2xl md:text-3xl text-gray-200 mb-12">
+                One SSH command. Zero config. Three-word domains.
+            </p>
+            
+            <div class="bg-black/50 backdrop-blur-sm rounded-xl p-8 mb-8 max-w-2xl mx-auto">
+                <div class="text-left code-block p-6 text-xl">
+                    <span class="text-green-400">$</span> <span class="text-white">ssh -R 443:localhost:3000 ssh.p0rt.xyz</span>
+                </div>
+                <div class="mt-6 text-center">
+                    <p class="text-gray-300 text-lg">Your app is now live at:</p>
+                    <p class="text-3xl font-bold text-cyan-400 mt-2">whale-guitar-fox.p0rt.xyz</p>
+                </div>
+            </div>
+            
+            {{.AccessSection}}
+            
+            <div class="grid grid-cols-3 gap-8 max-w-2xl mx-auto text-white">
+                <div>
+                    <div class="text-5xl mb-2">⚡</div>
+                    <p class="font-semibold">Instant</p>
+                </div>
+                <div>
+                    <div class="text-5xl mb-2">🔒</div>
+                    <p class="font-semibold">Secure</p>
+                </div>
+                <div>
+                    <div class="text-5xl mb-2">🎯</div>
+                    <p class="font-semibold">Persistent</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Features Section -->
+    <section class="bg-gray-900 py-16">
+        <div class="container max-w-6xl mx-auto px-4">
+            <h2 class="text-4xl md:text-5xl font-bold text-center text-white mb-16">
+                Why developers love P0rt
+            </h2>
+            
+            <div class="grid md:grid-cols-2 gap-12">
+                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
+                    <h3 class="text-2xl font-bold text-white mb-4">🧠 Smart Domain Generation</h3>
+                    <p class="text-gray-300 mb-4">
+                        Your SSH key fingerprint generates a unique three-word domain. Always get the same domain with the same key.
+                    </p>
+                    <div class="bg-gray-900 rounded p-4 font-mono text-sm">
+                        <div class="text-green-400">SSH Key → SHA256 → 3 Words</div>
+                        <div class="text-gray-500 mt-2">304 million unique combinations</div>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
+                    <h3 class="text-2xl font-bold text-white mb-4">🛡️ Enterprise-Grade Security</h3>
+                    <p class="text-gray-300 mb-4">
+                        End-to-end encryption with SSH. Automatic HTTPS with valid certificates. Advanced abuse prevention and forensic tracking for enterprise compliance.
+                    </p>
+                    <div class="bg-gray-900 rounded p-4 mb-4">
+                        <div class="text-xs text-gray-400 mb-2">Security Headers for Traceability:</div>
+                        <div class="font-mono text-xs text-green-400">X-P0rt-Fingerprint: SHA256:abc123...</div>
+                        <div class="font-mono text-xs text-blue-400">X-P0rt-Origin: 192.168.1.100</div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-sm text-gray-400">
+                        <span>✓ SSH Encrypted</span>
+                        <span>✓ HTTPS Ready</span>
+                        <span>✓ Abuse Reporting</span>
+                        <span>✓ Forensic Tracking</span>
+                        <span>✓ IP Traceability</span>
+                        <span>✓ Auto Domain Banning</span>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
+                    <h3 class="text-2xl font-bold text-white mb-4">⚡ Built for Speed</h3>
+                    <p class="text-gray-300 mb-4">
+                        Written in Go for blazing fast performance. Handles thousands of concurrent connections with minimal resource usage.
+                    </p>
+                    <div class="flex gap-6 text-gray-400">
+                        <div>
+                            <div class="text-2xl text-cyan-400 font-bold">&lt; 50ms</div>
+                            <div class="text-sm">Latency</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl text-cyan-400 font-bold">99.9%</div>
+                            <div class="text-sm">Uptime</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
+                    <h3 class="text-2xl font-bold text-white mb-4">🔄 Live Connection Monitoring</h3>
+                    <p class="text-gray-300 mb-4">
+                        See real-time connections directly in your SSH terminal. Know who's accessing your tunnel and when.
+                    </p>
+                    <div class="bg-gray-900 rounded p-6 font-mono text-xs max-w-none text-left">
+                        <div class="text-gray-400">[15:04:05] 192.168.1.100 /api/users</div>
+                        <div class="text-gray-400">[15:04:12] 10.0.0.5 /dashboard</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Anti-Abuse Section -->
+    <section class="py-16 bg-gray-900">
+        <div class="container mx-auto max-w-7xl px-4">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-bold text-white mb-4">🚨 Advanced Anti-Abuse System</h2>
+                <p class="text-xl text-gray-300 max-w-3xl mx-auto">
+                    Built-in protection and forensic capabilities to maintain service quality and security compliance.
+                </p>
+            </div>
+            
+            <div class="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
+                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
+                    <h3 class="text-xl font-bold text-white mb-4">📝 Community Reporting</h3>
+                    <p class="text-gray-300 mb-4">
+                        Public reporting endpoint allows users to report malicious domains. Automated review and blocking system.
+                    </p>
+                    <div class="bg-gray-900 rounded p-4 text-sm">
+                        <div class="text-blue-400">POST /report-abuse</div>
+                        <div class="text-gray-500 mt-1">→ Admin review → Domain blocking</div>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
+                    <h3 class="text-xl font-bold text-white mb-4">🔍 Forensic Tracking</h3>
+                    <p class="text-gray-300 mb-4">
+                        Every HTTP response includes traceability headers linking requests to SSH users for security investigations.
+                    </p>
+                    <div class="bg-gray-900 rounded p-4 font-mono text-xs">
+                        <div class="text-green-400">X-P0rt-Fingerprint: SHA256:user-key</div>
+                        <div class="text-blue-400">X-P0rt-Origin: source-ip</div>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
+                    <h3 class="text-xl font-bold text-white mb-4">🛡️ Automated Protection</h3>
+                    <p class="text-gray-300 mb-4">
+                        Real-time IP banning, rate limiting, and domain filtering. Malicious traffic is blocked before it reaches your application.
+                    </p>
+                    <div class="flex gap-4 text-sm text-gray-400">
+                        <span>• IP Blacklisting</span>
+                        <span>• Rate Limiting</span>
+                        <span>• DDoS Protection</span>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-800 rounded-lg p-8 border border-gray-700">
+                    <h3 class="text-xl font-bold text-white mb-4">📊 Admin Dashboard</h3>
+                    <p class="text-gray-300 mb-4">
+                        Comprehensive abuse report management, security analytics, and incident response tools for administrators.
+                    </p>
+                    <div class="bg-gray-900 rounded p-4 font-mono text-xs">
+                        <div class="text-cyan-400">./p0rt abuse list</div>
+                        <div class="text-yellow-400">./p0rt security stats</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="bg-white py-16">
+        <div class="container mx-auto max-w-7xl px-4">
+            <h2 class="text-4xl font-bold text-center text-gray-800 mb-16">
+                Get online in 3 steps
+            </h2>
+            
+            <div class="grid md:grid-cols-3 gap-12 max-w-7xl mx-auto">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-6">1</div>
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Run SSH Command</h3>
+                    <div class="bg-gray-900 text-green-400 p-6 rounded-lg font-mono text-xs mb-4 max-w-none text-left">
+                        ssh -R 443:localhost:3000 ssh.p0rt.xyz
+                    </div>
+                    <p class="text-gray-600">Point P0rt to your local development server</p>
+                </div>
+                
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-6">2</div>
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Get Your Domain</h3>
+                    <div class="bg-blue-50 p-4 rounded-lg mb-4">
+                        <div class="text-xl font-bold text-blue-600">whale-guitar-fox.p0rt.xyz</div>
+                        <div class="text-sm text-gray-500 mt-1">Generated from your SSH key</div>
+                    </div>
+                    <p class="text-gray-600">Instantly receive a memorable HTTPS domain</p>
+                </div>
+                
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-purple-500 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-6">3</div>
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Share & Monitor</h3>
+                    <div class="bg-gray-900 text-green-400 p-6 rounded-lg font-mono text-xs mb-4 max-w-none text-left">
+                        [15:04:05] 192.168.1.100 /api/users<br>[15:04:12] 10.0.0.5 /dashboard
+                    </div>
+                    <p class="text-gray-600">Watch real-time traffic in your terminal</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="bg-gray-50 py-16">
+        <div class="container mx-auto max-w-4xl px-4">
+            <h2 class="text-4xl font-bold text-center text-gray-800 mb-12">
+                Common Questions
+            </h2>
+            
+            <div class="space-y-8">
+                <div class="bg-white p-6 rounded-lg shadow-sm">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-3">What makes P0rt different?</h3>
+                    <p class="text-gray-600">
+                        P0rt focuses on simplicity and developer experience. Three-word domains are memorable, 
+                        real-time monitoring shows you exactly who's using your tunnel, and everything works 
+                        with just SSH - no additional tools required.
+                    </p>
+                </div>
+                
+                
+                <div class="bg-white p-6 rounded-lg shadow-sm">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-3">Is this production-ready?</h3>
+                    <p class="text-gray-600">
+                        P0rt is perfect for development, demos, and sharing prototypes. For production workloads, 
+                        consider running your own instance or using dedicated infrastructure.
+                    </p>
+                </div>
+                
+                <div class="bg-white p-6 rounded-lg shadow-sm">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-3">How do I monitor connections?</h3>
+                    <p class="text-gray-600">
+                        Connection logs appear directly in your SSH terminal in real-time. 
+                        See visitor IPs, user agents, and timestamps without leaving your terminal.
+                    </p>
+                </div>
+                
+                <div class="bg-white p-6 rounded-lg shadow-sm">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-3">How do you prevent abuse?</h3>
+                    <p class="text-gray-600">
+                        P0rt includes automated security monitoring for phishing, spam, and scam patterns. 
+                        Suspicious domains are automatically blocked. Rate limiting prevents excessive use.
+                        <a href="/report-abuse" class="text-blue-600 hover:text-blue-800 ml-1">Report abuse here</a>.
+                    </p>
+                </div>
+                
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-8">
+        <div class="container mx-auto text-center px-4">
+            <p class="text-lg mb-4">Made with ❤️ for developers</p>
+            <p class="text-gray-400 text-sm mt-4">
+                P0rt.xyz - Fast, free SSH tunneling service
+            </p>
+        </div>
+    </footer>
+</body>
+</html>
