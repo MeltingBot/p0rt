@@ -158,12 +158,12 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 								"fingerprint": fingerprint,
 								"session_id":  sessionID,
 							})
-							log.Printf("🚨 Recorded auth failure for session %s (first failure or > 30s since last)", sessionID)
+							log.Printf("Recorded auth failure for session %s (first failure or > 30s since last)", sessionID)
 						} else {
-							log.Printf("ℹ️ Skipping auth failure recording for session %s (within 30s of last failure)", sessionID)
+							log.Printf("Skipping auth failure recording for session %s (within 30s of last failure)", sessionID)
 						}
 					} else {
-						log.Printf("⚠️ Unauthorized key attempt from IP %s with valid active connections - reduced tracking", clientIP)
+						log.Printf("Unauthorized key attempt from IP %s with valid active connections - reduced tracking", clientIP)
 					}
 				}
 				metrics.RecordSSHConnection("failed")
@@ -864,7 +864,6 @@ func (s *Server) NotifyDomain(domain, message string) {
 // NotifyDomainBanned notifies SSH clients if their domain has been banned
 // TODO: Rename to NotifyDomain and accept message/type parameters
 func (s *Server) NotifyDomainBanned(domain string) {
-	log.Printf("🔍 NotifyDomainBanned called for domain: '%s'", domain)
 	
 	done := make(chan bool)
 	
@@ -879,12 +878,9 @@ func (s *Server) NotifyDomainBanned(domain string) {
 		}
 		
 		if clientsFound == 0 {
-			log.Printf("❌ No clients connected at all")
 		}
 		
-		log.Printf("🔍 Looking for client with exact domain: '%s'", domain)
 		if client, exists := s.clients[domain]; exists {
-			log.Printf("✅ Found client for domain '%s'", domain)
 			// Create notification messages for LogChannel
 			// These will be displayed with timestamp by monitorConnections
 			notifications := []string{
@@ -1129,7 +1125,7 @@ func (s *Server) recordFailedAttempt(ip string) {
 
 	// Skip tracking if IP has valid active connections
 	if s.hasValidConnectionsFromIP(ip) {
-		log.Printf("⚠️ Failed attempt from IP %s with valid active connections - skipping ban tracking", ip)
+		log.Printf("Failed attempt from IP %s with valid active connections - skipping ban tracking", ip)
 		return
 	}
 
@@ -1182,7 +1178,7 @@ func (s *Server) detectScanPattern(ip, pattern string) {
 
 	// Skip banning if IP has valid active connections
 	if s.hasValidConnectionsFromIP(ip) {
-		log.Printf("⚠️ Scan pattern detected from IP %s with valid active connections - skipping ban (pattern: %s)", ip, pattern)
+		log.Printf("Scan pattern detected from IP %s with valid active connections - skipping ban (pattern: %s)", ip, pattern)
 		return
 	}
 

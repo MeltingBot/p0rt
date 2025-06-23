@@ -101,7 +101,7 @@ func (rst *RedisSecurityTracker) RecordEvent(eventType EventType, ip string, det
 	newCount := rst.client.Incr(rst.ctx, countKey)
 	rst.client.Expire(rst.ctx, countKey, 30*24*time.Hour) // Expire after 30 days
 
-	log.Printf("📈 Event count for IP %s incremented to %d (event: %s)", ip, newCount.Val(), eventType)
+	log.Printf("Event count for IP %s incremented to %d (event: %s)", ip, newCount.Val(), eventType)
 
 	// Check if IP should be banned
 	rst.checkForBan(ip, eventType)
@@ -398,12 +398,12 @@ func (rst *RedisSecurityTracker) checkForBan(ip string, eventType EventType) {
 
 	// Skip banning if IP has valid active connections
 	if rst.hasValidConnectionsFunc != nil && rst.hasValidConnectionsFunc(ip) {
-		log.Printf("⚠️ Security event from IP %s with valid active connections - skipping ban tracking (event: %s)", ip, eventType)
+		log.Printf("Security event from IP %s with valid active connections - skipping ban tracking (event: %s)", ip, eventType)
 		return
 	}
 
 	eventCount := rst.getEventCount(ip)
-	log.Printf("🔍 Security check for IP %s: event count = %d, threshold = %d, event type = %s", ip, eventCount, rst.banThreshold, eventType)
+	log.Printf("Security check for IP %s: event count = %d, threshold = %d, event type = %s", ip, eventCount, rst.banThreshold, eventType)
 
 	// Ban based on total event count threshold
 	if eventCount >= rst.banThreshold {
@@ -414,7 +414,7 @@ func (rst *RedisSecurityTracker) checkForBan(ip string, eventType EventType) {
 			reason = "scanning"
 		}
 
-		log.Printf("🚨 About to auto-ban IP %s for %s (event count: %d >= threshold: %d)", ip, reason, eventCount, rst.banThreshold)
+		log.Printf("About to auto-ban IP %s for %s (event count: %d >= threshold: %d)", ip, reason, eventCount, rst.banThreshold)
 		rst.BanIP(ip, reason, rst.banDuration)
 		log.Printf("Auto-banned IP %s for %s (event count: %d)", ip, reason, eventCount)
 		return
