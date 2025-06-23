@@ -27,6 +27,9 @@ type RedisSecurityTracker struct {
 	banDuration      time.Duration
 	bruteForceWindow time.Duration
 	bruteForceLimit  int
+
+	// IP protection function
+	hasValidConnectionsFunc func(ip string) bool
 }
 
 // NewRedisSecurityTracker creates a new Redis-based security tracker
@@ -393,6 +396,12 @@ func (rst *RedisSecurityTracker) checkForBan(ip string, eventType EventType) {
 		return
 	}
 
+	// Skip banning if IP has valid active connections
+	if rst.hasValidConnectionsFunc != nil && rst.hasValidConnectionsFunc(ip) {
+		log.Printf("⚠️ Security event from IP %s with valid active connections - skipping ban tracking (event: %s)", ip, eventType)
+		return
+	}
+
 	eventCount := rst.getEventCount(ip)
 	log.Printf("🔍 Security check for IP %s: event count = %d, threshold = %d, event type = %s", ip, eventCount, rst.banThreshold, eventType)
 
@@ -435,6 +444,11 @@ func (rst *RedisSecurityTracker) checkForBan(ip string, eventType EventType) {
 			}
 
 			if recentFailures >= rst.bruteForceLimit {
+				// Double-check for valid connections before brute force ban
+				if rst.hasValidConnectionsFunc != nil && rst.hasValidConnectionsFunc(ip) {
+					log.Printf("⚠️ Brute force detected from IP %s with valid active connections - skipping ban (%d failures in %v)", ip, recentFailures, rst.bruteForceWindow)
+					return
+				}
 				rst.BanIP(ip, "brute_force", rst.banDuration)
 				log.Printf("Auto-banned IP %s for brute force (%d failures in %v)", ip, recentFailures, rst.bruteForceWindow)
 			}
@@ -516,4 +530,9 @@ func (rst *RedisSecurityTracker) cleanupRoutine() {
 // Close closes the Redis connection
 func (rst *RedisSecurityTracker) Close() error {
 	return rst.client.Close()
+}
+
+// SetValidConnectionsChecker sets the function to check for valid connections
+func (rst *RedisSecurityTracker) SetValidConnectionsChecker(checker func(ip string) bool) {
+	rst.hasValidConnectionsFunc = checker
 }

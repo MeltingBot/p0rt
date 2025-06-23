@@ -105,6 +105,9 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 		bannedDomainAttempts: make(map[string]int),
 	}
 
+	// Set IP protection function for security tracker
+	server.securityTracker.SetValidConnectionsChecker(server.hasValidConnectionsFromIP)
+
 	config := &ssh.ServerConfig{
 		PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 			clientIP := normalizeClientIP(conn.RemoteAddr().String())
@@ -1063,6 +1066,12 @@ func (s *Server) recordFailedAttempt(ip string) {
 		return
 	}
 
+	// Skip tracking if IP has valid active connections
+	if s.hasValidConnectionsFromIP(ip) {
+		log.Printf("⚠️ Failed attempt from IP %s with valid active connections - skipping ban tracking", ip)
+		return
+	}
+
 	s.failedMutex.Lock()
 	defer s.failedMutex.Unlock()
 
@@ -1107,6 +1116,12 @@ func (s *Server) resetFailedAttempts(ip string) {
 func (s *Server) detectScanPattern(ip, pattern string) {
 	// Skip scan detection for private IPs
 	if s.isPrivateIP(ip) {
+		return
+	}
+
+	// Skip banning if IP has valid active connections
+	if s.hasValidConnectionsFromIP(ip) {
+		log.Printf("⚠️ Scan pattern detected from IP %s with valid active connections - skipping ban (pattern: %s)", ip, pattern)
 		return
 	}
 

@@ -68,6 +68,7 @@ type SecurityTrackerInterface interface {
 	UnbanIP(ip string)
 	GetBannedIPs() []BannedIP
 	GetSecurityStats() SecurityStats
+	SetValidConnectionsChecker(checker func(ip string) bool)
 }
 
 // Ensure SecurityTracker implements SecurityTrackerInterface
@@ -87,6 +88,9 @@ type SecurityTracker struct {
 	banDuration      time.Duration
 	bruteForceWindow time.Duration
 	bruteForceLimit  int
+
+	// IP protection function
+	hasValidConnectionsFunc func(ip string) bool
 }
 
 // NewSecurityTracker creates a new security tracker
@@ -333,6 +337,12 @@ func (st *SecurityTracker) checkForBan(ip string, eventType EventType) {
 		return
 	}
 
+	// Skip banning if IP has valid active connections
+	if st.hasValidConnectionsFunc != nil && st.hasValidConnectionsFunc(ip) {
+		log.Printf("⚠️ Security event from IP %s with valid active connections - skipping ban tracking (event: %s)", ip, eventType)
+		return
+	}
+
 	eventCount := st.ipEventCounts[ip]
 
 	// Ban based on total event count threshold
@@ -369,6 +379,11 @@ func (st *SecurityTracker) checkForBan(ip string, eventType EventType) {
 		}
 
 		if recentFailures >= st.bruteForceLimit {
+			// Double-check for valid connections before brute force ban
+			if st.hasValidConnectionsFunc != nil && st.hasValidConnectionsFunc(ip) {
+				log.Printf("⚠️ Brute force detected from IP %s with valid active connections - skipping ban (%d failures in %v)", ip, recentFailures, st.bruteForceWindow)
+				return
+			}
 			st.bannedIPs[ip] = &BannedIP{
 				IP:         ip,
 				BannedAt:   time.Now(),
@@ -567,4 +582,9 @@ func GetRedisURLFromEnv() string {
 		return fmt.Sprintf("redis://:%s@%s:%s/%s", password, host, port, db)
 	}
 	return fmt.Sprintf("redis://%s:%s/%s", host, port, db)
+}
+
+// SetValidConnectionsChecker sets the function to check for valid connections
+func (st *SecurityTracker) SetValidConnectionsChecker(checker func(ip string) bool) {
+	st.hasValidConnectionsFunc = checker
 }
