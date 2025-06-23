@@ -48,12 +48,27 @@ var securityStatsCmd = &cobra.Command{
 var securityBansCmd = &cobra.Command{
 	Use:   "bans",
 	Short: "Show banned IPs and blocking information",
-	Long:  `Display currently banned IP addresses and blocking statistics.`,
+	Long: `Display currently banned IP addresses and blocking statistics.
+	
+Supports pagination for large ban lists:
+  --limit: Maximum number of IPs to show (default: 50, max: 1000)  
+  --offset: Number of IPs to skip (default: 0)
+  --page: Page number to show (alternative to offset)`,
 	Run: func(cmd *cobra.Command, args []string) {
 		_, remoteURL, apiKey, _, _, _ := GetGlobalFlags()
+		
+		// Get pagination flags
+		limit, _ := cmd.Flags().GetInt("limit")
+		offset, _ := cmd.Flags().GetInt("offset") 
+		page, _ := cmd.Flags().GetInt("page")
+		
+		// Convert page to offset if page is specified
+		if page > 0 {
+			offset = (page - 1) * limit
+		}
 
 		if remoteURL != "" {
-			showRemoteBanInfo(remoteURL, apiKey)
+			showRemoteBanInfo(remoteURL, apiKey, limit, offset)
 		} else {
 			fmt.Println("Ban information requires a running server.")
 			fmt.Println("Start the server with: p0rt server start")
@@ -99,6 +114,11 @@ func init() {
 	securityCmd.AddCommand(securityStatsCmd)
 	securityCmd.AddCommand(securityBansCmd)
 	securityCmd.AddCommand(securityUnbanCmd)
+	
+	// Add pagination flags to bans command
+	securityBansCmd.Flags().Int("limit", 50, "Maximum number of banned IPs to show (1-1000)")
+	securityBansCmd.Flags().Int("offset", 0, "Number of banned IPs to skip")
+	securityBansCmd.Flags().Int("page", 0, "Page number to show (alternative to offset)")
 }
 
 func showRemoteSecurityStats(serverURL, apiKey string) {
@@ -164,7 +184,7 @@ func showRemoteSecurityStats(serverURL, apiKey string) {
 	fmt.Println("   implemented in the SSH server for more detailed statistics.")
 }
 
-func showRemoteBanInfo(serverURL, apiKey string) {
+func showRemoteBanInfo(serverURL, apiKey string, limit, offset int) {
 	client := api.NewClient(serverURL, apiKey)
 
 	if err := client.Ping(); err != nil {
@@ -172,7 +192,7 @@ func showRemoteBanInfo(serverURL, apiKey string) {
 		return
 	}
 
-	bannedIPs, err := client.GetSecurityBans()
+	result, err := client.GetSecurityBans(limit, offset)
 	if err != nil {
 		fmt.Printf("Error: Failed to get ban information: %v\n", err)
 		return
@@ -185,37 +205,54 @@ func showRemoteBanInfo(serverURL, apiKey string) {
 	fmt.Printf("  Remote API: ✓ Connected to %s\n", serverURL)
 	fmt.Println()
 
-	if len(bannedIPs) == 0 {
+	// Show pagination info
+	currentPage := (offset / limit) + 1
+	totalPages := (result.TotalBans + limit - 1) / limit // Ceiling division
+	
+	if result.TotalBans == 0 {
 		fmt.Println("Banned IPs: None currently banned")
 		fmt.Println()
 		fmt.Println("✓ No blocked IP addresses at this time.")
 		fmt.Println("  The server is accepting connections from all IPs.")
 	} else {
-		fmt.Printf("Banned IPs: %d total\n", len(bannedIPs))
+		fmt.Printf("Banned IPs: %d total", result.TotalBans)
+		if totalPages > 1 {
+			fmt.Printf(" (Page %d of %d)", currentPage, totalPages)
+		}
+		fmt.Println()
+		fmt.Printf("Showing: %d of %d IPs\n", result.Count, result.TotalBans)
 		fmt.Println()
 
-		for i, banInfo := range bannedIPs {
-			if i >= 10 { // Limit display to 10 most recent
-				fmt.Printf("... and %d more banned IPs\n", len(bannedIPs)-10)
-				break
-			}
-
+		for _, banInfo := range result.BannedIPs {
 			if ip, ok := banInfo["ip"].(string); ok {
 				fmt.Printf("  %s", ip)
 				if reason, ok := banInfo["reason"].(string); ok {
 					fmt.Printf(" (reason: %s)", reason)
 				}
-				if expires, ok := banInfo["expires"].(string); ok {
+				if expires, ok := banInfo["expires_at"].(string); ok && expires != "" {
 					fmt.Printf(" expires: %s", expires)
+				} else {
+					fmt.Printf(" (permanent)")
 				}
 				fmt.Println()
+			}
+		}
+		
+		// Show navigation hints
+		if totalPages > 1 {
+			fmt.Println()
+			if result.HasPrev {
+				fmt.Printf("  Previous page: --page %d\n", currentPage-1)
+			}
+			if result.HasNext {
+				fmt.Printf("  Next page: --page %d\n", currentPage+1)
 			}
 		}
 	}
 
 	fmt.Println()
-	fmt.Println("💡 Note: Ban tracking is basic. Enhanced security monitoring")
-	fmt.Println("   can be implemented in the SSH server for automatic blocking.")
+	fmt.Println("💡 Use --limit and --page flags to navigate through large ban lists")
+	fmt.Println("   Example: p0rt security bans --limit 25 --page 2")
 }
 
 func unbanRemoteIP(serverURL, apiKey, ip string) {

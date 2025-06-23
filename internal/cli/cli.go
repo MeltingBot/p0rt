@@ -978,8 +978,8 @@ func (c *CLI) showSecurityStats() error {
 // showSecurityBans displays banned IP addresses
 func (c *CLI) showSecurityBans() error {
 	if c.useRemoteAPI {
-		// Get bans from remote API
-		bannedIPs, err := c.apiClient.GetSecurityBans()
+		// Get bans from remote API (use legacy method for CLI simplicity)
+		bannedIPs, err := c.apiClient.GetSecurityBansLegacy()
 		if err != nil {
 			return fmt.Errorf("failed to get security bans: %v", err)
 		}

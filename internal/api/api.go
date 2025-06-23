@@ -416,32 +416,66 @@ func (h *Handler) handleSecurityBans(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var bannedIPs interface{}
+	// Parse pagination parameters
+	query := r.URL.Query()
+	limit := 50 // Default limit
+	offset := 0
+	
+	if limitStr := query.Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 1000 {
+			limit = l
+		}
+	}
+	
+	if offsetStr := query.Get("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
+	var bannedIPs []security.BannedIP
+	var totalCount int
 	var note string
 
 	if h.securityProvider != nil {
 		// Get real ban data from the SSH server
-		bans := h.securityProvider.GetBannedIPs()
-		bannedIPs = bans
+		allBans := h.securityProvider.GetBannedIPs()
+		totalCount = len(allBans)
+		
+		// Apply pagination
+		start := offset
+		end := offset + limit
+		
+		if start < totalCount {
+			if end > totalCount {
+				end = totalCount
+			}
+			bannedIPs = allBans[start:end]
+		} else {
+			bannedIPs = []security.BannedIP{}
+		}
+		
 		note = "Real-time ban data from SSH server"
 	} else {
 		// Fallback to empty list
-		bannedIPs = []map[string]interface{}{}
+		bannedIPs = []security.BannedIP{}
+		totalCount = 0
 		note = "No security provider configured - showing placeholder data"
 	}
 
-	// Convert to slice for counting
-	var banCount int
-	if bans, ok := bannedIPs.([]security.BannedIP); ok {
-		banCount = len(bans)
-	} else if bans, ok := bannedIPs.([]map[string]interface{}); ok {
-		banCount = len(bans)
-	}
-
+	// Calculate pagination metadata
+	hasNext := offset+limit < totalCount
+	hasPrev := offset > 0
+	
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":    true,
 		"banned_ips": bannedIPs,
-		"total_bans": banCount,
+		"total_bans": totalCount,
+		"count":      len(bannedIPs),
+		"limit":      limit,
+		"offset":     offset,
+		"has_next":   hasNext,
+		"has_prev":   hasPrev,
 		"timestamp":  time.Now().Format(time.RFC3339),
 		"note":       note,
 	})

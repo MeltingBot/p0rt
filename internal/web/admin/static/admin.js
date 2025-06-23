@@ -375,11 +375,12 @@ class P0rtAdmin {
     }
 
     // Security
-    async loadSecurity() {
+    async loadSecurity(page = 1, limit = 50) {
         try {
+            const offset = (page - 1) * limit;
             const [securityStats, bannedIPs] = await Promise.all([
                 this.apiCall('/api/v1/security/stats'),
-                this.apiCall('/api/v1/security/bans')
+                this.apiCall(`/api/v1/security/bans?limit=${limit}&offset=${offset}`)
             ]);
 
             // Update security stats
@@ -390,7 +391,12 @@ class P0rtAdmin {
             const tbody = document.getElementById('banned-ips-table');
             
             if (bannedIPs.banned_ips.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No banned IPs</td></tr>';
+                if (page === 1) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No banned IPs</td></tr>';
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No more banned IPs</td></tr>';
+                }
+                this.updateSecurityPagination(bannedIPs, page, limit);
                 return;
             }
 
@@ -407,14 +413,71 @@ class P0rtAdmin {
                     </td>
                 </tr>
             `).join('');
+            
+            // Update pagination
+            this.updateSecurityPagination(bannedIPs, page, limit);
+            
         } catch (error) {
             document.getElementById('banned-ips-table').innerHTML = 
-                '<tr><td colspan="5" class="text-center text-danger">Loading error</td></tr>';
+                '<tr><td colspan="6" class="text-center text-danger">Loading error</td></tr>';
         }
     }
 
+    updateSecurityPagination(data, currentPage, limit) {
+        const totalPages = Math.ceil(data.total_bans / limit);
+        const paginationContainer = document.getElementById('security-pagination');
+        
+        if (!paginationContainer) {
+            // Create pagination container if it doesn't exist
+            const tableContainer = document.querySelector('#security .table-container');
+            const pagination = document.createElement('div');
+            pagination.id = 'security-pagination';
+            pagination.className = 'pagination-container';
+            tableContainer.appendChild(pagination);
+        }
+        
+        if (totalPages <= 1) {
+            document.getElementById('security-pagination').innerHTML = '';
+            return;
+        }
+        
+        let paginationHtml = `
+            <div class="pagination">
+                <div class="pagination-info">
+                    Showing ${data.count} of ${data.total_bans} banned IPs
+                </div>
+                <div class="pagination-controls">
+        `;
+        
+        // Previous button
+        if (data.has_prev) {
+            paginationHtml += `<button class="btn btn-sm" onclick="p0rtAdmin.loadSecurity(${currentPage - 1})">Previous</button>`;
+        }
+        
+        // Page numbers
+        const startPage = Math.max(1, currentPage - 2);
+        const endPage = Math.min(totalPages, currentPage + 2);
+        
+        for (let i = startPage; i <= endPage; i++) {
+            const activeClass = i === currentPage ? 'btn-primary' : '';
+            paginationHtml += `<button class="btn btn-sm ${activeClass}" onclick="p0rtAdmin.loadSecurity(${i})">${i}</button>`;
+        }
+        
+        // Next button
+        if (data.has_next) {
+            paginationHtml += `<button class="btn btn-sm" onclick="p0rtAdmin.loadSecurity(${currentPage + 1})">Next</button>`;
+        }
+        
+        paginationHtml += `
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('security-pagination').innerHTML = paginationHtml;
+    }
+
     async unbanIP(ip) {
-        if (!confirm(`Unban l'IP ${ip} ?`)) return;
+        if (!confirm(`Unban IP ${ip}?`)) return;
 
         try {
             await this.apiCall('/api/v1/security/unban', {

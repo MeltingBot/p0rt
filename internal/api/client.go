@@ -261,18 +261,27 @@ func (c *Client) GetSecurityStats() (map[string]interface{}, error) {
 	return result.SecurityStats, nil
 }
 
-// GetSecurityBans gets banned IP information
-func (c *Client) GetSecurityBans() ([]map[string]interface{}, error) {
-	responseBody, err := c.makeRequest("GET", "/api/v1/security/bans", nil)
+// SecurityBansResponse represents the response from the security bans API
+type SecurityBansResponse struct {
+	Success   bool                     `json:"success"`
+	BannedIPs []map[string]interface{} `json:"banned_ips"`
+	TotalBans int                      `json:"total_bans"`
+	Count     int                      `json:"count"`
+	Limit     int                      `json:"limit"`
+	Offset    int                      `json:"offset"`
+	HasNext   bool                     `json:"has_next"`
+	HasPrev   bool                     `json:"has_prev"`
+}
+
+// GetSecurityBans gets banned IP information with pagination support
+func (c *Client) GetSecurityBans(limit, offset int) (*SecurityBansResponse, error) {
+	url := fmt.Sprintf("/api/v1/security/bans?limit=%d&offset=%d", limit, offset)
+	responseBody, err := c.makeRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	var result struct {
-		Success   bool                     `json:"success"`
-		BannedIPs []map[string]interface{} `json:"banned_ips"`
-	}
-
+	var result SecurityBansResponse
 	if err := json.Unmarshal(responseBody, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
@@ -281,6 +290,15 @@ func (c *Client) GetSecurityBans() ([]map[string]interface{}, error) {
 		return nil, fmt.Errorf("API request failed")
 	}
 
+	return &result, nil
+}
+
+// GetSecurityBansLegacy gets banned IP information (legacy method for backward compatibility)
+func (c *Client) GetSecurityBansLegacy() ([]map[string]interface{}, error) {
+	result, err := c.GetSecurityBans(1000, 0) // Get first 1000 for backward compatibility
+	if err != nil {
+		return nil, err
+	}
 	return result.BannedIPs, nil
 }
 
