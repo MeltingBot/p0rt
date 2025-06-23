@@ -19,12 +19,14 @@ import (
 	"github.com/p0rt/p0rt/internal/metrics"
 	"github.com/p0rt/p0rt/internal/security"
 	"github.com/p0rt/p0rt/internal/stats"
+	"github.com/p0rt/p0rt/internal/web"
 )
 
 type HTTPProxy struct {
 	sshServer          SSHServer
 	abuseMonitor       *security.AbuseMonitor
 	apiHandler         *api.Handler
+	adminHandler       *web.AdminHandler
 	reservationManager domain.ReservationManagerInterface
 	statsManager       *stats.Manager
 }
@@ -115,6 +117,9 @@ func NewHTTPProxyWithAPI(sshServer SSHServer, reservationManager domain.Reservat
 		}
 	}
 
+	// Setup web admin handler
+	proxy.adminHandler = web.NewAdminHandler(apiKey)
+
 	return proxy
 }
 
@@ -124,6 +129,11 @@ func (p *HTTPProxy) Start(port string) error {
 	// Register API routes FIRST (more specific routes)
 	if p.apiHandler != nil {
 		p.apiHandler.RegisterRoutes(mux)
+	}
+
+	// Register web admin interface
+	if p.adminHandler != nil {
+		p.adminHandler.RegisterRoutes(mux)
 	}
 
 	// Endpoint pour signaler des abus

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P0rt Admin</title>
+    <link rel="stylesheet" href="admin.css">
+    <link rel="icon" type="image/x-icon" href="data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAFYSURBVDiNlZM9SwNBEIafgwTSWFhYWKQQwcJCG1sLwcJCG2uxsLBQsLGwsLCwsLCwsLGwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLC">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <h1>🚪 P0rt Admin</h1>
+        </div>
+        <div class="nav-links">
+            <a href="#dashboard" class="nav-link active" data-section="dashboard">Dashboard</a>
+            <a href="#connections" class="nav-link" data-section="connections">Connexions</a>
+            <a href="#domains" class="nav-link" data-section="domains">Domaines</a>
+            <a href="#security" class="nav-link" data-section="security">Sécurité</a>
+            <a href="#abuse" class="nav-link" data-section="abuse">Abus</a>
+            <a href="#keys" class="nav-link" data-section="keys">Clés SSH</a>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <!-- Dashboard Section -->
+        <section id="dashboard" class="section active">
+            <div class="section-header">
+                <h2>Dashboard</h2>
+                <button class="btn btn-refresh" onclick="refreshData()">↻ Actualiser</button>
+            </div>
+
+            <div class="cards-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="active-tunnels">-</div>
+                    <div class="stat-label">Tunnels Actifs</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="total-connections">-</div>
+                    <div class="stat-label">Connexions Totales</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="banned-ips">-</div>
+                    <div class="stat-label">IPs Bannies</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="abuse-reports">-</div>
+                    <div class="stat-label">Reports d'Abus</div>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3>Serveur Status</h3>
+                    <div id="server-status">Chargement...</div>
+                </div>
+                <div class="chart-card">
+                    <h3>Activité Récente</h3>
+                    <div id="recent-activity">Chargement...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Connections Section -->
+        <section id="connections" class="section">
+            <div class="section-header">
+                <h2>Connexions Actives</h2>
+                <button class="btn btn-refresh" onclick="loadConnections()">↻ Actualiser</button>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Domaine</th>
+                            <th>IP Client</th>
+                            <th>Connecté depuis</th>
+                            <th>Trafic</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="connections-table">
+                        <tr><td colspan="5" class="loading">Chargement des connexions...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Domains Section -->
+        <section id="domains" class="section">
+            <div class="section-header">
+                <h2>Réservations de Domaines</h2>
+                <button class="btn btn-primary" onclick="showAddDomainModal()">+ Nouvelle Réservation</button>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Domaine</th>
+                            <th>Empreinte SSH</th>
+                            <th>Commentaire</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="domains-table">
+                        <tr><td colspan="5" class="loading">Chargement des domaines...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Security Section -->
+        <section id="security" class="section">
+            <div class="section-header">
+                <h2>Sécurité</h2>
+                <button class="btn btn-refresh" onclick="loadSecurity()">↻ Actualiser</button>
+            </div>
+
+            <div class="cards-grid">
+                <div class="stat-card warn">
+                    <div class="stat-value" id="auth-failures">-</div>
+                    <div class="stat-label">Échecs d'Auth (24h)</div>
+                </div>
+                <div class="stat-card danger">
+                    <div class="stat-value" id="scan-attempts">-</div>
+                    <div class="stat-label">Tentatives de Scan</div>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <h3>IPs Bannies</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Adresse IP</th>
+                            <th>Raison</th>
+                            <th>Date de Ban</th>
+                            <th>Expire</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="banned-ips-table">
+                        <tr><td colspan="5" class="loading">Chargement des IPs bannies...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Abuse Section -->
+        <section id="abuse" class="section">
+            <div class="section-header">
+                <h2>Reports d'Abus</h2>
+                <div class="filter-tabs">
+                    <button class="filter-tab active" data-status="pending">En Attente</button>
+                    <button class="filter-tab" data-status="processed">Traités</button>
+                    <button class="filter-tab" data-status="">Tous</button>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Domaine</th>
+                            <th>Type</th>
+                            <th>Reporter</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="abuse-reports-table">
+                        <tr><td colspan="7" class="loading">Chargement des reports...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- SSH Keys Section -->
+        <section id="keys" class="section">
+            <div class="section-header">
+                <h2>Clés SSH Autorisées</h2>
+                <button class="btn btn-primary" onclick="showAddKeyModal()">+ Ajouter Clé</button>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Empreinte</th>
+                            <th>Type</th>
+                            <th>Commentaire</th>
+                            <th>Actif</th>
+                            <th>Ajouté</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="keys-table">
+                        <tr><td colspan="6" class="loading">Chargement des clés...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modals -->
+    <div id="modal-overlay" class="modal-overlay" onclick="closeModal()">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="modal-title">Modal</h3>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Dynamic content -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="admin.js"></script>
+</body>
+</html>
