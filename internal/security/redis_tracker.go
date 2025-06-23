@@ -61,7 +61,7 @@ func NewRedisSecurityTracker(redisURL, password string, db int) (*RedisSecurityT
 
 		// Default configuration
 		maxEvents:        10000,
-		banThreshold:     5,
+		banThreshold:     15, // Increased from 5 to handle multiple SSH key attempts
 		banDuration:      24 * time.Hour,
 		bruteForceWindow: 5 * time.Minute,
 		bruteForceLimit:  3,
@@ -406,7 +406,13 @@ func (rst *RedisSecurityTracker) checkForBan(ip string, eventType EventType) {
 	log.Printf("Security check for IP %s: event count = %d, threshold = %d, event type = %s", ip, eventCount, rst.banThreshold, eventType)
 
 	// Ban based on total event count threshold
-	if eventCount >= rst.banThreshold {
+	// Be more lenient with auth failures from SSH clients trying multiple keys
+	effectiveThreshold := rst.banThreshold
+	if eventType == EventAuthFailure {
+		effectiveThreshold = rst.banThreshold * 2 // Double threshold for auth failures
+	}
+	
+	if eventCount >= effectiveThreshold {
 		reason := "repeated_violations"
 		if eventType == EventAuthFailure {
 			reason = "brute_force"
@@ -414,7 +420,7 @@ func (rst *RedisSecurityTracker) checkForBan(ip string, eventType EventType) {
 			reason = "scanning"
 		}
 
-		log.Printf("About to auto-ban IP %s for %s (event count: %d >= threshold: %d)", ip, reason, eventCount, rst.banThreshold)
+		log.Printf("About to auto-ban IP %s for %s (event count: %d >= threshold: %d)", ip, reason, eventCount, effectiveThreshold)
 		rst.BanIP(ip, reason, rst.banDuration)
 		log.Printf("Auto-banned IP %s for %s (event count: %d)", ip, reason, eventCount)
 		return

@@ -108,7 +108,7 @@ func NewSecurityTracker(dataDir string) *SecurityTracker {
 
 		// Default configuration
 		maxEvents:        10000,
-		banThreshold:     5,
+		banThreshold:     15, // Increased from 5 to handle multiple SSH key attempts
 		banDuration:      24 * time.Hour,
 		bruteForceWindow: 5 * time.Minute,
 		bruteForceLimit:  3,
@@ -345,8 +345,14 @@ func (st *SecurityTracker) checkForBan(ip string, eventType EventType) {
 
 	eventCount := st.ipEventCounts[ip]
 
-	// Ban based on total event count threshold
-	if eventCount >= st.banThreshold {
+	// Ban based on total event count threshold  
+	// Be more lenient with auth failures from SSH clients trying multiple keys
+	effectiveThreshold := st.banThreshold
+	if eventType == EventAuthFailure {
+		effectiveThreshold = st.banThreshold * 2 // Double threshold for auth failures
+	}
+	
+	if eventCount >= effectiveThreshold {
 		reason := "repeated_violations"
 		if eventType == EventAuthFailure {
 			reason = "brute_force"
@@ -363,7 +369,7 @@ func (st *SecurityTracker) checkForBan(ip string, eventType EventType) {
 			Country:    st.getCountryForIP(ip),
 		}
 
-		log.Printf("Auto-banned IP %s for %s (event count: %d)", ip, reason, eventCount)
+		log.Printf("Auto-banned IP %s for %s (event count: %d >= threshold: %d)", ip, reason, eventCount, effectiveThreshold)
 		return
 	}
 
