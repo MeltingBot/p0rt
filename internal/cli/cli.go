@@ -648,17 +648,24 @@ func (c *CLI) showStats() error {
 	// Local mode
 	if c.jsonOutput {
 		// Build JSON stats data
+		storageType := c.getStorageType()
 		configStats := map[string]interface{}{
-			"storage_type": c.config.Storage.Type,
+			"storage_type": storageType,
 			"ssh_port":     c.config.GetSSHPort(),
 			"http_port":    c.config.GetHTTPPort(),
 			"domain_base":  c.config.GetDomainBase(),
 		}
-		if c.config.Storage.Type == "json" {
+		if storageType == "json" {
 			configStats["data_directory"] = c.config.Storage.DataDir
-		} else if c.config.Storage.Type == "redis" {
-			configStats["redis_url"] = c.config.Storage.RedisURL
-			configStats["redis_db"] = c.config.Storage.RedisDB
+		} else if storageType == "redis" {
+			if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+				configStats["redis_url"] = redisURL
+			} else if c.config.Storage.RedisURL != "" {
+				configStats["redis_url"] = c.config.Storage.RedisURL
+			}
+			if c.config.Storage.RedisDB != 0 {
+				configStats["redis_db"] = c.config.Storage.RedisDB
+			}
 		}
 
 		statsData := map[string]interface{}{
@@ -683,12 +690,19 @@ func (c *CLI) showStats() error {
 
 		// Configuration Statistics
 		fmt.Println("Configuration:")
-		fmt.Printf("  Storage Type: %s\n", c.config.Storage.Type)
-		if c.config.Storage.Type == "json" {
+		storageType := c.getStorageType()
+		fmt.Printf("  Storage Type: %s\n", storageType)
+		if storageType == "json" {
 			fmt.Printf("  Data Directory: %s\n", c.config.Storage.DataDir)
-		} else if c.config.Storage.Type == "redis" {
-			fmt.Printf("  Redis URL: %s\n", c.config.Storage.RedisURL)
-			fmt.Printf("  Redis DB: %d\n", c.config.Storage.RedisDB)
+		} else if storageType == "redis" {
+			if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+				fmt.Printf("  Redis URL: %s\n", redisURL)
+			} else if c.config.Storage.RedisURL != "" {
+				fmt.Printf("  Redis URL: %s\n", c.config.Storage.RedisURL)
+			}
+			if c.config.Storage.RedisDB != 0 {
+				fmt.Printf("  Redis DB: %d\n", c.config.Storage.RedisDB)
+			}
 		}
 		fmt.Printf("  SSH Port: %s\n", c.config.GetSSHPort())
 		fmt.Printf("  HTTP Port: %s\n", c.config.GetHTTPPort())
@@ -1115,8 +1129,75 @@ func (c *CLI) restartServer() error {
 	return nil
 }
 
-// serverStatus shows the server status (placeholder for future implementation)
+// serverStatus shows the server status
 func (c *CLI) serverStatus() error {
+	if c.useRemoteAPI && c.apiClient != nil {
+		// Use remote API like the cmd/server.go implementation
+		status, err := c.apiClient.GetServerStatus()
+		if err != nil {
+			return fmt.Errorf("failed to get server status: %v", err)
+		}
+		
+		if c.jsonOutput {
+			c.outputSuccess(status, "Remote server status")
+		} else {
+			fmt.Printf("✅ Remote P0rt Server Status:\n")
+			fmt.Printf("  Status: %s\n", status.Status)
+			fmt.Printf("  Version: %s\n", status.Version)
+			
+			if sshPort, ok := status.SSH["port"].(string); ok {
+				fmt.Printf("  SSH Port: %s", sshPort)
+				if available, ok := status.SSH["available"].(bool); ok {
+					if available {
+						fmt.Printf(" ✓ Available\n")
+					} else {
+						fmt.Printf(" ✗ In use\n")
+					}
+				} else {
+					fmt.Println()
+				}
+			}
+			
+			if httpPort, ok := status.HTTP["port"].(string); ok {
+				fmt.Printf("  HTTP Port: %s", httpPort)
+				if available, ok := status.HTTP["available"].(bool); ok {
+					if available {
+						fmt.Printf(" ✓ Available\n")
+					} else {
+						fmt.Printf(" ✗ In use\n")
+					}
+				} else {
+					fmt.Println()
+				}
+			}
+			
+			if storageType, ok := status.Storage["type"].(string); ok {
+				fmt.Printf("  Storage Type: %s", storageType)
+				if connected, ok := status.Storage["connected"].(bool); ok {
+					if connected {
+						fmt.Printf(" ✓ Connected\n")
+					} else {
+						fmt.Printf(" ✗ Disconnected\n")
+					}
+				} else {
+					fmt.Println()
+				}
+			}
+			
+			if accessMode, ok := status.Security["access_mode"].(string); ok {
+				fmt.Printf("  Access Mode: %s\n", accessMode)
+			}
+			
+			if bannedIPs, ok := status.Security["banned_ips"].(float64); ok {
+				fmt.Printf("  Banned IPs: %.0f\n", bannedIPs)
+			}
+			
+			fmt.Printf("  Last Update: %s\n", status.Timestamp)
+		}
+		return nil
+	}
+	
+	// Local mode
 	fmt.Println("Server Status:")
 	fmt.Printf("  Configuration loaded: ✓\n")
 	fmt.Printf("  SSH Port: %s\n", c.config.GetSSHPort())
