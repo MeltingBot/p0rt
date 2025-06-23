@@ -65,6 +65,8 @@ func NewRedisKeyStore(redisURL, keyPrefix string) (*RedisKeyStore, error) {
 	// Load existing keys from Redis
 	if err := ks.loadKeys(); err != nil {
 		log.Printf("RedisKeyStore: Failed to load keys: %v", err)
+	} else {
+		log.Printf("RedisKeyStore: Loaded %d keys from Redis", len(ks.keys))
 	}
 
 	return ks, nil
@@ -85,9 +87,12 @@ func (ks *RedisKeyStore) IsKeyAllowed(pubKey ssh.PublicKey) (bool, *KeyAccess) {
 
 	if !exists {
 		// Try to load from Redis if not in cache
+		log.Printf("RedisKeyStore: Key %s not in cache, checking Redis", fingerprint)
 		if access = ks.loadKeyFromRedis(fingerprint); access == nil {
+			log.Printf("RedisKeyStore: Key %s not found in Redis", fingerprint)
 			return false, nil
 		}
+		log.Printf("RedisKeyStore: Key %s found in Redis", fingerprint)
 
 		// Cache it
 		ks.mu.Lock()
