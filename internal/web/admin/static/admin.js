@@ -548,7 +548,7 @@ class P0rtAdmin {
                 })
             });
             this.showToast('Réservation créée', 'success');
-            this.closeModal();
+            closeModal();
             this.loadDomains();
         } catch (error) {
             this.showToast(`Erreur: ${error.message}`, 'error');
@@ -568,7 +568,7 @@ class P0rtAdmin {
                 })
             });
             this.showToast('Clé ajoutée', 'success');
-            this.closeModal();
+            closeModal();
             this.loadKeys();
         } catch (error) {
             this.showToast(`Erreur: ${error.message}`, 'error');
