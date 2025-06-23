@@ -538,3 +538,84 @@ func (c *Client) UnbanIP(ip string) error {
 	_, err := c.makeRequest("POST", path, body)
 	return err
 }
+
+// KeyInfo represents SSH key information
+type KeyInfo struct {
+	Fingerprint string    `json:"fingerprint"`
+	Tier        string    `json:"tier"`
+	Active      bool      `json:"active"`
+	Comment     string    `json:"comment"`
+	AddedAt     time.Time `json:"added_at"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+}
+
+// ListKeys lists all SSH keys via the API
+func (c *Client) ListKeys() ([]KeyInfo, error) {
+	path := "/api/v1/keys"
+	
+	respBody, err := c.makeRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		Success bool      `json:"success"`
+		Keys    []KeyInfo `json:"keys"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return response.Keys, nil
+}
+
+// AddKey adds a new SSH key via the API
+func (c *Client) AddKey(fingerprint, publicKey, comment, tier string, expiresAt *time.Time) error {
+	path := "/api/v1/keys"
+	body := map[string]interface{}{
+		"comment": comment,
+		"tier":    tier,
+	}
+	
+	if publicKey != "" {
+		body["public_key"] = publicKey
+	} else {
+		body["fingerprint"] = fingerprint
+	}
+	
+	if expiresAt != nil {
+		body["expires_at"] = expiresAt
+	}
+
+	_, err := c.makeRequest("POST", path, body)
+	return err
+}
+
+// RemoveKey removes an SSH key via the API
+func (c *Client) RemoveKey(fingerprint string) error {
+	path := fmt.Sprintf("/api/v1/keys/%s", url.QueryEscape(fingerprint))
+	_, err := c.makeRequest("DELETE", path, nil)
+	return err
+}
+
+// ActivateKey activates an SSH key via the API
+func (c *Client) ActivateKey(fingerprint string) error {
+	path := fmt.Sprintf("/api/v1/keys/%s", url.QueryEscape(fingerprint))
+	body := map[string]bool{
+		"active": true,
+	}
+	
+	_, err := c.makeRequest("PATCH", path, body)
+	return err
+}
+
+// DeactivateKey deactivates an SSH key via the API
+func (c *Client) DeactivateKey(fingerprint string) error {
+	path := fmt.Sprintf("/api/v1/keys/%s", url.QueryEscape(fingerprint))
+	body := map[string]bool{
+		"active": false,
+	}
+	
+	_, err := c.makeRequest("PATCH", path, body)
+	return err
+}

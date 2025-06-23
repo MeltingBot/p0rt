@@ -1183,9 +1183,17 @@ func (c *CLI) addKey(args []string) error {
 		comment = strings.Trim(comment, "\"'")
 	}
 
-	err := c.keyStore.AddKeyByFingerprint(fingerprint, comment, tier, nil)
-	if err != nil {
-		return fmt.Errorf("failed to add key: %v", err)
+	// Use API client if in remote mode
+	if c.useRemoteAPI && c.apiClient != nil {
+		err := c.apiClient.AddKey(fingerprint, "", comment, tier, nil)
+		if err != nil {
+			return fmt.Errorf("failed to add key: %v", err)
+		}
+	} else {
+		err := c.keyStore.AddKeyByFingerprint(fingerprint, comment, tier, nil)
+		if err != nil {
+			return fmt.Errorf("failed to add key: %v", err)
+		}
 	}
 
 	fmt.Printf("✅ Successfully added SSH key\n")
@@ -1205,9 +1213,18 @@ func (c *CLI) removeKey(args []string) error {
 	}
 
 	fingerprint := args[0]
-	err := c.keyStore.RemoveKey(fingerprint)
-	if err != nil {
-		return fmt.Errorf("failed to remove key: %v", err)
+	
+	// Use API client if in remote mode
+	if c.useRemoteAPI && c.apiClient != nil {
+		err := c.apiClient.RemoveKey(fingerprint)
+		if err != nil {
+			return fmt.Errorf("failed to remove key: %v", err)
+		}
+	} else {
+		err := c.keyStore.RemoveKey(fingerprint)
+		if err != nil {
+			return fmt.Errorf("failed to remove key: %v", err)
+		}
 	}
 
 	fmt.Printf("✅ Successfully removed SSH key: %s\n", fingerprint)
@@ -1216,6 +1233,61 @@ func (c *CLI) removeKey(args []string) error {
 
 // listKeys lists all authorized SSH keys
 func (c *CLI) listKeys() error {
+	// Use API client if in remote mode
+	if c.useRemoteAPI && c.apiClient != nil {
+		keys, err := c.apiClient.ListKeys()
+		if err != nil {
+			return fmt.Errorf("failed to list keys: %v", err)
+		}
+		
+		if len(keys) == 0 {
+			if c.jsonOutput {
+				c.outputSuccess([]interface{}{}, "No authorized SSH keys found")
+			} else {
+				fmt.Println("No authorized SSH keys found")
+				fmt.Println()
+				fmt.Println("Add a key with:")
+				fmt.Println("  key add SHA256:abc123... beta \"User Name\"")
+			}
+			return nil
+		}
+		
+		// Convert API response to match local format
+		if c.jsonOutput {
+			c.outputSuccess(keys, fmt.Sprintf("Found %d authorized SSH key(s)", len(keys)))
+		} else {
+			fmt.Printf("Found %d authorized SSH key(s):\n\n", len(keys))
+			fmt.Printf("%-55s %-10s %-11s %-20s %s\n", "Fingerprint", "Tier", "Status", "Added", "Comment")
+			fmt.Println(strings.Repeat("-", 120))
+			
+			for _, key := range keys {
+				status := "✅ Active"
+				if !key.Active {
+					status = "❌ Inactive"
+				}
+				if key.ExpiresAt != nil && time.Now().After(*key.ExpiresAt) {
+					status = "⏰ Expired"
+				}
+				
+				fingerprint := key.Fingerprint
+				if len(fingerprint) > 50 {
+					fingerprint = fingerprint[:47] + "..."
+				}
+				
+				fmt.Printf("%-55s %-10s %-11s %-20s %s\n",
+					fingerprint,
+					key.Tier,
+					status,
+					key.AddedAt.Format("2006-01-02 15:04:05"),
+					key.Comment,
+				)
+			}
+		}
+		
+		return nil
+	}
+	
+	// Local mode - use keyStore
 	keys := c.keyStore.ListKeys()
 
 	if len(keys) == 0 {
@@ -1328,9 +1400,18 @@ func (c *CLI) activateKey(args []string) error {
 	}
 
 	fingerprint := args[0]
-	err := c.keyStore.ActivateKey(fingerprint)
-	if err != nil {
-		return fmt.Errorf("failed to activate key: %v", err)
+	
+	// Use API client if in remote mode
+	if c.useRemoteAPI && c.apiClient != nil {
+		err := c.apiClient.ActivateKey(fingerprint)
+		if err != nil {
+			return fmt.Errorf("failed to activate key: %v", err)
+		}
+	} else {
+		err := c.keyStore.ActivateKey(fingerprint)
+		if err != nil {
+			return fmt.Errorf("failed to activate key: %v", err)
+		}
 	}
 
 	fmt.Printf("✅ Successfully activated SSH key: %s\n", fingerprint)
@@ -1344,9 +1425,18 @@ func (c *CLI) deactivateKey(args []string) error {
 	}
 
 	fingerprint := args[0]
-	err := c.keyStore.DeactivateKey(fingerprint)
-	if err != nil {
-		return fmt.Errorf("failed to deactivate key: %v", err)
+	
+	// Use API client if in remote mode
+	if c.useRemoteAPI && c.apiClient != nil {
+		err := c.apiClient.DeactivateKey(fingerprint)
+		if err != nil {
+			return fmt.Errorf("failed to deactivate key: %v", err)
+		}
+	} else {
+		err := c.keyStore.DeactivateKey(fingerprint)
+		if err != nil {
+			return fmt.Errorf("failed to deactivate key: %v", err)
+		}
 	}
 
 	fmt.Printf("✅ Successfully deactivated SSH key: %s\n", fingerprint)

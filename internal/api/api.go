@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/p0rt/p0rt/internal/auth"
 	"github.com/p0rt/p0rt/internal/config"
 	"github.com/p0rt/p0rt/internal/domain"
 	"github.com/p0rt/p0rt/internal/security"
@@ -29,24 +30,29 @@ type Handler struct {
 	reservationManager domain.ReservationManagerInterface
 	statsManager       *stats.Manager
 	securityProvider   SecurityProvider
+	keyStore           auth.KeyStoreInterface
 	apiKey             string // Optional API key for authentication
 }
 
 // NewHandler creates a new API handler
 func NewHandler(reservationManager domain.ReservationManagerInterface, statsManager *stats.Manager, apiKey string) *Handler {
+	keyStore, _ := auth.NewKeyStoreFromConfig()
 	return &Handler{
 		reservationManager: reservationManager,
 		statsManager:       statsManager,
+		keyStore:           keyStore,
 		apiKey:             apiKey,
 	}
 }
 
 // NewHandlerWithSecurity creates a new API handler with security provider
 func NewHandlerWithSecurity(reservationManager domain.ReservationManagerInterface, statsManager *stats.Manager, securityProvider SecurityProvider, apiKey string) *Handler {
+	keyStore, _ := auth.NewKeyStoreFromConfig()
 	return &Handler{
 		reservationManager: reservationManager,
 		statsManager:       statsManager,
 		securityProvider:   securityProvider,
+		keyStore:           keyStore,
 		apiKey:             apiKey,
 	}
 }
@@ -68,6 +74,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/abuse/stats", h.handleAbuseStats)
 	mux.HandleFunc("/api/v1/access", h.handleAccess)
 	mux.HandleFunc("/api/v1/status", h.handleStatus)
+	
+	// SSH key management endpoints
+	mux.HandleFunc("/api/v1/keys", h.handleKeys)
+	mux.HandleFunc("/api/v1/keys/", h.handleKey)
 }
 
 // authenticateRequest checks if the request is authenticated
