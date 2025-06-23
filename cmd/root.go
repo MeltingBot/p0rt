@@ -21,8 +21,8 @@ var (
 var rootCmd = &cobra.Command{
 	Use:     "p0rt",
 	Short:   "P0rt - Fast, free SSH tunneling service",
-	Version: "1.1.0",
-	Long: `P0rt v1.1.0 - Fast, free SSH tunneling service that allows you to expose
+	Version: "1.1.5",
+	Long: `P0rt v1.1.5 - Fast, free SSH tunneling service that allows you to expose
 local servers to the internet without installation, signup, and free forever.
 
 Key features:
