@@ -805,19 +805,25 @@ func (s *Server) NotifyDomainBanned(domain string) {
 		log.Printf("🔍 Looking for client with exact domain: '%s'", domain)
 		if client, exists := s.clients[domain]; exists {
 			log.Printf("✅ Found client for domain '%s'", domain)
-			// Create ban notification message
-			banMessage := "\r\n" + strings.Repeat("=", 70) + "\r\n"
-			banMessage += "🚫 DOMAIN BANNED - IMMEDIATE ACTION REQUIRED\r\n"
-			banMessage += strings.Repeat("=", 70) + "\r\n"
-			banMessage += fmt.Sprintf("Domain: %s.%s\r\n", domain, s.baseDomain)
-			banMessage += "Reason: Abuse reports received and processed\r\n"
-			banMessage += "Action: Tunnel will be terminated in 5 seconds\r\n"
-			banMessage += "\r\n"
-			banMessage += "If you believe this is an error:\r\n"
-			banMessage += "- Contact support immediately\r\n"
-			banMessage += "- Provide your SSH key fingerprint\r\n"
-			banMessage += "- Include details about legitimate use\r\n"
-			banMessage += strings.Repeat("=", 70) + "\r\n\r\n"
+			// Create notification messages for LogChannel
+			// These will be displayed with timestamp by monitorConnections
+			notifications := []string{
+				strings.Repeat("=", 60),
+				"🚫 NOTIFICATION - IMMEDIATE ACTION REQUIRED",
+				strings.Repeat("=", 60),
+				fmt.Sprintf("Domain: %s.%s", domain, s.baseDomain),
+				"Reason: Abuse reports received and processed",
+				"Action: Tunnel will be terminated in 5 seconds",
+				"",
+				"If you believe this is an error:",
+				"- Contact support immediately",
+				"- Provide your SSH key fingerprint",
+				"- Include details about legitimate use",
+				strings.Repeat("=", 60),
+			}
+			
+			// For other delivery methods, create formatted message
+			banMessage := "\r\n" + strings.Join(notifications, "\r\n") + "\r\n"
 			
 			// Try to send via SSH channel directly first (more reliable)
 			if client.SSHChannel != nil {
@@ -827,14 +833,54 @@ func (s *Server) NotifyDomainBanned(domain string) {
 				} else {
 					log.Printf("❌ Failed to send direct SSH notification for client %s: %v", domain, err)
 				}
+			} else {
+				log.Printf("⚠️ No SSH channel available for client %s (client may not have requested a shell)", domain)
 			}
 			
-			// Also try via LogChannel (backup method)
-			select {
-			case client.LogChannel <- banMessage:
-				log.Printf("📝 Sent ban notification to LogChannel for client %s", domain)
-			default:
-				log.Printf("⚠️ LogChannel full for client %s", domain)
+			// Try to send global request as alternative notification method
+			if client.Conn != nil {
+				// Send a global request that the client can handle
+				sent, _, err := client.Conn.SendRequest("notification@p0rt.xyz", false, []byte(banMessage))
+				if err == nil && sent {
+					log.Printf("✅ Sent notification via global request for client %s", domain)
+				} else if err != nil {
+					log.Printf("❌ Failed to send global request notification: %v", err)
+				}
+			}
+			
+			// Try to open a new channel for notification if no shell channel exists
+			if client.SSHChannel == nil && client.Conn != nil {
+				// Try to open a session channel for notification
+				channel, _, err := client.Conn.OpenChannel("session", nil)
+				if err == nil {
+					defer channel.Close()
+					
+					// Send the notification message
+					_, writeErr := channel.Write([]byte(banMessage))
+					if writeErr == nil {
+						log.Printf("✅ Sent notification via new session channel for client %s", domain)
+					} else {
+						log.Printf("❌ Failed to write to new session channel: %v", writeErr)
+					}
+				} else {
+					log.Printf("❌ Failed to open session channel for notification: %v", err)
+				}
+			}
+			
+			// Send via LogChannel - this works since logs are displayed to the user
+			// Send each line separately so they appear properly formatted
+			sentCount := 0
+			for _, line := range notifications {
+				select {
+				case client.LogChannel <- line:
+					sentCount++
+				default:
+					log.Printf("⚠️ LogChannel full for client %s after %d lines", domain, sentCount)
+					break
+				}
+			}
+			if sentCount > 0 {
+				log.Printf("📝 Sent %d lines of notification to LogChannel for client %s", sentCount, domain)
 			}
 			
 			// Close the connection after notification
