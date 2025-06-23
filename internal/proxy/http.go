@@ -327,17 +327,15 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 	proxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
 		logStructured(req, "Proxy error for %s: %v", host, err)
 		
-		// Different error types need different status codes
-		if strings.Contains(err.Error(), "connection refused") ||
-		   strings.Contains(err.Error(), "connect: connection refused") ||
-		   strings.Contains(err.Error(), "dial tcp") ||
-		   strings.Contains(err.Error(), "no such host") {
-			// Local service is down - 502 Bad Gateway
-			p.serveConnectionErrorPage(rw, req, host, err)
-		} else {
-			// Other proxy errors - 502 Bad Gateway
-			p.serveConnectionErrorPage(rw, req, host, err)
+		// Check if response was already started (headers sent)
+		if headers := rw.Header(); headers.Get("Content-Type") != "" {
+			// Headers already sent, can't change status code
+			log.Printf("Response already started for %s, cannot send error page", host)
+			return
 		}
+		
+		// All proxy errors get 502 Bad Gateway with our custom page
+		p.serveConnectionErrorPage(rw, req, host, err)
 	}
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
@@ -473,12 +471,16 @@ func (p *HTTPProxy) serveConnectionErrorPage(w http.ResponseWriter, _ *http.Requ
 	
 	if strings.Contains(errStr, "connection refused") || strings.Contains(errStr, "connect: connection refused") {
 		errorMsg = "The local service is not running or not accepting connections on the specified port."
+	} else if strings.Contains(errStr, "connection reset by peer") {
+		errorMsg = "The local service closed the connection unexpectedly. Check if your service is running properly."
 	} else if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "i/o timeout") {
 		errorMsg = "The local service is not responding (connection timeout)."
 	} else if strings.Contains(errStr, "dial tcp") {
 		errorMsg = "Unable to establish connection to the local service."
 	} else if strings.Contains(errStr, "no such host") {
 		errorMsg = "Cannot resolve the local service address."
+	} else if strings.Contains(errStr, "broken pipe") || strings.Contains(errStr, "pipe") {
+		errorMsg = "Connection to the local service was interrupted."
 	} else {
 		errorMsg = fmt.Sprintf("Unable to connect to the local service: %s", errStr)
 	}
@@ -491,10 +493,12 @@ func (p *HTTPProxy) serveConnectionErrorPage(w http.ResponseWriter, _ *http.Requ
 	} else {
 		// Fallback if error handler not available
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusBadGateway)
+		w.Header().Set("X-P0rt-Error", "local-service-down")
+		w.WriteHeader(http.StatusOK) // Use 200 to bypass Cloudflare error handling
 		fmt.Fprintf(w, `<!DOCTYPE html>
-<html><head><title>Service Error</title></head>
-<body><h1>Service Error</h1><p>%s</p><p>%s</p></body></html>`, subdomain, errorMsg)
+<html><head><title>Service Error - P0rt</title></head>
+<body><h1>⚠️ Service Error</h1><p>Tunnel: <strong>%s.p0rt.xyz</strong></p><p>%s</p>
+<p>The tunnel is connected but your local service has an issue.</p></body></html>`, subdomain, errorMsg)
 	}
 }
 

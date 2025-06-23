@@ -80,11 +80,20 @@ func (h *ErrorPageHandler) ServeConnectionError(w http.ResponseWriter, subdomain
 		ErrorMessage: errorMessage,
 	}
 
+	// Set headers that help Cloudflare pass through our custom error page
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusBadGateway)
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("X-Error-Type", "backend-connection")
+	w.Header().Set("X-P0rt-Error", "local-service-down")
+	
+	// Use 200 OK to ensure Cloudflare passes through our custom error page
+	// The page content will indicate the error to users
+	w.WriteHeader(http.StatusOK)
 
 	if err := h.connectionErrorTmpl.Execute(w, data); err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		// Fallback error response
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Error serving error page"))
 	}
 }
 
