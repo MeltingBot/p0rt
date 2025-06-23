@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"log"
 	"net/http"
-	"strings"
 )
 
 //go:embed admin/static/admin.html
@@ -32,7 +31,9 @@ func NewAdminHandler(apiKey string) *AdminHandler {
 func (h *AdminHandler) RegisterRoutes(mux *http.ServeMux) {
 	// Main admin interface
 	mux.HandleFunc("/p0rtadmin", h.handleAdminPage)
-	mux.HandleFunc("/p0rtadmin/", h.handleAdminAssets)
+	// Admin assets (CSS, JS)
+	mux.HandleFunc("/p0rtadmin/admin.css", h.handleAdminCSS)
+	mux.HandleFunc("/p0rtadmin/admin.js", h.handleAdminJS)
 	
 	log.Printf("🌐 Web admin interface available at /p0rtadmin")
 }
@@ -51,26 +52,18 @@ func (h *AdminHandler) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	w.Write(adminHTML)
 }
 
-// handleAdminAssets serves static assets (CSS, JS)
-func (h *AdminHandler) handleAdminAssets(w http.ResponseWriter, r *http.Request) {
-	// Extract asset path
-	assetPath := strings.TrimPrefix(r.URL.Path, "/p0rtadmin/")
-	
-	switch assetPath {
-	case "admin.css":
-		w.Header().Set("Content-Type", "text/css; charset=utf-8")
-		w.Header().Set("Cache-Control", "public, max-age=3600") // Cache for 1 hour
-		w.WriteHeader(http.StatusOK)
-		w.Write(adminCSS)
-		
-	case "admin.js":
-		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Header().Set("Cache-Control", "public, max-age=3600") // Cache for 1 hour
-		w.WriteHeader(http.StatusOK)
-		w.Write(adminJS)
-		
-	default:
-		// Unknown asset, redirect to main admin page
-		http.Redirect(w, r, "/p0rtadmin", http.StatusFound)
-	}
+// handleAdminCSS serves the CSS file
+func (h *AdminHandler) handleAdminCSS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=3600") // Cache for 1 hour
+	w.WriteHeader(http.StatusOK)
+	w.Write(adminCSS)
+}
+
+// handleAdminJS serves the JavaScript file
+func (h *AdminHandler) handleAdminJS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=3600") // Cache for 1 hour
+	w.WriteHeader(http.StatusOK)
+	w.Write(adminJS)
 }
