@@ -843,53 +843,17 @@ func (s *Server) GetActiveTunnelCount() int {
 
 // NotifyDomain sends a general notification to SSH clients for their domain
 func (s *Server) NotifyDomain(domain, message string) {
-	log.Printf("🔍 NotifyDomain called for domain: '%s' with message: '%s'", domain, message)
-	
 	done := make(chan bool)
 	
 	s.clientOps <- func() {
-		// Debug: List all current clients
-		log.Printf("📊 Current connected clients:")
-		clientsFound := 0
-		for clientDomain, client := range s.clients {
-			clientsFound++
-			log.Printf("  - Domain: '%s', Port: %d, HasSSHChannel: %t, HasLogChannel: %t", 
-				clientDomain, client.Port, client.SSHChannel != nil, client.LogChannel != nil)
-		}
-		
-		if clientsFound == 0 {
-			log.Printf("❌ No clients connected at all")
-		}
-		
-		log.Printf("🔍 Looking for client with exact domain: '%s'", domain)
 		if client, exists := s.clients[domain]; exists {
-			log.Printf("✅ Found client for domain '%s'", domain)
-			
-			// Create notification message for LogChannel
-			notificationLines := []string{
-				strings.Repeat("-", 50),
-				"📨 NOTIFICATION",
-				strings.Repeat("-", 50),
-				message,
-				strings.Repeat("-", 50),
+			// Send simple notification via LogChannel
+			select {
+			case client.LogChannel <- message:
+				// Notification sent successfully
+			default:
+				// LogChannel full, skip notification
 			}
-			
-			// Send via LogChannel - this works since logs are displayed to the user
-			sentCount := 0
-			for _, line := range notificationLines {
-				select {
-				case client.LogChannel <- line:
-					sentCount++
-				default:
-					log.Printf("⚠️ LogChannel full for client %s after %d lines", domain, sentCount)
-					break
-				}
-			}
-			if sentCount > 0 {
-				log.Printf("📝 Sent %d lines of notification to LogChannel for client %s", sentCount, domain)
-			}
-		} else {
-			log.Printf("❌ No client found for domain '%s'", domain)
 		}
 		done <- true
 	}
