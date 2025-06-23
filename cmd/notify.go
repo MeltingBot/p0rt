@@ -15,11 +15,11 @@ var notifyCmd = &cobra.Command{
 	Long:  `Commands to manage and test notifications for active SSH clients.`,
 }
 
-var notifyBanCmd = &cobra.Command{
-	Use:   "ban-domain [domain]",
-	Short: "Test ban notification by sending a test message",
-	Long: `Send a test ban notification to a connected SSH client.
-This directly calls the NotifyDomainBanned function for testing.`,
+var notifyDomainCmd = &cobra.Command{
+	Use:   "domain [domain]",
+	Short: "Send notification to domain's SSH client",
+	Long: `Send a notification message to a connected SSH client for the specified domain.
+This can be used for various purposes like warnings, bans, maintenance notices, etc.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		domain := args[0]
@@ -27,42 +27,77 @@ This directly calls the NotifyDomainBanned function for testing.`,
 		
 		if remoteURL != "" {
 			// Use remote API
-			fmt.Printf("🌐 Sending ban notification via API for domain: %s\n", domain)
-			
 			client := api.NewClient(remoteURL, apiKey)
 			reason, _ := cmd.Flags().GetString("reason")
+			message, _ := cmd.Flags().GetString("message")
+			notificationType, _ := cmd.Flags().GetString("type")
 			
-			notification, err := client.BanDomainNotification(domain, reason)
-			if err != nil {
-				fmt.Printf("❌ Error: %v\n", err)
-				return
-			}
-			
-			if useJSON {
-				fmt.Printf("{\"success\": true, \"notification\": %+v}\n", notification)
+			if notificationType == "ban" || (notificationType == "" && reason != "") {
+				// Send ban notification
+				fmt.Printf("🚫 Sending ban notification via API for domain: %s\n", domain)
+				notification, err := client.BanDomainNotification(domain, reason)
+				if err != nil {
+					fmt.Printf("❌ Error: %v\n", err)
+					return
+				}
+				
+				if useJSON {
+					fmt.Printf("{\"success\": true, \"notification\": %+v}\n", notification)
+				} else {
+					fmt.Printf("✅ Ban notification sent successfully!\n")
+					fmt.Printf("📋 Domain: %s\n", domain)
+					fmt.Printf("⏰ Sent at: %s\n", notification.Timestamp)
+					if reason != "" {
+						fmt.Printf("💬 Reason: %s\n", reason)
+					}
+				}
 			} else {
-				fmt.Printf("✅ Ban notification sent successfully!\n")
-				fmt.Printf("📋 Domain: %s\n", domain)
-				fmt.Printf("⏰ Sent at: %s\n", notification.Timestamp)
-				if reason != "" {
-					fmt.Printf("💬 Reason: %s\n", reason)
+				// Send test notification
+				fmt.Printf("📨 Sending notification via API for domain: %s\n", domain)
+				notification, err := client.TestNotification(message)
+				if err != nil {
+					fmt.Printf("❌ Error: %v\n", err)
+					return
+				}
+				
+				if useJSON {
+					fmt.Printf("{\"success\": true, \"notification\": %+v}\n", notification)
+				} else {
+					fmt.Printf("✅ Notification sent successfully!\n")
+					fmt.Printf("📋 Domain: %s\n", domain)
+					fmt.Printf("⏰ Sent at: %s\n", notification.Timestamp)
+					if message != "" {
+						fmt.Printf("💬 Message: %s\n", message)
+					}
 				}
 			}
 		} else {
 			// Local mode
-			fmt.Printf("🧪 Testing ban notification for domain: %s\n", domain)
+			reason, _ := cmd.Flags().GetString("reason")
+			message, _ := cmd.Flags().GetString("message")
+			notificationType, _ := cmd.Flags().GetString("type")
+			
+			if notificationType == "ban" || (notificationType == "" && reason != "") {
+				fmt.Printf("🚫 Testing ban notification for domain: %s\n", domain)
+				if reason != "" {
+					fmt.Printf("💬 Reason: %s\n", reason)
+				}
+			} else {
+				fmt.Printf("📨 Testing notification for domain: %s\n", domain)
+				if message != "" {
+					fmt.Printf("💬 Message: %s\n", message)
+				}
+			}
 			
 			fmt.Printf("\n⚠️  This is a placeholder command for testing.\n")
-			fmt.Printf("To actually test ban notifications:\n")
+			fmt.Printf("To actually test notifications:\n")
 			fmt.Printf("1. Start P0rt server: ./p0rt server start\n")
 			fmt.Printf("2. Connect with SSH: ssh -R 443:localhost:8080 localhost -p 2222\n")
 			fmt.Printf("3. Note your assigned domain (e.g., happy-cat-123)\n")
-			fmt.Printf("4. Run: ./p0rt abuse report <your-domain>.p0rt.xyz\n")
-			fmt.Printf("5. Process the report: ./p0rt abuse process <report-id> ban\n")
-			fmt.Printf("6. Watch the SSH client console for the ban notification!\n")
+			fmt.Printf("4. Use remote API: ./p0rt --remote http://server notify domain <domain>\n")
 		}
 		
-		log.Printf("Ban notification test command completed for domain: %s", domain)
+		log.Printf("Domain notification test command completed for domain: %s", domain)
 	},
 }
 
@@ -118,10 +153,14 @@ var notifyTestCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(notifyCmd)
-	notifyCmd.AddCommand(notifyBanCmd)
+	notifyCmd.AddCommand(notifyDomainCmd)
 	notifyCmd.AddCommand(notifyTestCmd)
 	
-	// Add flags for customization
-	notifyBanCmd.Flags().StringP("reason", "r", "", "reason for banning the domain")
+	// Add flags for domain notifications
+	notifyDomainCmd.Flags().StringP("type", "t", "", "notification type (ban, warning, info)")
+	notifyDomainCmd.Flags().StringP("reason", "r", "", "reason for the notification (used for ban type)")
+	notifyDomainCmd.Flags().StringP("message", "m", "", "custom notification message")
+	
+	// Add flags for test notifications
 	notifyTestCmd.Flags().StringP("message", "m", "", "custom test message")
 }

@@ -25,11 +25,17 @@ type SecurityProvider interface {
 	UnbanIPFromTracker(ip string)
 }
 
+// SSHNotificationProvider interface for sending notifications to SSH clients
+type SSHNotificationProvider interface {
+	NotifyDomainBanned(domain string)
+}
+
 // Handler handles API requests
 type Handler struct {
 	reservationManager domain.ReservationManagerInterface
 	statsManager       *stats.Manager
 	securityProvider   SecurityProvider
+	sshNotifier        SSHNotificationProvider
 	keyStore           auth.KeyStoreInterface
 	apiKey             string // Optional API key for authentication
 }
@@ -52,6 +58,19 @@ func NewHandlerWithSecurity(reservationManager domain.ReservationManagerInterfac
 		reservationManager: reservationManager,
 		statsManager:       statsManager,
 		securityProvider:   securityProvider,
+		keyStore:           keyStore,
+		apiKey:             apiKey,
+	}
+}
+
+// NewHandlerWithSSH creates a new API handler with SSH notification support
+func NewHandlerWithSSH(reservationManager domain.ReservationManagerInterface, statsManager *stats.Manager, securityProvider SecurityProvider, sshNotifier SSHNotificationProvider, apiKey string) *Handler {
+	keyStore, _ := auth.NewKeyStoreFromConfig()
+	return &Handler{
+		reservationManager: reservationManager,
+		statsManager:       statsManager,
+		securityProvider:   securityProvider,
+		sshNotifier:        sshNotifier,
 		keyStore:           keyStore,
 		apiKey:             apiKey,
 	}

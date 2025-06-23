@@ -238,7 +238,7 @@ func (h *Handler) performReload() map[string]interface{} {
 // reloadConfiguration reloads the server configuration
 func (h *Handler) reloadConfiguration() map[string]interface{} {
 	// Reload configuration from disk without disrupting the API response
-	cfg, err := h.getConfig()
+	_, err := h.getConfig()
 	if err != nil {
 		return map[string]interface{}{
 			"operation": "config_reload",

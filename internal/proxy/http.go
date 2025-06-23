@@ -106,9 +106,15 @@ func NewHTTPProxyWithAPI(sshServer SSHServer, reservationManager domain.Reservat
 	}
 
 	if reservationManager != nil {
-		// Check if sshServer implements SecurityProvider interface
+		// Check if sshServer implements both SecurityProvider and SSHNotificationProvider interfaces
 		if securityProvider, ok := sshServer.(api.SecurityProvider); ok {
-			proxy.apiHandler = api.NewHandlerWithSecurity(reservationManager, statsManager, securityProvider, apiKey)
+			if sshNotifier, ok := sshServer.(api.SSHNotificationProvider); ok {
+				// SSH server supports both security and notification features
+				proxy.apiHandler = api.NewHandlerWithSSH(reservationManager, statsManager, securityProvider, sshNotifier, apiKey)
+			} else {
+				// SSH server only supports security features
+				proxy.apiHandler = api.NewHandlerWithSecurity(reservationManager, statsManager, securityProvider, apiKey)
+			}
 		} else {
 			proxy.apiHandler = api.NewHandler(reservationManager, statsManager, apiKey)
 		}

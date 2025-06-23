@@ -95,17 +95,37 @@ func (h *Handler) handleNotificationBanDomain(w http.ResponseWriter, r *http.Req
 	// Generate ban notification message
 	banMessage := h.generateBanNotification(req.Domain, req.Reason)
 	
-	// In a real implementation, this would:
-	// 1. Find active SSH connections for this domain
-	// 2. Send notification to those connections
-	// 3. Log the notification action
+	// Send real notification to SSH clients if SSH notifier is available
+	notificationSent := false
+	var notificationError string
+	
+	if h.sshNotifier != nil {
+		// Extract subdomain from full domain (remove base domain)
+		subdomain := req.Domain
+		if strings.Contains(req.Domain, ".") {
+			parts := strings.Split(req.Domain, ".")
+			if len(parts) > 0 {
+				subdomain = parts[0]
+			}
+		}
+		
+		// Send real notification via SSH server
+		h.sshNotifier.NotifyDomainBanned(subdomain)
+		notificationSent = true
+	} else {
+		notificationError = "SSH notification provider not available"
+	}
 	
 	response := NotificationResponseLocal{
-		Success:   true,
+		Success:   notificationSent,
 		Message:   fmt.Sprintf("Ban notification sent for domain: %s", req.Domain),
-		Sent:      true,
+		Sent:      notificationSent,
 		Recipient: req.Domain,
 		Timestamp: time.Now().Format(time.RFC3339),
+	}
+	
+	if notificationError != "" {
+		response.Message = fmt.Sprintf("Failed to send notification: %s", notificationError)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
