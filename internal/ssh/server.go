@@ -131,10 +131,15 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 				fingerprint := ssh.FingerprintSHA256(key)
 				log.Printf("Unauthorized key attempted connection: %s from %s", fingerprint, clientIP)
 				if !server.isPrivateIP(clientIP) {
-					server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
-						"reason":      "unauthorized_key",
-						"fingerprint": fingerprint,
-					})
+					// Only record IP-based tracking if no valid connections from this IP exist
+					if !server.hasValidConnectionsFromIP(clientIP) {
+						server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
+							"reason":      "unauthorized_key",
+							"fingerprint": fingerprint,
+						})
+					} else {
+						log.Printf("⚠️ Unauthorized key attempt from IP %s with valid active connections - reduced tracking", clientIP)
+					}
 				}
 				metrics.RecordSSHConnection("failed")
 				metrics.RecordSecurityEvent("unauthorized_key", "medium")
@@ -189,10 +194,15 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 
 			// Skip tracking for private IPs
 			if !server.isPrivateIP(clientIP) {
-				server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
-					"reason": "no_public_key",
-					"user":   conn.User(),
-				})
+				// Only record IP-based tracking if no valid connections from this IP exist
+				if !server.hasValidConnectionsFromIP(clientIP) {
+					server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
+						"reason": "no_public_key",
+						"user":   conn.User(),
+					})
+				} else {
+					log.Printf("⚠️ No public key attempt from IP %s with valid active connections - reduced tracking", clientIP)
+				}
 			}
 
 			return nil, fmt.Errorf("public key authentication required")
@@ -269,12 +279,17 @@ func (s *Server) handleConnection(netConn net.Conn) {
 		trackerBanned := s.securityTracker.IsBanned(clientIP)
 
 		if localBanned || trackerBanned {
-			log.Printf("Blocked banned IP: %s (local: %t, tracker: %t)", clientIP, localBanned, trackerBanned)
-			s.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
-				"reason": "banned_ip_connection_attempt",
-			})
-			netConn.Close()
-			return
+			// Check if this IP has valid active connections before blocking
+			if !s.hasValidConnectionsFromIP(clientIP) {
+				log.Printf("Blocked banned IP: %s (local: %t, tracker: %t)", clientIP, localBanned, trackerBanned)
+				s.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
+					"reason": "banned_ip_connection_attempt",
+				})
+				netConn.Close()
+				return
+			} else {
+				log.Printf("⚠️ Banned IP %s has valid active connections, allowing connection attempt", clientIP)
+			}
 		}
 	}
 
@@ -783,6 +798,7 @@ func (s *Server) GetActiveTunnelCount() int {
 }
 
 // NotifyDomainBanned notifies SSH clients if their domain has been banned
+// TODO: Rename to NotifyDomain and accept message/type parameters
 func (s *Server) NotifyDomainBanned(domain string) {
 	log.Printf("🔍 NotifyDomainBanned called for domain: '%s'", domain)
 	
@@ -1001,6 +1017,28 @@ func (s *Server) isIPBanned(ip string) bool {
 		delete(s.bannedIPs, ip)
 	}
 	return false
+}
+
+// hasValidConnectionsFromIP checks if an IP has active valid connections
+func (s *Server) hasValidConnectionsFromIP(ip string) bool {
+	hasValid := false
+	done := make(chan bool)
+	
+	s.clientOps <- func() {
+		for _, client := range s.clients {
+			if client.Conn != nil {
+				clientIP := normalizeClientIP(client.Conn.RemoteAddr().String())
+				if clientIP == ip {
+					hasValid = true
+					break
+				}
+			}
+		}
+		done <- true
+	}
+	
+	<-done
+	return hasValid
 }
 
 // UnbanIP removes an IP from the banned IPs list

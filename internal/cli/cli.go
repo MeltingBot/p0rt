@@ -2538,13 +2538,15 @@ func (c *CLI) handleNotifyDomain(args []string) error {
 			}
 		case "--message":
 			if i+1 < len(args) {
-				message = args[i+1]
-				i++
+				// Join all remaining args as the message
+				message = strings.Join(args[i+1:], " ")
+				i = len(args) // Skip to end
 			}
 		case "--reason":
 			if i+1 < len(args) {
-				reason = args[i+1]
-				i++
+				// Join all remaining args as the reason
+				reason = strings.Join(args[i+1:], " ")
+				i = len(args) // Skip to end
 			}
 		}
 	}
@@ -2570,12 +2572,13 @@ func (c *CLI) handleNotifyDomain(args []string) error {
 		}
 		fmt.Printf("⏰ Sent at: %s\n", notification.Timestamp)
 	} else {
-		// Send general notification
+		// Send general notification via ban API with custom message as reason
 		if message == "" {
 			message = fmt.Sprintf("Notification for domain %s", domain)
 		}
 		
-		notification, err := c.apiClient.TestNotification(message)
+		// Use BanDomainNotification API which actually sends to SSH clients
+		notification, err := c.apiClient.BanDomainNotification(domain, message)
 		if err != nil {
 			c.outputError(fmt.Sprintf("Failed to send notification: %v", err))
 			return nil
