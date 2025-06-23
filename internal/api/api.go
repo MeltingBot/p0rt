@@ -105,6 +105,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	
 	// Notification endpoints
 	mux.HandleFunc("/api/v1/notifications/test", h.handleNotificationTest)
+	mux.HandleFunc("/api/v1/notifications/domain", h.handleNotificationBanDomain)
 	mux.HandleFunc("/api/v1/notifications/ban-domain", h.handleNotificationBanDomain)
 }
 
