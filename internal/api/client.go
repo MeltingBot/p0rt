@@ -619,3 +619,122 @@ func (c *Client) DeactivateKey(fingerprint string) error {
 	_, err := c.makeRequest("PATCH", path, body)
 	return err
 }
+
+// ServerStatus represents server status information from API
+type ServerStatus struct {
+	Status      string                 `json:"status"`
+	Uptime      string                 `json:"uptime,omitempty"`
+	Version     string                 `json:"version"`
+	SSH         map[string]interface{} `json:"ssh"`
+	HTTP        map[string]interface{} `json:"http"`
+	Storage     map[string]interface{} `json:"storage"`
+	Security    map[string]interface{} `json:"security"`
+	System      map[string]interface{} `json:"system"`
+	Environment map[string]string      `json:"environment"`
+	Timestamp   string                 `json:"timestamp"`
+}
+
+// GetServerStatus gets detailed server status via API
+func (c *Client) GetServerStatus() (*ServerStatus, error) {
+	path := "/api/v1/server/status"
+	
+	respBody, err := c.makeRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		Success bool          `json:"success"`
+		Server  *ServerStatus `json:"server"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return response.Server, nil
+}
+
+// StartServer starts the server via API
+func (c *Client) StartServer() error {
+	path := "/api/v1/server/start"
+	_, err := c.makeRequest("POST", path, nil)
+	return err
+}
+
+// StopServer stops the server via API
+func (c *Client) StopServer() error {
+	path := "/api/v1/server/stop"
+	_, err := c.makeRequest("POST", path, nil)
+	return err
+}
+
+// RestartServer restarts the server via API
+func (c *Client) RestartServer() error {
+	path := "/api/v1/server/restart"
+	_, err := c.makeRequest("POST", path, nil)
+	return err
+}
+
+// NotificationResponse represents a notification response
+type NotificationResponse struct {
+	Success   bool   `json:"success"`
+	Message   string `json:"message"`
+	Sent      bool   `json:"sent"`
+	Recipient string `json:"recipient,omitempty"`
+	Timestamp string `json:"timestamp"`
+}
+
+// TestNotification sends a test notification via API
+func (c *Client) TestNotification(message string) (*NotificationResponse, error) {
+	path := "/api/v1/notifications/test"
+	body := map[string]string{}
+	if message != "" {
+		body["message"] = message
+	}
+	
+	respBody, err := c.makeRequest("POST", path, body)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		Success      bool                  `json:"success"`
+		Notification *NotificationResponse `json:"notification"`
+		Preview      string                `json:"preview"`
+		Format       string                `json:"format"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return response.Notification, nil
+}
+
+// BanDomainNotification sends a ban notification for a domain via API
+func (c *Client) BanDomainNotification(domain, reason string) (*NotificationResponse, error) {
+	path := "/api/v1/notifications/ban-domain"
+	body := map[string]string{
+		"domain": domain,
+	}
+	if reason != "" {
+		body["reason"] = reason
+	}
+	
+	respBody, err := c.makeRequest("POST", path, body)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		Success      bool                  `json:"success"`
+		Notification *NotificationResponse `json:"notification"`
+		BanMessage   string                `json:"ban_message"`
+		Domain       string                `json:"domain"`
+		Reason       string                `json:"reason"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return response.Notification, nil
+}

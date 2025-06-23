@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/p0rt/p0rt/internal/api"
 	"github.com/p0rt/p0rt/internal/config"
 	"github.com/p0rt/p0rt/internal/domain"
 	"github.com/p0rt/p0rt/internal/metrics"
@@ -65,30 +66,106 @@ var serverStatusCmd = &cobra.Command{
 	Short: "Show server status",
 	Long:  `Display the current configuration and status of the P0rt server.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.Load()
-		if err != nil {
-			log.Printf("Failed to load config file, using defaults: %v", err)
-			cfg = config.LoadDefault()
-		}
-
-		fmt.Println("P0rt Server Status:")
-		fmt.Printf("  SSH Port: %s\n", cfg.GetSSHPort())
-		fmt.Printf("  HTTP Port: %s\n", cfg.GetHTTPPort())
-		fmt.Printf("  Domain Base: %s\n", cfg.GetDomainBase())
-		fmt.Printf("  Storage Type: %s\n", cfg.Storage.Type)
-		fmt.Printf("  Reservations Enabled: %t\n", cfg.Domain.ReservationsEnabled)
-
-		// Test if ports are available
-		if testPort(cfg.GetSSHPort()) {
-			fmt.Printf("  SSH Port Status: ✓ Available\n")
+		_, remoteURL, apiKey, _, _, useJSON := GetGlobalFlags()
+		
+		if remoteURL != "" {
+			// Use remote API
+			if useJSON {
+				fmt.Print("") // Will be handled by API response
+			} else {
+				fmt.Println("🌐 Getting server status via API...")
+			}
+			
+			client := api.NewClient(remoteURL, apiKey)
+			status, err := client.GetServerStatus()
+			if err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+				return
+			}
+			
+			if useJSON {
+				fmt.Printf("{\"success\": true, \"status\": %+v}\n", status)
+			} else {
+				fmt.Printf("✅ Remote P0rt Server Status:\n")
+				fmt.Printf("  Status: %s\n", status.Status)
+				fmt.Printf("  Version: %s\n", status.Version)
+				
+				if sshPort, ok := status.SSH["port"].(string); ok {
+					fmt.Printf("  SSH Port: %s", sshPort)
+					if available, ok := status.SSH["available"].(bool); ok {
+						if available {
+							fmt.Printf(" ✓ Available\n")
+						} else {
+							fmt.Printf(" ✗ In use\n")
+						}
+					} else {
+						fmt.Println()
+					}
+				}
+				
+				if httpPort, ok := status.HTTP["port"].(string); ok {
+					fmt.Printf("  HTTP Port: %s", httpPort)
+					if available, ok := status.HTTP["available"].(bool); ok {
+						if available {
+							fmt.Printf(" ✓ Available\n")
+						} else {
+							fmt.Printf(" ✗ In use\n")
+						}
+					} else {
+						fmt.Println()
+					}
+				}
+				
+				if storageType, ok := status.Storage["type"].(string); ok {
+					fmt.Printf("  Storage Type: %s", storageType)
+					if connected, ok := status.Storage["connected"].(bool); ok {
+						if connected {
+							fmt.Printf(" ✓ Connected\n")
+						} else {
+							fmt.Printf(" ✗ Disconnected\n")
+						}
+					} else {
+						fmt.Println()
+					}
+				}
+				
+				if accessMode, ok := status.Security["access_mode"].(string); ok {
+					fmt.Printf("  Access Mode: %s\n", accessMode)
+				}
+				
+				if bannedIPs, ok := status.Security["banned_ips"].(float64); ok {
+					fmt.Printf("  Banned IPs: %.0f\n", bannedIPs)
+				}
+				
+				fmt.Printf("  Last Update: %s\n", status.Timestamp)
+			}
 		} else {
-			fmt.Printf("  SSH Port Status: ✗ In use\n")
-		}
+			// Local mode
+			cfg, err := config.Load()
+			if err != nil {
+				log.Printf("Failed to load config file, using defaults: %v", err)
+				cfg = config.LoadDefault()
+			}
 
-		if testPort(cfg.GetHTTPPort()) {
-			fmt.Printf("  HTTP Port Status: ✓ Available\n")
-		} else {
-			fmt.Printf("  HTTP Port Status: ✗ In use (server may be running)\n")
+			fmt.Println("P0rt Server Status:")
+			fmt.Printf("  SSH Port: %s\n", cfg.GetSSHPort())
+			fmt.Printf("  HTTP Port: %s\n", cfg.GetHTTPPort())
+			fmt.Printf("  Domain Base: %s\n", cfg.GetDomainBase())
+			fmt.Printf("  Storage Type: %s\n", cfg.Storage.Type)
+			fmt.Printf("  Reservations Enabled: %t\n", cfg.Domain.ReservationsEnabled)
+
+			// Test if ports are available
+			if testPort(cfg.GetSSHPort()) {
+				fmt.Printf("  SSH Port Status: ✓ Available\n")
+			} else {
+				fmt.Printf("  SSH Port Status: ✗ In use\n")
+			}
+
+			if testPort(cfg.GetHTTPPort()) {
+				fmt.Printf("  HTTP Port Status: ✓ Available\n")
+			} else {
+				fmt.Printf("  HTTP Port Status: ✗ In use (server may be running)\n")
+			}
 		}
 	},
 }

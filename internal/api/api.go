@@ -78,6 +78,16 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// SSH key management endpoints
 	mux.HandleFunc("/api/v1/keys", h.handleKeys)
 	mux.HandleFunc("/api/v1/keys/", h.handleKey)
+	
+	// Server management endpoints
+	mux.HandleFunc("/api/v1/server/status", h.handleServerStatus)
+	mux.HandleFunc("/api/v1/server/start", h.handleServerStart)
+	mux.HandleFunc("/api/v1/server/stop", h.handleServerStop)
+	mux.HandleFunc("/api/v1/server/restart", h.handleServerRestart)
+	
+	// Notification endpoints
+	mux.HandleFunc("/api/v1/notifications/test", h.handleNotificationTest)
+	mux.HandleFunc("/api/v1/notifications/ban-domain", h.handleNotificationBanDomain)
 }
 
 // authenticateRequest checks if the request is authenticated
