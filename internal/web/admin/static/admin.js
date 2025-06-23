@@ -439,12 +439,28 @@ class P0rtAdmin {
                 return;
             }
 
-            tbody.innerHTML = response.reports.map(report => `
+            tbody.innerHTML = response.reports.map(report => {
+                // Handle field mapping - sometimes description comes in type field
+                let reportType = 'Not specified';
+                let description = 'No description provided';
+                
+                // Check if type contains description-like content (longer text or specific patterns)
+                if (report.type && (report.type.length > 20 || report.type.includes('!'))) {
+                    description = report.type;
+                    reportType = report.reason || report.category || 'malware';
+                } else {
+                    reportType = report.type || report.reason || report.category || 'Not specified';
+                    description = report.description || report.message || 'No description provided';
+                }
+                
+                const reporter = report.contact || report.reporter_email || 'Anonymous';
+                
+                return `
                 <tr>
                     <td><code>${report.id.substring(0, 8)}</code></td>
                     <td><strong>${report.domain || 'N/A'}</strong></td>
-                    <td>${report.type || report.reason || 'Not specified'}</td>
-                    <td>${report.reporter_email || report.contact || 'Anonymous'}</td>
+                    <td>${reportType}</td>
+                    <td>${reporter}</td>
                     <td>${this.formatDate(report.created_at)}</td>
                     <td><span class="status-badge status-${report.status}">${report.status}</span></td>
                     <td>
@@ -461,7 +477,8 @@ class P0rtAdmin {
                         ` : ''}
                     </td>
                 </tr>
-            `).join('');
+                `;
+            }).join('');
         } catch (error) {
             document.getElementById('abuse-reports-table').innerHTML = 
                 '<tr><td colspan="7" class="text-center text-danger">Loading error</td></tr>';
@@ -489,11 +506,21 @@ class P0rtAdmin {
             const response = await this.apiCall(`/api/v1/abuse/reports/${reportId}`);
             const report = response.report;
             
-            // Handle missing fields gracefully
+            // Handle missing fields gracefully with same logic as table display
             const domain = report.domain || 'N/A';
-            const type = report.type || report.reason || 'Not specified';
-            const reporter = report.reporter_email || report.contact || 'Anonymous';
-            const description = report.description || report.message || 'No description provided';
+            let type = 'Not specified';
+            let description = 'No description provided';
+            
+            // Apply same field mapping logic as table
+            if (report.type && (report.type.length > 20 || report.type.includes('!'))) {
+                description = report.type;
+                type = report.reason || report.category || 'malware';
+            } else {
+                type = report.type || report.reason || report.category || 'Not specified';
+                description = report.description || report.message || 'No description provided';
+            }
+            
+            const reporter = report.contact || report.reporter_email || 'Anonymous';
             const status = report.status || 'unknown';
             const createdAt = report.created_at || report.timestamp || null;
             const processedAt = report.processed_at || null;
@@ -567,9 +594,6 @@ class P0rtAdmin {
                         </button>
                         <button class="btn btn-success btn-sm" onclick="p0rtAdmin.processAbuseReport('${report.id}', 'accept'); closeModal();">
                             ✅ Accept Report
-                        </button>
-                        <button class="btn btn-secondary btn-sm" onclick="p0rtAdmin.processAbuseReport('${report.id}', 'reject'); closeModal();">
-                            ❌ Reject Report
                         </button>
                     </div>
                 </div>`;
