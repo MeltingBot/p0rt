@@ -691,8 +691,6 @@ func (arm *AbuseReportManager) performCleanupActions(report *AbuseReport, archiv
 
 // IsDomainBanned checks if a domain has been banned via abuse report
 func (arm *AbuseReportManager) IsDomainBanned(domain string) bool {
-	log.Printf("🔍 Checking if domain '%s' is banned...", domain)
-
 	if arm.useRedis {
 		return arm.isDomainBannedRedis(domain)
 	}
@@ -705,11 +703,8 @@ func (arm *AbuseReportManager) isDomainBannedRedis(domain string) bool {
 	pattern := arm.keyPrefix + "report:*"
 	keys, err := arm.redisClient.Keys(arm.ctx, pattern).Result()
 	if err != nil {
-		log.Printf("🔍 Error getting abuse report keys: %v", err)
 		return false
 	}
-
-	log.Printf("🔍 Found %d abuse reports to check", len(keys))
 
 	for _, key := range keys {
 		data, err := arm.redisClient.Get(arm.ctx, key).Result()
@@ -722,8 +717,6 @@ func (arm *AbuseReportManager) isDomainBannedRedis(domain string) bool {
 			continue
 		}
 
-		log.Printf("🔍 Checking report: domain='%s', status='%s', target='%s'", report.Domain, report.Status, domain)
-
 		// Check if this domain is banned (and not accepted or archived)
 		if report.Domain == domain && report.Status == "banned" {
 			log.Printf("🚫 Domain '%s' is BANNED (found banned report)", domain)
@@ -732,12 +725,10 @@ func (arm *AbuseReportManager) isDomainBannedRedis(domain string) bool {
 
 		// If domain was accepted or archived, it's explicitly not banned
 		if report.Domain == domain && (report.Status == "accepted" || report.Status == "archived") {
-			log.Printf("✅ Domain '%s' is NOT banned (found %s report)", domain, report.Status)
 			return false
 		}
 	}
 
-	log.Printf("🔍 Domain '%s' not found in any abuse reports - NOT banned", domain)
 	return false
 }
 
@@ -746,11 +737,7 @@ func (arm *AbuseReportManager) isDomainBannedJSON(domain string) bool {
 	arm.mutex.RLock()
 	defer arm.mutex.RUnlock()
 
-	log.Printf("🔍 Checking %d abuse reports from JSON storage", len(arm.reports))
-
 	for _, report := range arm.reports {
-		log.Printf("🔍 Checking report: domain='%s', status='%s', target='%s'", report.Domain, report.Status, domain)
-
 		// Check if this domain is banned (and not accepted or archived)
 		if report.Domain == domain && report.Status == "banned" {
 			log.Printf("🚫 Domain '%s' is BANNED (found banned report)", domain)
@@ -759,12 +746,10 @@ func (arm *AbuseReportManager) isDomainBannedJSON(domain string) bool {
 
 		// If domain was accepted or archived, it's explicitly not banned
 		if report.Domain == domain && (report.Status == "accepted" || report.Status == "archived") {
-			log.Printf("✅ Domain '%s' is NOT banned (found %s report)", domain, report.Status)
 			return false
 		}
 	}
 
-	log.Printf("🔍 Domain '%s' not found in any abuse reports - NOT banned", domain)
 	return false
 }
 
