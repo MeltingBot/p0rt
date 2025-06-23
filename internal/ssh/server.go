@@ -57,6 +57,10 @@ type Server struct {
 	// Tracking for banned domain connection attempts
 	bannedDomainAttempts map[string]int // IP -> attempt count for banned domains
 	bannedDomainMutex    sync.RWMutex
+
+	// Track failed SSH sessions to prevent multi-key attempts from being counted as separate failures
+	failedSessions map[string]time.Time // sessionID -> last failure time
+	sessionMutex   sync.RWMutex
 }
 
 type DomainGenerator interface {
@@ -103,6 +107,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 		failedAttempts:       make(map[string]int),
 		bannedIPs:            make(map[string]time.Time),
 		bannedDomainAttempts: make(map[string]int),
+		failedSessions:       make(map[string]time.Time),
 	}
 
 	// Set IP protection function for security tracker
@@ -132,14 +137,35 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 			allowed, keyAccess := server.keyStore.IsKeyAllowed(key)
 			if !allowed {
 				fingerprint := ssh.FingerprintSHA256(key)
-				log.Printf("Unauthorized key attempted connection: %s from %s", fingerprint, clientIP)
+				
+				// Create session ID from IP + username + session start time pattern
+				// This helps identify multiple key attempts from the same SSH session
+				sessionID := fmt.Sprintf("%s-%s", clientIP, conn.User())
+				
+				log.Printf("Unauthorized key attempted connection: %s from %s (session: %s)", fingerprint, clientIP, sessionID)
+				
 				if !server.isPrivateIP(clientIP) {
 					// Only record IP-based tracking if no valid connections from this IP exist
 					if !server.hasValidConnectionsFromIP(clientIP) {
-						server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
-							"reason":      "unauthorized_key",
-							"fingerprint": fingerprint,
-						})
+						// Check if we already recorded a failure for this session recently (within 30 seconds)
+						server.sessionMutex.Lock()
+						lastFailure, sessionExists := server.failedSessions[sessionID]
+						shouldRecord := !sessionExists || time.Since(lastFailure) > 30*time.Second
+						if shouldRecord {
+							server.failedSessions[sessionID] = time.Now()
+						}
+						server.sessionMutex.Unlock()
+						
+						if shouldRecord {
+							server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
+								"reason":      "unauthorized_key",
+								"fingerprint": fingerprint,
+								"session_id":  sessionID,
+							})
+							log.Printf("🚨 Recorded auth failure for session %s (first failure or > 30s since last)", sessionID)
+						} else {
+							log.Printf("ℹ️ Skipping auth failure recording for session %s (within 30s of last failure)", sessionID)
+						}
 					} else {
 						log.Printf("⚠️ Unauthorized key attempt from IP %s with valid active connections - reduced tracking", clientIP)
 					}
@@ -234,6 +260,9 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 
 	// Démarrer le nettoyage périodique des IPs bannies
 	go server.cleanupBannedIPs()
+	
+	// Démarrer le nettoyage périodique des sessions d'authentification échouées
+	go server.cleanupFailedSessions()
 
 	// Set SSH server reference in abuse report manager for IP unbanning
 	server.abuseMonitor.GetReportManager().SetSSHServer(server)
@@ -1166,6 +1195,28 @@ func (s *Server) cleanupBannedIPs() {
 			}
 		}
 		s.failedMutex.Unlock()
+	}
+}
+
+// cleanupFailedSessions removes old failed session entries (cleanup every 5 minutes, remove entries older than 1 hour)
+func (s *Server) cleanupFailedSessions() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		s.sessionMutex.Lock()
+		now := time.Now()
+		cleaned := 0
+		for sessionID, lastFailure := range s.failedSessions {
+			if now.Sub(lastFailure) > 1*time.Hour {
+				delete(s.failedSessions, sessionID)
+				cleaned++
+			}
+		}
+		if cleaned > 0 {
+			log.Printf("Cleaned up %d expired failed session entries", cleaned)
+		}
+		s.sessionMutex.Unlock()
 	}
 }
 
