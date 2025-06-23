@@ -323,11 +323,21 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
-	// Améliorer la gestion d'erreur pour éviter 521
+	// Comprehensive error handling for tunnel vs backend issues
 	proxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
-		logStructured(req, "Proxy error: %v", err)
-		// Au lieu de retourner une erreur qui cause 521, servir notre page
-		p.serveConnectionErrorPage(rw, req, host, err)
+		logStructured(req, "Proxy error for %s: %v", host, err)
+		
+		// Different error types need different status codes
+		if strings.Contains(err.Error(), "connection refused") ||
+		   strings.Contains(err.Error(), "connect: connection refused") ||
+		   strings.Contains(err.Error(), "dial tcp") ||
+		   strings.Contains(err.Error(), "no such host") {
+			// Local service is down - 502 Bad Gateway
+			p.serveConnectionErrorPage(rw, req, host, err)
+		} else {
+			// Other proxy errors - 502 Bad Gateway
+			p.serveConnectionErrorPage(rw, req, host, err)
+		}
 	}
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
@@ -438,8 +448,10 @@ func (p *HTTPProxy) handleWebSocket(w http.ResponseWriter, r *http.Request, targ
 }
 
 func (p *HTTPProxy) testLocalConnection(port int) bool {
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort("localhost", fmt.Sprintf("%d", port)), 2*time.Second)
+	// Test TCP connection to the local port
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort("localhost", fmt.Sprintf("%d", port)), 1*time.Second)
 	if err != nil {
+		log.Printf("Local connection test failed for port %d: %v", port, err)
 		return false
 	}
 	conn.Close()
@@ -452,18 +464,38 @@ func (p *HTTPProxy) serveConnectionErrorPage(w http.ResponseWriter, _ *http.Requ
 	subdomain := ""
 	if idx := strings.Index(host, "."); idx > 0 {
 		subdomain = host[:idx]
+	} else {
+		subdomain = host
 	}
 
 	var errorMsg string
-	if strings.Contains(err.Error(), "connection refused") {
-		errorMsg = "The local service is not running or not accepting connections."
-	} else if strings.Contains(err.Error(), "timeout") {
-		errorMsg = "The local service is not responding (timeout)."
+	errStr := err.Error()
+	
+	if strings.Contains(errStr, "connection refused") || strings.Contains(errStr, "connect: connection refused") {
+		errorMsg = "The local service is not running or not accepting connections on the specified port."
+	} else if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "i/o timeout") {
+		errorMsg = "The local service is not responding (connection timeout)."
+	} else if strings.Contains(errStr, "dial tcp") {
+		errorMsg = "Unable to establish connection to the local service."
+	} else if strings.Contains(errStr, "no such host") {
+		errorMsg = "Cannot resolve the local service address."
 	} else {
-		errorMsg = "Unable to connect to the local service."
+		errorMsg = fmt.Sprintf("Unable to connect to the local service: %s", errStr)
 	}
 
-	p.errorPageHandler.ServeConnectionError(w, subdomain, errorMsg)
+	log.Printf("Serving connection error page for %s: %s", host, errorMsg)
+	
+	// Use error page handler to return proper 502 status
+	if p.errorPageHandler != nil {
+		p.errorPageHandler.ServeConnectionError(w, subdomain, errorMsg)
+	} else {
+		// Fallback if error handler not available
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusBadGateway)
+		fmt.Fprintf(w, `<!DOCTYPE html>
+<html><head><title>Service Error</title></head>
+<body><h1>Service Error</h1><p>%s</p><p>%s</p></body></html>`, subdomain, errorMsg)
+	}
 }
 
 func (p *HTTPProxy) serveErrorPage(w http.ResponseWriter, _ *http.Request, host string) {
