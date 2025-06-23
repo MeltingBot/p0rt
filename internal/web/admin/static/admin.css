@@ -6,6 +6,7 @@
     --success: #10b981;
     --warning: #f59e0b;
     --danger: #ef4444;
+    --info: #06b6d4;
     --radius: 0.5rem;
     --transition: all 0.15s ease-in-out;
 }
@@ -616,10 +617,28 @@ body {
 .text-success { color: var(--success); }
 .text-warning { color: var(--warning); }
 .text-danger { color: var(--danger); }
+.text-primary { color: var(--primary); }
+.text-info { color: var(--info); }
 
 .bg-success { background-color: var(--success); }
 .bg-warning { background-color: var(--warning); }
 .bg-danger { background-color: var(--danger); }
+
+/* Additional status badge variants */
+.status-badge.status-info {
+    background: var(--info);
+    color: white;
+}
+
+.status-badge.status-secondary {
+    background: var(--secondary);
+    color: white;
+}
+
+.status-badge.status-warning {
+    background: var(--warning);
+    color: white;
+}
 
 .mb-0 { margin-bottom: 0; }
 .mb-1 { margin-bottom: 0.5rem; }

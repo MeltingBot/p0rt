@@ -196,7 +196,46 @@ class P0rtAdmin {
             
             // Get abuse stats
             const abuseStats = await this.apiCall('/api/v1/abuse/stats').catch(() => ({stats: {}}));
-            this.updateElement('abuse-reports', abuseStats.stats?.pending || 0);
+            const pendingReports = abuseStats.stats?.pending || 0;
+            const processedReports = abuseStats.stats?.processed || 0;
+            
+            // Update abuse reports card with pending count
+            this.updateElement('abuse-reports', pendingReports);
+            
+            // Update dashboard with abuse statistics
+            const abuseStatsHtml = `
+                <div class="status-grid">
+                    <div class="status-item">
+                        <strong>Pending:</strong> 
+                        <span class="status-badge ${pendingReports > 0 ? 'status-warning' : 'status-success'}">${pendingReports}</span>
+                    </div>
+                    <div class="status-item">
+                        <strong>Processed:</strong> 
+                        <span class="status-badge status-info">${processedReports}</span>
+                    </div>
+                    <div class="status-item">
+                        <strong>Total:</strong> 
+                        <span class="status-badge status-secondary">${pendingReports + processedReports}</span>
+                    </div>
+                </div>
+            `;
+            
+            // Add abuse stats section to dashboard if it doesn't exist
+            let abuseStatsElement = document.getElementById('abuse-stats');
+            if (!abuseStatsElement) {
+                const chartsGrid = document.querySelector('.charts-grid');
+                if (chartsGrid) {
+                    const abuseCard = document.createElement('div');
+                    abuseCard.className = 'chart-card';
+                    abuseCard.innerHTML = `
+                        <h3>Abuse Reports</h3>
+                        <div id="abuse-stats"></div>
+                    `;
+                    chartsGrid.appendChild(abuseCard);
+                }
+            }
+            
+            this.updateElement('abuse-stats', abuseStatsHtml);
 
             // Update server status
             this.updateServerStatus(serverStatus.server);
@@ -297,14 +336,14 @@ class P0rtAdmin {
                     <td>${this.formatDate(res.created_at)}</td>
                     <td>
                         <button class="btn btn-danger btn-sm" onclick="p0rtAdmin.deleteDomain('${res.domain}')">
-                            Supprimer
+                            Delete
                         </button>
                     </td>
                 </tr>
             `).join('');
         } catch (error) {
             document.getElementById('domains-table').innerHTML = 
-                '<tr><td colspan="5" class="text-center text-danger">Erreur de chargement</td></tr>';
+                '<tr><td colspan="5" class="text-center text-danger">Loading error</td></tr>';
         }
     }
 
@@ -336,7 +375,7 @@ class P0rtAdmin {
             const tbody = document.getElementById('banned-ips-table');
             
             if (bannedIPs.banned_ips.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Aucune IP bannie</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No banned IPs</td></tr>';
                 return;
             }
 
@@ -348,19 +387,19 @@ class P0rtAdmin {
                     <td>${ban.expires_at ? this.formatDate(ban.expires_at) : 'Permanent'}</td>
                     <td>
                         <button class="btn btn-success btn-sm" onclick="p0rtAdmin.unbanIP('${ban.ip}')">
-                            Débannir
+                            Unban
                         </button>
                     </td>
                 </tr>
             `).join('');
         } catch (error) {
             document.getElementById('banned-ips-table').innerHTML = 
-                '<tr><td colspan="5" class="text-center text-danger">Erreur de chargement</td></tr>';
+                '<tr><td colspan="5" class="text-center text-danger">Loading error</td></tr>';
         }
     }
 
     async unbanIP(ip) {
-        if (!confirm(`Débannir l'IP ${ip} ?`)) return;
+        if (!confirm(`Unban l'IP ${ip} ?`)) return;
 
         try {
             await this.apiCall('/api/v1/security/unban', {
@@ -396,19 +435,22 @@ class P0rtAdmin {
             const tbody = document.getElementById('abuse-reports-table');
             
             if (response.reports.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Aucun report d\'abus</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No abuse reports</td></tr>';
                 return;
             }
 
             tbody.innerHTML = response.reports.map(report => `
                 <tr>
                     <td><code>${report.id.substring(0, 8)}</code></td>
-                    <td><strong>${report.domain}</strong></td>
-                    <td>${report.type}</td>
-                    <td>${report.reporter_email}</td>
+                    <td><strong>${report.domain || 'N/A'}</strong></td>
+                    <td>${report.type || report.reason || 'Not specified'}</td>
+                    <td>${report.reporter_email || report.contact || 'Anonymous'}</td>
                     <td>${this.formatDate(report.created_at)}</td>
                     <td><span class="status-badge status-${report.status}">${report.status}</span></td>
                     <td>
+                        <button class="btn btn-secondary btn-sm" onclick="p0rtAdmin.viewAbuseReport('${report.id}')">
+                            View Details
+                        </button>
                         ${report.status === 'pending' ? `
                             <button class="btn btn-danger btn-sm" onclick="p0rtAdmin.processAbuseReport('${report.id}', 'ban')">
                                 Ban
@@ -416,11 +458,7 @@ class P0rtAdmin {
                             <button class="btn btn-success btn-sm" onclick="p0rtAdmin.processAbuseReport('${report.id}', 'accept')">
                                 Accept
                             </button>
-                        ` : `
-                            <button class="btn btn-secondary btn-sm" onclick="p0rtAdmin.viewAbuseReport('${report.id}')">
-                                View
-                            </button>
-                        `}
+                        ` : ''}
                     </td>
                 </tr>
             `).join('');
@@ -451,38 +489,95 @@ class P0rtAdmin {
             const response = await this.apiCall(`/api/v1/abuse/reports/${reportId}`);
             const report = response.report;
             
-            this.showModal('Détails du Report', `
+            // Handle missing fields gracefully
+            const domain = report.domain || 'N/A';
+            const type = report.type || report.reason || 'Not specified';
+            const reporter = report.reporter_email || report.contact || 'Anonymous';
+            const description = report.description || report.message || 'No description provided';
+            const status = report.status || 'unknown';
+            const createdAt = report.created_at || report.timestamp || null;
+            const processedAt = report.processed_at || null;
+            const processedBy = report.processed_by || null;
+            const evidence = report.evidence || report.url || null;
+            
+            let modalContent = `
                 <div class="form-group">
-                    <label class="form-label">ID:</label>
-                    <p><code>${report.id}</code></p>
+                    <label class="form-label">Report ID:</label>
+                    <p><code>${report.id || 'Unknown'}</code></p>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Domaine:</label>
-                    <p><strong>${report.domain}</strong></p>
+                    <label class="form-label">Domain:</label>
+                    <p><strong>${domain}</strong></p>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Type:</label>
-                    <p>${report.type}</p>
+                    <label class="form-label">Type/Reason:</label>
+                    <p>${type}</p>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Reporter:</label>
-                    <p>${report.reporter_email}</p>
+                    <p>${reporter}</p>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Description:</label>
-                    <p>${report.description}</p>
-                </div>
+                    <p style="white-space: pre-wrap; word-break: break-word;">${description}</p>
+                </div>`;
+            
+            if (evidence) {
+                modalContent += `
+                <div class="form-group">
+                    <label class="form-label">Evidence/URL:</label>
+                    <p style="word-break: break-all;"><a href="${evidence}" target="_blank" rel="noopener">${evidence}</a></p>
+                </div>`;
+            }
+            
+            modalContent += `
                 <div class="form-group">
                     <label class="form-label">Status:</label>
-                    <p><span class="status-badge status-${report.status}">${report.status}</span></p>
+                    <p><span class="status-badge status-${status}">${status}</span></p>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Date:</label>
-                    <p>${this.formatDate(report.created_at)}</p>
-                </div>
-            `);
+                    <label class="form-label">Reported:</label>
+                    <p>${createdAt ? this.formatDate(createdAt) : 'Unknown'}</p>
+                </div>`;
+            
+            if (processedAt) {
+                modalContent += `
+                <div class="form-group">
+                    <label class="form-label">Processed:</label>
+                    <p>${this.formatDate(processedAt)}</p>
+                </div>`;
+            }
+            
+            if (processedBy) {
+                modalContent += `
+                <div class="form-group">
+                    <label class="form-label">Processed By:</label>
+                    <p>${processedBy}</p>
+                </div>`;
+            }
+            
+            // Add available actions for pending reports
+            if (status === 'pending') {
+                modalContent += `
+                <div class="form-group" style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                    <label class="form-label">Actions:</label>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button class="btn btn-danger btn-sm" onclick="p0rtAdmin.processAbuseReport('${report.id}', 'ban'); closeModal();">
+                            🚫 Ban Domain
+                        </button>
+                        <button class="btn btn-success btn-sm" onclick="p0rtAdmin.processAbuseReport('${report.id}', 'accept'); closeModal();">
+                            ✅ Accept Report
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="p0rtAdmin.processAbuseReport('${report.id}', 'reject'); closeModal();">
+                            ❌ Reject Report
+                        </button>
+                    </div>
+                </div>`;
+            }
+            
+            this.showModal('Abuse Report Details', modalContent);
         } catch (error) {
-            // Error already handled by apiCall
+            this.showToast('Failed to load abuse report details', 'error');
         }
     }
 
@@ -493,7 +588,7 @@ class P0rtAdmin {
             const tbody = document.getElementById('keys-table');
             
             if (response.keys.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Aucune clé SSH</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No SSH keys</td></tr>';
                 return;
             }
 
@@ -502,22 +597,22 @@ class P0rtAdmin {
                     <td><code>${key.fingerprint.substring(0, 16)}...</code></td>
                     <td>${key.type}</td>
                     <td>${key.comment || '-'}</td>
-                    <td><span class="status-badge status-${key.active ? 'online' : 'offline'}">${key.active ? 'Actif' : 'Inactif'}</span></td>
+                    <td><span class="status-badge status-${key.active ? 'online' : 'offline'}">${key.active ? 'Active' : 'Inactive'}</span></td>
                     <td>${this.formatDate(key.created_at)}</td>
                     <td>
                         <button class="btn btn-${key.active ? 'warning' : 'success'} btn-sm" 
                                 onclick="p0rtAdmin.toggleKey('${key.fingerprint}', ${!key.active})">
-                            ${key.active ? 'Désactiver' : 'Activer'}
+                            ${key.active ? 'Deactivate' : 'Activate'}
                         </button>
                         <button class="btn btn-danger btn-sm" onclick="p0rtAdmin.deleteKey('${key.fingerprint}')">
-                            Supprimer
+                            Delete
                         </button>
                     </td>
                 </tr>
             `).join('');
         } catch (error) {
             document.getElementById('keys-table').innerHTML = 
-                '<tr><td colspan="6" class="text-center text-danger">Erreur de chargement</td></tr>';
+                '<tr><td colspan="6" class="text-center text-danger">Loading error</td></tr>';
         }
     }
 
@@ -535,7 +630,7 @@ class P0rtAdmin {
     }
 
     async deleteKey(fingerprint) {
-        if (!confirm('Supprimer cette clé SSH ?')) return;
+        if (!confirm('Delete cette clé SSH ?')) return;
 
         try {
             await this.apiCall(`/api/v1/keys/${fingerprint}`, { method: 'DELETE' });
@@ -553,18 +648,18 @@ class P0rtAdmin {
         };
 
         window.showAddDomainModal = () => {
-            this.showModal('Nouvelle Réservation de Domaine', `
+            this.showModal('New Domain Reservation', `
                 <form onsubmit="p0rtAdmin.addDomain(event)">
                     <div class="form-group">
-                        <label class="form-label">Domaine:</label>
+                        <label class="form-label">Domain:</label>
                         <input type="text" class="form-input" name="domain" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Empreinte SSH:</label>
+                        <label class="form-label">SSH Fingerprint:</label>
                         <input type="text" class="form-input" name="fingerprint" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Commentaire:</label>
+                        <label class="form-label">Comment:</label>
                         <input type="text" class="form-input" name="comment">
                     </div>
                     <div class="form-actions">
@@ -579,11 +674,11 @@ class P0rtAdmin {
             this.showModal('Add SSH Key', `
                 <form onsubmit="p0rtAdmin.addKey(event)">
                     <div class="form-group">
-                        <label class="form-label">Clé SSH publique:</label>
+                        <label class="form-label">Public SSH Key:</label>
                         <textarea class="form-textarea" name="key" rows="4" required placeholder="ssh-rsa AAAAB3NzaC1yc2E..."></textarea>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Commentaire:</label>
+                        <label class="form-label">Comment:</label>
                         <input type="text" class="form-input" name="comment">
                     </div>
                     <div class="form-actions">
