@@ -427,7 +427,34 @@ X-P0rt-Origin: 192.168.1.100             # SSH client IP address
 - **Domain filtering**: Real-time blocking of reported domains
 - **Analytics**: Security statistics and monitoring
 
-### 📊 Admin Commands
+### 🌐 Web Admin Interface
+
+P0rt includes a modern web-based administration interface:
+
+**Features:**
+- Real-time dashboard with live metrics
+- Active connection monitoring with traffic stats
+- Domain reservation management
+- Security monitoring and IP ban management
+- Abuse report processing
+- SSH key management
+- Dark/light theme toggle
+
+**Configuration:**
+```bash
+# Required: Enable admin interface
+export ADMIN_URL="/your-secret-admin-path"
+export API_KEY="your-secure-api-key"
+
+# Start server
+./p0rt server start
+```
+
+**Access:** Navigate to `http://localhost:8080{ADMIN_URL}` (secure the URL!)
+
+> **Security Note:** The admin interface is disabled by default. Only enable it by setting `ADMIN_URL` in production, and use a hard-to-guess path like `/admin-$(date +%s)`.
+
+### 📊 CLI Admin Commands
 ```bash
 # List abuse reports
 ./p0rt abuse list

@@ -21,7 +21,10 @@ L'interface utilise les mêmes APIs que le CLI, avec authentification par clé A
 export API_KEY="votre-cle-api-secrete"
 export SSH_SERVER_PORT="2222"
 export HTTP_SERVER_PORT="8080"
+export ADMIN_URL="/p0rtadmin"  # REQUIRED - Admin interface disabled if not set
 ```
+
+**Important:** L'interface d'administration n'est disponible que si `ADMIN_URL` est définie dans l'environnement. Si cette variable n'est pas configurée, l'interface admin est complètement désactivée pour des raisons de sécurité.
 
 ### Démarrer le serveur
 
@@ -35,9 +38,10 @@ go build -o p0rt cmd/main/main.go
 
 ### Accès à l'interface
 
-1. Ouvrir http://localhost:8080/p0rtadmin
-2. Entrer la clé API quand demandée
-3. La clé sera stockée en localStorage pour les prochaines sessions
+1. Configurer `ADMIN_URL` dans l'environnement (ex: `/p0rtadmin`)
+2. Ouvrir http://localhost:8080{ADMIN_URL} (ex: http://localhost:8080/p0rtadmin)
+3. Entrer la clé API quand demandée
+4. La clé sera stockée en localStorage pour les prochaines sessions
 
 ## 🎨 Interface
 
@@ -78,10 +82,22 @@ go build -o p0rt cmd/main/main.go
 
 ## 🔒 Sécurité
 
-- Authentification requise via clé API
-- Headers de sécurité (CSP, X-Frame-Options, etc.)
-- Files statiques embarqués dans le binaire
-- Pas d'accès extérieur aux APIs d'administration
+- **Interface désactivée par défaut** : Requiert `ADMIN_URL` dans l'environnement
+- **Authentification requise** via clé API
+- **Headers de sécurité** (CSP, X-Frame-Options, etc.)
+- **Files statiques embarqués** dans le binaire
+- **URL personnalisable** pour masquer l'interface d'administration
+- **Pas d'accès extérieur** aux APIs d'administration sans authentification
+
+### Configuration de sécurité recommandée
+
+```bash
+# URL d'admin difficile à deviner
+export ADMIN_URL="/secret-admin-panel-$(date +%s)"
+
+# Clé API forte
+export API_KEY="$(openssl rand -hex 32)"
+```
 
 ## 🛠️ Développement
 

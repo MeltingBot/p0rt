@@ -10,6 +10,7 @@ export SSH_PORT="2222"
 export HTTP_PORT="8080"
 export P0RT_OPEN_ACCESS="false"
 export P0RT_VERBOSE="true"
+export ADMIN_URL="/p0rtadmin"
 
 # Start the server in background
 ./p0rt server start &
