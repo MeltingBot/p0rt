@@ -1122,10 +1122,33 @@ func (c *CLI) serverStatus() error {
 	fmt.Printf("  SSH Port: %s\n", c.config.GetSSHPort())
 	fmt.Printf("  HTTP Port: %s\n", c.config.GetHTTPPort())
 	fmt.Printf("  Domain Base: %s\n", c.config.GetDomainBase())
-	fmt.Printf("  Storage Type: %s\n", c.config.Storage.Type)
+	storageType := c.getStorageType()
+	fmt.Printf("  Storage Type: %s\n", storageType)
 	fmt.Printf("  Reservations Enabled: %t\n", c.config.Domain.ReservationsEnabled)
 	fmt.Println("  Server Status: Use 'server start' to launch")
 	return nil
+}
+
+// getStorageType determines the actual storage type being used
+func (c *CLI) getStorageType() string {
+	// Check if Redis is configured via environment variables
+	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+		return "redis"
+	}
+	if redisURL := os.Getenv("P0RT_REDIS_URL"); redisURL != "" {
+		return "redis"
+	}
+	if host := os.Getenv("REDIS_HOST"); host != "" {
+		return "redis"
+	}
+	
+	// Check config file for Redis
+	if c.config.Storage.Type == "redis" || c.config.Storage.RedisURL != "" {
+		return "redis"
+	}
+	
+	// Default to JSON
+	return "json"
 }
 
 // handleKeyCommand handles SSH key management commands

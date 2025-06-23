@@ -27,15 +27,20 @@ import (
 var serverCmd = &cobra.Command{
 	Use:   "server",
 	Short: "Manage the P0rt server",
-	Long: `Start, stop, restart, or check the status of the P0rt SSH tunneling server.
+	Long: `Start, check status, or reload the P0rt SSH tunneling server.
 
 The server handles SSH connections for tunneling and serves the HTTP proxy
 that routes incoming web requests to the appropriate tunnels.`,
-	Example: `  # Start the server
+	Example: `  # Start the server (local only)
   p0rt server start
 
-  # Check server status
+  # Check server status (local or remote)
   p0rt server status
+  p0rt --remote http://server:80 server status
+
+  # Reload server configuration (local or remote)
+  p0rt server reload
+  p0rt --remote http://server:80 server reload
 
   # Start with custom config
   p0rt --config /path/to/config.yaml server start`,
@@ -151,7 +156,8 @@ var serverStatusCmd = &cobra.Command{
 			fmt.Printf("  SSH Port: %s\n", cfg.GetSSHPort())
 			fmt.Printf("  HTTP Port: %s\n", cfg.GetHTTPPort())
 			fmt.Printf("  Domain Base: %s\n", cfg.GetDomainBase())
-			fmt.Printf("  Storage Type: %s\n", cfg.Storage.Type)
+			storageType := getStorageType(cfg)
+			fmt.Printf("  Storage Type: %s\n", storageType)
 			fmt.Printf("  Reservations Enabled: %t\n", cfg.Domain.ReservationsEnabled)
 
 			// Test if ports are available
@@ -247,6 +253,28 @@ func testPort(port string) bool {
 	}
 	ln.Close()
 	return true
+}
+
+// getStorageType determines the actual storage type being used
+func getStorageType(cfg *config.Config) string {
+	// Check if Redis is configured via environment variables
+	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+		return "redis"
+	}
+	if redisURL := os.Getenv("P0RT_REDIS_URL"); redisURL != "" {
+		return "redis"
+	}
+	if host := os.Getenv("REDIS_HOST"); host != "" {
+		return "redis"
+	}
+	
+	// Check config file for Redis
+	if cfg.Storage.Type == "redis" || cfg.Storage.RedisURL != "" {
+		return "redis"
+	}
+	
+	// Default to JSON
+	return "json"
 }
 
 // TCP Manager adapter types (moved from main.go)
