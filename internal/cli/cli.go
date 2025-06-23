@@ -292,6 +292,8 @@ func (c *CLI) processCommand(line string) error {
 		return c.handleAccessCommand(args)
 	case "abuse":
 		return c.handleAbuseCommand(args)
+	case "notify":
+		return c.handleNotifyCommand(args)
 	case "clear":
 		fmt.Print("\033[H\033[2J")
 		return nil
@@ -314,6 +316,7 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("  connections        - Show active connections")
 		fmt.Println("  access             - Manage server access mode")
 		fmt.Println("  abuse              - Manage abuse reports")
+		fmt.Println("  notify             - Send notifications to SSH clients")
 		fmt.Println("  status             - Show system status")
 		fmt.Println("  clear              - Clear the screen")
 		fmt.Println("  exit               - Exit the CLI")
@@ -454,6 +457,27 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("Description:")
 		fmt.Println("  Submit, view and process abuse reports for domains.")
 		fmt.Println("  Reports are stored in Redis and can be banned or accepted.")
+	case "notify":
+		fmt.Println("notify - Send notifications to SSH clients")
+		fmt.Println()
+		fmt.Println("Usage:")
+		fmt.Println("  notify test [message]                    - Send test notification")
+		fmt.Println("  notify domain <domain> [options]         - Send notification to specific domain")
+		fmt.Println()
+		fmt.Println("Domain notification options:")
+		fmt.Println("  --type ban --reason <reason>             - Send ban notification")
+		fmt.Println("  --type warning --message <message>       - Send warning notification")
+		fmt.Println("  --message <message>                      - Send custom message")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  notify test")
+		fmt.Println("  notify test \"Custom test message\"")
+		fmt.Println("  notify domain happy-cat-123 --type ban --reason \"spam\"")
+		fmt.Println("  notify domain happy-cat-123 --message \"Maintenance in 5 minutes\"")
+		fmt.Println()
+		fmt.Println("Description:")
+		fmt.Println("  Send real-time notifications to active SSH clients.")
+		fmt.Println("  Requires remote API connection to work.")
 	default:
 		return fmt.Errorf("no help available for command: %s", command)
 	}
@@ -869,6 +893,10 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 			readline.PcItem("process"),
 			readline.PcItem("delete"),
 			readline.PcItem("stats"),
+		),
+		readline.PcItem("notify",
+			readline.PcItem("test"),
+			readline.PcItem("domain"),
 		),
 		readline.PcItem("history"),
 		readline.PcItem("connections"),
@@ -2422,6 +2450,146 @@ func (c *CLI) showRemoteConnections() error {
 		fmt.Printf("   Bandwidth Out: %s\n", stats.FormatBytes(conn.BytesOut))
 		fmt.Printf("   Requests: %d\n", conn.RequestCount)
 		fmt.Println()
+	}
+
+	return nil
+}
+
+// handleNotifyCommand handles notify subcommands
+func (c *CLI) handleNotifyCommand(args []string) error {
+	if len(args) == 0 {
+		fmt.Println("📨 Notify subcommands:")
+		fmt.Println("  test [message]                           - Send test notification")
+		fmt.Println("  domain <domain> [--type <type>] [--message <msg>] [--reason <reason>]")
+		fmt.Println("                                           - Send notification to specific domain")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  notify test")
+		fmt.Println("  notify test \"Custom test message\"")
+		fmt.Println("  notify domain happy-cat-123 --type ban --reason \"spam\"")
+		fmt.Println("  notify domain happy-cat-123 --message \"Maintenance in 5 minutes\"")
+		return nil
+	}
+
+	subcommand := args[0]
+	subArgs := args[1:]
+
+	switch subcommand {
+	case "test":
+		return c.handleNotifyTest(subArgs)
+	case "domain":
+		return c.handleNotifyDomain(subArgs)
+	default:
+		return fmt.Errorf("unknown notify subcommand: %s. Use 'help notify' for available commands", subcommand)
+	}
+}
+
+// handleNotifyTest sends a test notification
+func (c *CLI) handleNotifyTest(args []string) error {
+	if !c.useRemoteAPI || c.apiClient == nil {
+		c.outputError("Notify commands require remote API connection. Use --remote flag or configure remote API")
+		return nil
+	}
+
+	message := "Test notification from P0rt CLI"
+	if len(args) > 0 {
+		message = strings.Join(args, " ")
+	}
+
+	notification, err := c.apiClient.TestNotification(message)
+	if err != nil {
+		c.outputError(fmt.Sprintf("Failed to send test notification: %v", err))
+		return nil
+	}
+
+	if c.jsonOutput {
+		c.outputSuccess(notification, "Test notification sent")
+		return nil
+	}
+
+	fmt.Printf("✅ Test notification sent successfully!\n")
+	fmt.Printf("📋 Message: %s\n", message)
+	fmt.Printf("⏰ Sent at: %s\n", notification.Timestamp)
+	return nil
+}
+
+// handleNotifyDomain sends a notification to a specific domain
+func (c *CLI) handleNotifyDomain(args []string) error {
+	if !c.useRemoteAPI || c.apiClient == nil {
+		c.outputError("Notify commands require remote API connection. Use --remote flag or configure remote API")
+		return nil
+	}
+
+	if len(args) == 0 {
+		c.outputError("Usage: notify domain <domain> [options]")
+		return nil
+	}
+
+	domain := args[0]
+	
+	// Parse simple flags from remaining args
+	var notifyType, message, reason string
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
+		case "--type":
+			if i+1 < len(args) {
+				notifyType = args[i+1]
+				i++
+			}
+		case "--message":
+			if i+1 < len(args) {
+				message = args[i+1]
+				i++
+			}
+		case "--reason":
+			if i+1 < len(args) {
+				reason = args[i+1]
+				i++
+			}
+		}
+	}
+
+	// Determine notification type and send appropriate notification
+	if notifyType == "ban" || (notifyType == "" && reason != "") {
+		// Send ban notification
+		notification, err := c.apiClient.BanDomainNotification(domain, reason)
+		if err != nil {
+			c.outputError(fmt.Sprintf("Failed to send ban notification: %v", err))
+			return nil
+		}
+
+		if c.jsonOutput {
+			c.outputSuccess(notification, "Ban notification sent")
+			return nil
+		}
+
+		fmt.Printf("🚫 Ban notification sent successfully!\n")
+		fmt.Printf("📋 Domain: %s\n", domain)
+		if reason != "" {
+			fmt.Printf("💬 Reason: %s\n", reason)
+		}
+		fmt.Printf("⏰ Sent at: %s\n", notification.Timestamp)
+	} else {
+		// Send general notification
+		if message == "" {
+			message = fmt.Sprintf("Notification for domain %s", domain)
+		}
+		
+		notification, err := c.apiClient.TestNotification(message)
+		if err != nil {
+			c.outputError(fmt.Sprintf("Failed to send notification: %v", err))
+			return nil
+		}
+
+		if c.jsonOutput {
+			c.outputSuccess(notification, "Notification sent")
+			return nil
+		}
+
+		fmt.Printf("📨 Notification sent successfully!\n")
+		fmt.Printf("📋 Domain: %s\n", domain)
+		fmt.Printf("💬 Message: %s\n", message)
+		fmt.Printf("⏰ Sent at: %s\n", notification.Timestamp)
 	}
 
 	return nil
