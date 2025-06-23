@@ -49,19 +49,82 @@ class P0rtAdmin {
             });
 
             if (!response.ok) {
-                if (response.status === 401) {
-                    this.showToast('Authentification échouée. Vérifiez votre clé API.', 'error');
-                    localStorage.removeItem('p0rt_api_key');
-                    this.apiKey = this.getApiKey();
-                    return;
+                // Try to parse error response body
+                let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                let errorData = null;
+                
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        errorData = await response.json();
+                        if (errorData.message) {
+                            errorMessage = errorData.message;
+                        } else if (errorData.error && typeof errorData.error === 'string') {
+                            errorMessage = errorData.error;
+                        }
+                    }
+                } catch (parseError) {
+                    // If we can't parse the error response, use the status text
+                    console.warn('Could not parse error response:', parseError);
                 }
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+                // Handle specific status codes
+                switch (response.status) {
+                    case 401:
+                        this.showToast('🔐 Authentification échouée. Vérifiez votre clé API.', 'error');
+                        localStorage.removeItem('p0rt_api_key');
+                        this.apiKey = this.getApiKey();
+                        throw new Error('Authentication failed');
+                        
+                    case 403:
+                        this.showToast('🚫 Accès refusé. Permissions insuffisantes.', 'error');
+                        break;
+                        
+                    case 404:
+                        this.showToast('❓ Ressource non trouvée.', 'error');
+                        break;
+                        
+                    case 409:
+                        this.showToast(`⚠️ Conflit: ${errorMessage}`, 'error');
+                        break;
+                        
+                    case 422:
+                        this.showToast(`📝 Données invalides: ${errorMessage}`, 'error');
+                        break;
+                        
+                    case 429:
+                        this.showToast('⏳ Trop de requêtes. Veuillez patienter.', 'warning');
+                        break;
+                        
+                    case 500:
+                        this.showToast('💥 Erreur serveur interne. Contactez l\'administrateur.', 'error');
+                        break;
+                        
+                    case 503:
+                        this.showToast('🔧 Service temporairement indisponible.', 'warning');
+                        break;
+                        
+                    default:
+                        this.showToast(`❌ Erreur ${response.status}: ${errorMessage}`, 'error');
+                }
+                
+                const error = new Error(errorMessage);
+                error.status = response.status;
+                error.data = errorData;
+                throw error;
             }
 
             return await response.json();
         } catch (error) {
+            // Network errors or other fetch errors
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                this.showToast('🌐 Erreur de connexion. Vérifiez votre réseau.', 'error');
+            } else if (!error.status) {
+                // Only show generic error if we haven't already shown a specific one
+                this.showToast(`⚠️ Erreur: ${error.message}`, 'error');
+            }
+            
             console.error('API Call failed:', error);
-            this.showToast(`Erreur API: ${error.message}`, 'error');
             throw error;
         }
     }
@@ -249,7 +312,7 @@ class P0rtAdmin {
             this.showToast(`Réservation ${domain} supprimée`, 'success');
             this.loadDomains();
         } catch (error) {
-            this.showToast(`Erreur lors de la suppression: ${error.message}`, 'error');
+            // Error already handled by apiCall
         }
     }
 
@@ -303,7 +366,7 @@ class P0rtAdmin {
             this.showToast(`IP ${ip} débannie`, 'success');
             this.loadSecurity();
         } catch (error) {
-            this.showToast(`Erreur lors du débannissement: ${error.message}`, 'error');
+            // Error already handled by apiCall
         }
     }
 
@@ -375,7 +438,7 @@ class P0rtAdmin {
             this.showToast(`Report ${actionText === 'bannir' ? 'banni' : 'accepté'}`, 'success');
             this.loadAbuseReports();
         } catch (error) {
-            this.showToast(`Erreur lors du traitement: ${error.message}`, 'error');
+            // Error already handled by apiCall
         }
     }
 
@@ -415,7 +478,7 @@ class P0rtAdmin {
                 </div>
             `);
         } catch (error) {
-            this.showToast(`Erreur lors du chargement: ${error.message}`, 'error');
+            // Error already handled by apiCall
         }
     }
 
@@ -463,7 +526,7 @@ class P0rtAdmin {
             this.showToast(`Clé ${activate ? 'activée' : 'désactivée'}`, 'success');
             this.loadKeys();
         } catch (error) {
-            this.showToast(`Erreur: ${error.message}`, 'error');
+            // Error already handled by apiCall
         }
     }
 
@@ -475,7 +538,7 @@ class P0rtAdmin {
             this.showToast('Clé supprimée', 'success');
             this.loadKeys();
         } catch (error) {
-            this.showToast(`Erreur lors de la suppression: ${error.message}`, 'error');
+            // Error already handled by apiCall
         }
     }
 
@@ -551,7 +614,7 @@ class P0rtAdmin {
             closeModal();
             this.loadDomains();
         } catch (error) {
-            this.showToast(`Erreur: ${error.message}`, 'error');
+            // Error already handled by apiCall
         }
     }
 
@@ -571,7 +634,7 @@ class P0rtAdmin {
             closeModal();
             this.loadKeys();
         } catch (error) {
-            this.showToast(`Erreur: ${error.message}`, 'error');
+            // Error already handled by apiCall
         }
     }
 

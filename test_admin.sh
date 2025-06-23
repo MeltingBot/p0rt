@@ -6,8 +6,8 @@ echo "🚀 Starting P0rt server with web admin interface..."
 
 # Set test environment variables
 export API_KEY="test-admin-key-12345"
-export SSH_SERVER_PORT="2222"
-export HTTP_SERVER_PORT="8080"
+export SSH_PORT="2222"
+export HTTP_PORT="8080"
 export P0RT_OPEN_ACCESS="false"
 export P0RT_VERBOSE="true"
 
