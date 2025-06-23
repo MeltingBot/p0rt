@@ -345,6 +345,15 @@ func (s *sshServerAdapter) UnbanIPFromTracker(ip string) {
 	s.server.UnbanIPFromTracker(ip)
 }
 
+// SSHNotificationProvider interface implementation
+func (s *sshServerAdapter) NotifyDomainBanned(domain string) {
+	s.server.NotifyDomainBanned(domain)
+}
+
+func (s *sshServerAdapter) NotifyDomain(domain, message string) {
+	s.server.NotifyDomain(domain, message)
+}
+
 type clientPortAdapter struct {
 	client *ssh.Client
 }
