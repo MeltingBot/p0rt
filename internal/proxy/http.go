@@ -106,18 +106,13 @@ func NewHTTPProxyWithAPI(sshServer SSHServer, reservationManager domain.Reservat
 	}
 
 	if reservationManager != nil {
-		// Check if sshServer implements both SecurityProvider and SSHNotificationProvider interfaces
+		// Force using NewHandlerWithSSH since we know sshServer has the notification methods
 		if securityProvider, ok := sshServer.(api.SecurityProvider); ok {
 			log.Printf("✅ SSH server implements SecurityProvider")
-			if sshNotifier, ok := sshServer.(api.SSHNotificationProvider); ok {
-				// SSH server supports both security and notification features
-				log.Printf("✅ SSH server implements SSHNotificationProvider - using NewHandlerWithSSH")
-				proxy.apiHandler = api.NewHandlerWithSSH(reservationManager, statsManager, securityProvider, sshNotifier, apiKey)
-			} else {
-				// SSH server only supports security features
-				log.Printf("❌ SSH server does NOT implement SSHNotificationProvider - using NewHandlerWithSecurity")
-				proxy.apiHandler = api.NewHandlerWithSecurity(reservationManager, statsManager, securityProvider, apiKey)
-			}
+			// Cast sshServer directly to SSHNotificationProvider (we know it has the methods)
+			sshNotifier := sshServer.(api.SSHNotificationProvider)
+			log.Printf("✅ Force-casting SSH server to SSHNotificationProvider - using NewHandlerWithSSH")
+			proxy.apiHandler = api.NewHandlerWithSSH(reservationManager, statsManager, securityProvider, sshNotifier, apiKey)
 		} else {
 			log.Printf("❌ SSH server does NOT implement SecurityProvider - using basic NewHandler")
 			proxy.apiHandler = api.NewHandler(reservationManager, statsManager, apiKey)

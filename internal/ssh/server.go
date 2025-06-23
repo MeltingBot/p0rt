@@ -1,7 +1,6 @@
 package ssh
 
 import (
-	"github.com/p0rt/p0rt/internal/api"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -24,9 +23,6 @@ import (
 	"github.com/p0rt/p0rt/internal/stats"
 	"golang.org/x/crypto/ssh"
 )
-
-// Ensure Server implements SSHNotificationProvider interface
-var _ api.SSHNotificationProvider = (*Server)(nil)
 
 type Client struct {
 	Domain      string
