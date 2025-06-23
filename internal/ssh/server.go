@@ -120,15 +120,11 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 			// Check if IP is banned using SecurityTracker (skip for private IPs)
 			if !server.isPrivateIP(clientIP) {
 				isBanned := server.securityTracker.IsBanned(clientIP)
-				log.Printf("🔒 IP ban check for %s: banned = %t", clientIP, isBanned)
 				if isBanned {
-					server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
-						"reason": "banned_ip_attempt",
-						"user":   conn.User(),
-					})
+					// Don't record additional security events for already banned IPs
+					// This prevents cascading event accumulation
 					metrics.RecordSSHConnection("banned")
-					metrics.RecordSecurityEvent("banned_ip_attempt", "high")
-					log.Printf("Banned IP attempted connection: %s", clientIP)
+					log.Printf("Banned IP attempted connection: %s (silently rejected)", clientIP)
 					return nil, fmt.Errorf("IP banned")
 				}
 			}
@@ -225,10 +221,27 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 			if !server.isPrivateIP(clientIP) {
 				// Only record IP-based tracking if no valid connections from this IP exist
 				if !server.hasValidConnectionsFromIP(clientIP) {
-					server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
-						"reason": "no_public_key",
-						"user":   conn.User(),
-					})
+					// Apply session-based tracking for no-auth attempts too
+					sessionID := fmt.Sprintf("%s-%s", clientIP, conn.User())
+					
+					server.sessionMutex.Lock()
+					lastFailure, sessionExists := server.failedSessions[sessionID]
+					shouldRecord := !sessionExists || time.Since(lastFailure) > 30*time.Second
+					if shouldRecord {
+						server.failedSessions[sessionID] = time.Now()
+					}
+					server.sessionMutex.Unlock()
+					
+					if shouldRecord {
+						server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
+							"reason":     "no_public_key",
+							"user":       conn.User(),
+							"session_id": sessionID,
+						})
+						log.Printf("🚨 Recorded no-auth failure for session %s (first failure or > 30s since last)", sessionID)
+					} else {
+						log.Printf("ℹ️ Skipping no-auth failure recording for session %s (within 30s of last failure)", sessionID)
+					}
 				} else {
 					log.Printf("⚠️ No public key attempt from IP %s with valid active connections - reduced tracking", clientIP)
 				}
