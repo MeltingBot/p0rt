@@ -10,7 +10,11 @@
     <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License">
     <img src="https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-informational?style=for-the-badge" alt="Platform">
   </p>
+
+  [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L01GYVCA)
+  
 </div>
+
 
 ---
 
