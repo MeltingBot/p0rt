@@ -949,6 +949,22 @@ class P0rtAdmin {
         }
     }
 
+    // Get current theme colors for charts
+    getChartColors() {
+        const style = getComputedStyle(document.documentElement);
+        return {
+            textPrimary: style.getPropertyValue('--text-primary').trim(),
+            textSecondary: style.getPropertyValue('--text-secondary').trim(),
+            border: style.getPropertyValue('--border').trim(),
+            success: style.getPropertyValue('--success').trim(),
+            warning: style.getPropertyValue('--warning').trim(),
+            danger: style.getPropertyValue('--danger').trim(),
+            info: style.getPropertyValue('--info').trim(),
+            primary: style.getPropertyValue('--primary').trim(),
+            secondary: style.getPropertyValue('--secondary').trim()
+        };
+    }
+
     // Load Prometheus metrics for dashboard
     async loadMetrics() {
         try {
@@ -982,6 +998,7 @@ class P0rtAdmin {
             this.statusCodesChart.destroy();
         }
 
+        const colors = this.getChartColors();
         const data = Object.entries(statusCodes)
             .sort(([a], [b]) => a.localeCompare(b))
             .slice(0, 8); // Limit to top 8 status codes
@@ -994,13 +1011,13 @@ class P0rtAdmin {
                     label: 'Requests',
                     data: data.map(([, count]) => count),
                     backgroundColor: data.map(([code]) => {
-                        if (code.startsWith('2')) return '#10b981'; // Green for 2xx
-                        if (code.startsWith('3')) return '#06b6d4'; // Blue for 3xx
-                        if (code.startsWith('4')) return '#f59e0b'; // Orange for 4xx
-                        if (code.startsWith('5')) return '#ef4444'; // Red for 5xx
-                        return '#64748b'; // Gray for others
+                        if (code.startsWith('2')) return colors.success; // Green for 2xx
+                        if (code.startsWith('3')) return colors.info; // Blue for 3xx
+                        if (code.startsWith('4')) return colors.warning; // Orange for 4xx
+                        if (code.startsWith('5')) return colors.danger; // Red for 5xx
+                        return colors.secondary; // Gray for others
                     }),
-                    borderColor: 'rgba(255, 255, 255, 0.8)',
+                    borderColor: colors.border,
                     borderWidth: 1
                 }]
             },
@@ -1013,12 +1030,12 @@ class P0rtAdmin {
                 scales: {
                     y: {
                         beginAtZero: true,
-                        grid: { color: 'rgba(156, 163, 175, 0.1)' },
-                        ticks: { color: 'var(--text-secondary)' }
+                        grid: { color: colors.border + '40' },
+                        ticks: { color: colors.textSecondary }
                     },
                     x: {
                         grid: { display: false },
-                        ticks: { color: 'var(--text-secondary)' }
+                        ticks: { color: colors.textSecondary }
                     }
                 }
             }
@@ -1034,6 +1051,7 @@ class P0rtAdmin {
             this.securityEventsChart.destroy();
         }
 
+        const colors = this.getChartColors();
         const data = Object.entries(securityEvents)
             .sort(([, a], [, b]) => b - a)
             .slice(0, 6); // Top 6 events
@@ -1045,10 +1063,10 @@ class P0rtAdmin {
                 datasets: [{
                     data: data.map(([, count]) => count),
                     backgroundColor: [
-                        '#ef4444', '#f59e0b', '#10b981', 
-                        '#06b6d4', '#8b5cf6', '#ec4899'
+                        colors.danger, colors.warning, colors.success, 
+                        colors.info, colors.primary, colors.secondary
                     ],
-                    borderColor: 'rgba(255, 255, 255, 0.8)',
+                    borderColor: colors.border,
                     borderWidth: 2
                 }]
             },
@@ -1058,7 +1076,7 @@ class P0rtAdmin {
                 plugins: {
                     legend: {
                         position: 'bottom',
-                        labels: { color: 'var(--text-secondary)', font: { size: 11 } }
+                        labels: { color: colors.textSecondary, font: { size: 11 } }
                     }
                 }
             }
@@ -1074,6 +1092,7 @@ class P0rtAdmin {
             this.authFailuresChart.destroy();
         }
 
+        const colors = this.getChartColors();
         const data = Object.entries(authFailures)
             .sort(([, a], [, b]) => b - a)
             .slice(0, 5);
@@ -1085,8 +1104,8 @@ class P0rtAdmin {
                 datasets: [{
                     label: 'Failures',
                     data: data.map(([, count]) => count),
-                    backgroundColor: '#ef4444',
-                    borderColor: 'rgba(255, 255, 255, 0.8)',
+                    backgroundColor: colors.danger,
+                    borderColor: colors.border,
                     borderWidth: 1
                 }]
             },
@@ -1100,12 +1119,12 @@ class P0rtAdmin {
                 scales: {
                     x: {
                         beginAtZero: true,
-                        grid: { color: 'rgba(156, 163, 175, 0.1)' },
-                        ticks: { color: 'var(--text-secondary)' }
+                        grid: { color: colors.border + '40' },
+                        ticks: { color: colors.textSecondary }
                     },
                     y: {
                         grid: { display: false },
-                        ticks: { color: 'var(--text-secondary)' }
+                        ticks: { color: colors.textSecondary }
                     }
                 }
             }
@@ -1121,6 +1140,7 @@ class P0rtAdmin {
             this.latencyChart.destroy();
         }
 
+        const colors = this.getChartColors();
         const avgLatency = traffic.avg_latency_ms || 0;
         const p95Latency = traffic.p95_latency_ms || 0;
         const p99Latency = traffic.p99_latency_ms || 0;
@@ -1133,11 +1153,11 @@ class P0rtAdmin {
                     label: 'Latency (ms)',
                     data: [avgLatency, p95Latency, p99Latency],
                     backgroundColor: [
-                        '#10b981', // Green for average
-                        '#f59e0b', // Orange for P95
-                        '#ef4444'  // Red for P99
+                        colors.success, // Green for average
+                        colors.warning, // Orange for P95
+                        colors.danger   // Red for P99
                     ],
-                    borderColor: 'rgba(255, 255, 255, 0.8)',
+                    borderColor: colors.border,
                     borderWidth: 1
                 }]
             },
@@ -1150,9 +1170,9 @@ class P0rtAdmin {
                 scales: {
                     y: {
                         beginAtZero: true,
-                        grid: { color: 'rgba(156, 163, 175, 0.1)' },
+                        grid: { color: colors.border + '40' },
                         ticks: { 
-                            color: 'var(--text-secondary)',
+                            color: colors.textSecondary,
                             callback: function(value) {
                                 return value + 'ms';
                             }
@@ -1160,7 +1180,7 @@ class P0rtAdmin {
                     },
                     x: {
                         grid: { display: false },
-                        ticks: { color: 'var(--text-secondary)' }
+                        ticks: { color: colors.textSecondary }
                     }
                 }
             }
