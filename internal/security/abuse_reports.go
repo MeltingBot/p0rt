@@ -747,6 +747,8 @@ func (arm *AbuseReportManager) isDomainBannedRedis(domain string) bool {
 		return false
 	}
 
+	// Check ALL reports for this domain - if ANY active report is banned, domain is banned
+	// Archived reports are considered resolved and don't affect domain status
 	for _, key := range keys {
 		data, err := arm.redisClient.Get(arm.ctx, key).Result()
 		if err != nil {
@@ -758,18 +760,19 @@ func (arm *AbuseReportManager) isDomainBannedRedis(domain string) bool {
 			continue
 		}
 
-		// Check if this domain is banned (and not accepted or archived)
-		if report.Domain == domain && report.Status == "banned" {
-			log.Printf("🚫 Domain '%s' is BANNED (found banned report)", domain)
-			return true
+		// Skip archived reports - they are resolved and don't affect domain status
+		if report.Domain == domain && report.Status == "archived" {
+			continue
 		}
 
-		// If domain was accepted or archived, it's explicitly not banned
-		if report.Domain == domain && (report.Status == "accepted" || report.Status == "archived") {
-			return false
+		// If we find ANY active banned report for this domain, it's banned
+		if report.Domain == domain && report.Status == "banned" {
+			log.Printf("🚫 Domain '%s' is BANNED (found active banned report)", domain)
+			return true
 		}
 	}
 
+	// Only return false if no banned reports were found
 	return false
 }
 
@@ -778,19 +781,22 @@ func (arm *AbuseReportManager) isDomainBannedJSON(domain string) bool {
 	arm.mutex.RLock()
 	defer arm.mutex.RUnlock()
 
+	// Check ALL reports for this domain - if ANY active report is banned, domain is banned
+	// Archived reports are considered resolved and don't affect domain status
 	for _, report := range arm.reports {
-		// Check if this domain is banned (and not accepted or archived)
-		if report.Domain == domain && report.Status == "banned" {
-			log.Printf("🚫 Domain '%s' is BANNED (found banned report)", domain)
-			return true
+		// Skip archived reports - they are resolved and don't affect domain status
+		if report.Domain == domain && report.Status == "archived" {
+			continue
 		}
 
-		// If domain was accepted or archived, it's explicitly not banned
-		if report.Domain == domain && (report.Status == "accepted" || report.Status == "archived") {
-			return false
+		// If we find ANY active banned report for this domain, it's banned
+		if report.Domain == domain && report.Status == "banned" {
+			log.Printf("🚫 Domain '%s' is BANNED (found active banned report)", domain)
+			return true
 		}
 	}
 
+	// Only return false if no banned reports were found
 	return false
 }
 
