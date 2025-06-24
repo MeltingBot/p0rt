@@ -427,6 +427,26 @@ func (arm *AbuseReportManager) processReportRedis(reportID, action, processedBy 
 	} else {
 		metrics.RecordAbuseReport(report.Reason, "accepted")
 		metrics.RecordSecurityEvent("report_accepted", "info")
+		
+		// Notify active SSH clients that their abuse report was accepted/dismissed
+		if arm.sshServer != nil {
+			acceptMessage := fmt.Sprintf(
+				"============================================================\n"+
+				"✅ NOTIFICATION - ABUSE REPORT RESOLVED\n"+
+				"============================================================\n"+
+				"Domain: %s\n"+
+				"Status: Report reviewed and dismissed\n"+
+				"Action: No action required - your tunnel remains active\n"+
+				"\n"+
+				"The abuse report against your domain has been reviewed\n"+
+				"and found to be without merit. Your service continues\n"+
+				"normally. Thank you for using P0rt responsibly!\n"+
+				"============================================================",
+				report.Domain)
+			
+			log.Printf("✅ Notifying domain %s that abuse report was accepted", report.Domain)
+			arm.sshServer.NotifyDomain(extractSubdomain(report.Domain), acceptMessage)
+		}
 	}
 	
 	return nil
@@ -495,6 +515,26 @@ func (arm *AbuseReportManager) processReportJSON(reportID, action, processedBy s
 	} else {
 		metrics.RecordAbuseReport(report.Reason, "accepted")
 		metrics.RecordSecurityEvent("report_accepted", "info")
+		
+		// Notify active SSH clients that their abuse report was accepted/dismissed
+		if arm.sshServer != nil {
+			acceptMessage := fmt.Sprintf(
+				"============================================================\n"+
+				"✅ NOTIFICATION - ABUSE REPORT RESOLVED\n"+
+				"============================================================\n"+
+				"Domain: %s\n"+
+				"Status: Report reviewed and dismissed\n"+
+				"Action: No action required - your tunnel remains active\n"+
+				"\n"+
+				"The abuse report against your domain has been reviewed\n"+
+				"and found to be without merit. Your service continues\n"+
+				"normally. Thank you for using P0rt responsibly!\n"+
+				"============================================================",
+				report.Domain)
+			
+			log.Printf("✅ Notifying domain %s that abuse report was accepted", report.Domain)
+			arm.sshServer.NotifyDomain(extractSubdomain(report.Domain), acceptMessage)
+		}
 	}
 	
 	return nil

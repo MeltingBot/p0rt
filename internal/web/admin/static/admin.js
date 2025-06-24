@@ -518,20 +518,10 @@ class P0rtAdmin {
             }
 
             tbody.innerHTML = response.reports.map(report => {
-                // Handle field mapping - sometimes description comes in type field
-                let reportType = 'Not specified';
-                let description = 'No description provided';
-                
-                // Check if type contains description-like content (longer text or specific patterns)
-                if (report.type && (report.type.length > 20 || report.type.includes('!'))) {
-                    description = report.type;
-                    reportType = report.reason || report.category || 'malware';
-                } else {
-                    reportType = report.type || report.reason || report.category || 'Not specified';
-                    description = report.description || report.message || 'No description provided';
-                }
-                
-                const reporter = report.contact || report.reporter_email || 'Anonymous';
+                // Use correct field names from backend
+                const reportType = report.reason || 'Not specified';
+                const description = report.details || 'No description provided';
+                const reporter = report.reporter_ip || 'Anonymous';
                 
                 return `
                 <tr>
@@ -539,11 +529,11 @@ class P0rtAdmin {
                     <td><strong>${report.domain || 'N/A'}</strong></td>
                     <td>${reportType}</td>
                     <td>${reporter}</td>
-                    <td>${this.formatDate(report.created_at)}</td>
+                    <td>${this.formatDate(report.reported_at)}</td>
                     <td><span class="status-badge status-${report.status}">${report.status}</span></td>
-                    <td>
+                    <td style="white-space: nowrap;">
                         <button class="btn btn-secondary btn-sm" onclick="p0rtAdmin.viewAbuseReport('${report.id}')">
-                            View Details
+                            View
                         </button>
                         ${report.status === 'pending' ? `
                             <button class="btn btn-danger btn-sm" onclick="p0rtAdmin.processAbuseReport('${report.id}', 'ban')">
@@ -551,6 +541,11 @@ class P0rtAdmin {
                             </button>
                             <button class="btn btn-success btn-sm" onclick="p0rtAdmin.processAbuseReport('${report.id}', 'accept')">
                                 Accept
+                            </button>
+                        ` : ''}
+                        ${(report.status === 'banned' || report.status === 'accepted') ? `
+                            <button class="btn btn-warning btn-sm" onclick="p0rtAdmin.archiveAbuseReport('${report.id}')">
+                                Archive
                             </button>
                         ` : ''}
                     </td>
@@ -579,31 +574,42 @@ class P0rtAdmin {
         }
     }
 
+    async archiveAbuseReport(reportId) {
+        const response = await this.apiCall(`/api/v1/abuse/reports/${reportId}`);
+        const report = response.report;
+        
+        let confirmMessage = 'Archive this report?';
+        if (report.status === 'banned') {
+            confirmMessage = 'Archive this report? This will unban the domain and the reporter IP.';
+        }
+        
+        if (!confirm(confirmMessage)) return;
+
+        try {
+            await this.apiCall(`/api/v1/abuse/reports/${reportId}`, {
+                method: 'DELETE'
+            });
+            this.showToast('Report archived', 'success');
+            this.loadAbuseReports();
+        } catch (error) {
+            // Error already handled by apiCall
+        }
+    }
+
     async viewAbuseReport(reportId) {
         try {
             const response = await this.apiCall(`/api/v1/abuse/reports/${reportId}`);
             const report = response.report;
             
-            // Handle missing fields gracefully with same logic as table display
+            // Use correct field names from backend
             const domain = report.domain || 'N/A';
-            let type = 'Not specified';
-            let description = 'No description provided';
-            
-            // Apply same field mapping logic as table
-            if (report.type && (report.type.length > 20 || report.type.includes('!'))) {
-                description = report.type;
-                type = report.reason || report.category || 'malware';
-            } else {
-                type = report.type || report.reason || report.category || 'Not specified';
-                description = report.description || report.message || 'No description provided';
-            }
-            
-            const reporter = report.contact || report.reporter_email || 'Anonymous';
+            const type = report.reason || 'Not specified';
+            const description = report.details || 'No description provided';
+            const reporter = report.reporter_ip || 'Anonymous';
             const status = report.status || 'unknown';
-            const createdAt = report.created_at || report.timestamp || null;
+            const reportedAt = report.reported_at || null;
             const processedAt = report.processed_at || null;
             const processedBy = report.processed_by || null;
-            const evidence = report.evidence || report.url || null;
             
             let modalContent = `
                 <div class="form-group">
@@ -627,13 +633,7 @@ class P0rtAdmin {
                     <p style="white-space: pre-wrap; word-break: break-word;">${description}</p>
                 </div>`;
             
-            if (evidence) {
-                modalContent += `
-                <div class="form-group">
-                    <label class="form-label">Evidence/URL:</label>
-                    <p style="word-break: break-all;"><a href="${evidence}" target="_blank" rel="noopener">${evidence}</a></p>
-                </div>`;
-            }
+            // Remove evidence section as it's not in the backend structure
             
             modalContent += `
                 <div class="form-group">
@@ -642,7 +642,7 @@ class P0rtAdmin {
                 </div>
                 <div class="form-group">
                     <label class="form-label">Reported:</label>
-                    <p>${createdAt ? this.formatDate(createdAt) : 'Unknown'}</p>
+                    <p>${reportedAt ? this.formatDate(reportedAt) : 'Unknown'}</p>
                 </div>`;
             
             if (processedAt) {
