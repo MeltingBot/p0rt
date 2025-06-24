@@ -1,4 +1,5 @@
 // P0rt Admin JavaScript
+// Admin interface updated - Ban/Accept/Archive workflow v2
 class P0rtAdmin {
     constructor() {
         this.apiKey = this.getApiKey();
@@ -543,7 +544,15 @@ class P0rtAdmin {
                                 Accept
                             </button>
                         ` : ''}
-                        ${(report.status === 'banned' || report.status === 'accepted') ? `
+                        ${report.status === 'banned' ? `
+                            <button class="btn btn-success btn-sm" onclick="p0rtAdmin.processAbuseReport('${report.id}', 'accept')">
+                                Accept
+                            </button>
+                            <button class="btn btn-warning btn-sm" onclick="p0rtAdmin.archiveAbuseReport('${report.id}')">
+                                Archive
+                            </button>
+                        ` : ''}
+                        ${report.status === 'accepted' ? `
                             <button class="btn btn-warning btn-sm" onclick="p0rtAdmin.archiveAbuseReport('${report.id}')">
                                 Archive
                             </button>
