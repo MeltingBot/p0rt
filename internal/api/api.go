@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,6 +14,7 @@ import (
 	"github.com/p0rt/p0rt/internal/auth"
 	"github.com/p0rt/p0rt/internal/config"
 	"github.com/p0rt/p0rt/internal/domain"
+	"github.com/p0rt/p0rt/internal/metrics"
 	"github.com/p0rt/p0rt/internal/security"
 	"github.com/p0rt/p0rt/internal/stats"
 )
@@ -107,6 +109,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/notifications/test", h.handleNotificationTest)
 	mux.HandleFunc("/api/v1/notifications/domain", h.handleNotificationBanDomain)
 	mux.HandleFunc("/api/v1/notifications/ban-domain", h.handleNotificationBanDomain)
+	
+	// Metrics endpoint for admin dashboard
+	mux.HandleFunc("/api/v1/metrics/dashboard", h.handleDashboardMetrics)
 }
 
 // authenticateRequest checks if the request is authenticated
@@ -743,6 +748,33 @@ func (h *Handler) handleAbuseReport(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
+}
+
+// handleDashboardMetrics returns Prometheus metrics formatted for the admin dashboard
+func (h *Handler) handleDashboardMetrics(w http.ResponseWriter, r *http.Request) {
+	// Check authentication
+	if !h.authenticateRequest(r) {
+		writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	// Only allow GET method
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Collect metrics from Prometheus
+	ctx := context.Background()
+	dashboardMetrics, err := metrics.CollectDashboardMetrics(ctx)
+	if err != nil {
+		log.Printf("Error collecting dashboard metrics: %v", err)
+		writeError(w, http.StatusInternalServerError, "Failed to collect metrics")
+		return
+	}
+
+	// Return metrics as JSON
+	writeJSON(w, http.StatusOK, dashboardMetrics)
 }
 
 // handleAbuseStats handles /api/v1/abuse/stats endpoint

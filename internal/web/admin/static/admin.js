@@ -949,6 +949,224 @@ class P0rtAdmin {
         }
     }
 
+    // Load Prometheus metrics for dashboard
+    async loadMetrics() {
+        try {
+            const response = await this.apiCall('/api/v1/metrics/dashboard');
+            
+            // Update main stats
+            this.updateElement('requests-rate', response.traffic.requests_rate.toFixed(2));
+            this.updateElement('avg-latency', response.traffic.avg_latency_ms.toFixed(1));
+            this.updateElement('bandwidth-in', this.formatBytes(response.traffic.bytes_in));
+            this.updateElement('bandwidth-out', this.formatBytes(response.traffic.bytes_out));
+            
+            // Create Chart.js charts
+            this.createStatusCodesChart(response.traffic.status_codes || {});
+            this.createSecurityEventsChart(response.security.security_events || {});
+            this.createAuthFailuresChart(response.connections.auth_failures || {});
+            this.createLatencyChart(response.traffic);
+            
+        } catch (error) {
+            console.error('Error loading metrics:', error);
+            this.showToast('Failed to load metrics', 'error');
+        }
+    }
+
+    // Create HTTP Status Codes bar chart
+    createStatusCodesChart(statusCodes) {
+        const ctx = document.getElementById('status-codes-chart');
+        if (!ctx) return;
+
+        // Destroy existing chart if it exists
+        if (this.statusCodesChart) {
+            this.statusCodesChart.destroy();
+        }
+
+        const data = Object.entries(statusCodes)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .slice(0, 8); // Limit to top 8 status codes
+
+        this.statusCodesChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: data.map(([code]) => code),
+                datasets: [{
+                    label: 'Requests',
+                    data: data.map(([, count]) => count),
+                    backgroundColor: data.map(([code]) => {
+                        if (code.startsWith('2')) return '#10b981'; // Green for 2xx
+                        if (code.startsWith('3')) return '#06b6d4'; // Blue for 3xx
+                        if (code.startsWith('4')) return '#f59e0b'; // Orange for 4xx
+                        if (code.startsWith('5')) return '#ef4444'; // Red for 5xx
+                        return '#64748b'; // Gray for others
+                    }),
+                    borderColor: 'rgba(255, 255, 255, 0.8)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(156, 163, 175, 0.1)' },
+                        ticks: { color: 'var(--text-secondary)' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: 'var(--text-secondary)' }
+                    }
+                }
+            }
+        });
+    }
+
+    // Create Security Events pie chart
+    createSecurityEventsChart(securityEvents) {
+        const ctx = document.getElementById('security-events-chart');
+        if (!ctx) return;
+
+        if (this.securityEventsChart) {
+            this.securityEventsChart.destroy();
+        }
+
+        const data = Object.entries(securityEvents)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 6); // Top 6 events
+
+        this.securityEventsChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: data.map(([event]) => event.replace(/_/g, ' ')),
+                datasets: [{
+                    data: data.map(([, count]) => count),
+                    backgroundColor: [
+                        '#ef4444', '#f59e0b', '#10b981', 
+                        '#06b6d4', '#8b5cf6', '#ec4899'
+                    ],
+                    borderColor: 'rgba(255, 255, 255, 0.8)',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: 'var(--text-secondary)', font: { size: 11 } }
+                    }
+                }
+            }
+        });
+    }
+
+    // Create Auth Failures horizontal bar chart
+    createAuthFailuresChart(authFailures) {
+        const ctx = document.getElementById('auth-failures-chart');
+        if (!ctx) return;
+
+        if (this.authFailuresChart) {
+            this.authFailuresChart.destroy();
+        }
+
+        const data = Object.entries(authFailures)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5);
+
+        this.authFailuresChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: data.map(([reason]) => reason.replace(/_/g, ' ')),
+                datasets: [{
+                    label: 'Failures',
+                    data: data.map(([, count]) => count),
+                    backgroundColor: '#ef4444',
+                    borderColor: 'rgba(255, 255, 255, 0.8)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(156, 163, 175, 0.1)' },
+                        ticks: { color: 'var(--text-secondary)' }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: { color: 'var(--text-secondary)' }
+                    }
+                }
+            }
+        });
+    }
+
+    // Create Latency gauge-style chart
+    createLatencyChart(traffic) {
+        const ctx = document.getElementById('latency-chart');
+        if (!ctx) return;
+
+        if (this.latencyChart) {
+            this.latencyChart.destroy();
+        }
+
+        const avgLatency = traffic.avg_latency_ms || 0;
+        const p95Latency = traffic.p95_latency_ms || 0;
+        const p99Latency = traffic.p99_latency_ms || 0;
+
+        this.latencyChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Average', 'P95', 'P99'],
+                datasets: [{
+                    label: 'Latency (ms)',
+                    data: [avgLatency, p95Latency, p99Latency],
+                    backgroundColor: [
+                        '#10b981', // Green for average
+                        '#f59e0b', // Orange for P95
+                        '#ef4444'  // Red for P99
+                    ],
+                    borderColor: 'rgba(255, 255, 255, 0.8)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(156, 163, 175, 0.1)' },
+                        ticks: { 
+                            color: 'var(--text-secondary)',
+                            callback: function(value) {
+                                return value + 'ms';
+                            }
+                        }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: 'var(--text-secondary)' }
+                    }
+                }
+            }
+        });
+    }
+
     initTheme() {
         // Get saved theme or default to light
         const savedTheme = localStorage.getItem('p0rt_theme') || 'light';

@@ -18,7 +18,7 @@
             <a href="#domains" class="nav-link" data-section="domains">Domains</a>
             <a href="#security" class="nav-link" data-section="security">Security</a>
             <a href="#abuse" class="nav-link" data-section="abuse">Abuse</a>
-            <a href="#keys" class="nav-link" data-section="keys">SSH Keys</a>
+            <a href="#keys" class="nav-link" data-section="keys">SSH Keys</a>\n            <a href="#metrics" class="nav-link" data-section="metrics">Metrics</a>
             <button class="theme-toggle" onclick="p0rtAdmin.toggleTheme()" title="Toggle theme">
                 🌙
             </button>
@@ -204,6 +204,52 @@
                 </table>
             </div>
         </section>
+
+        <!-- Metrics Section -->
+        <section id="metrics" class="section">
+            <div class="section-header">
+                <h2>📊 Advanced Metrics</h2>
+                <button class="btn btn-refresh" onclick="p0rtAdmin.loadMetrics()">↻ Refresh</button>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="requests-rate">-</div>
+                    <div class="stat-label">Requests/sec</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="avg-latency">-</div>
+                    <div class="stat-label">Avg Latency (ms)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="bandwidth-in">-</div>
+                    <div class="stat-label">Bandwidth In</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="bandwidth-out">-</div>
+                    <div class="stat-label">Bandwidth Out</div>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3>🌐 HTTP Status Codes</h3>
+                    <canvas id="status-codes-chart" width="400" height="200"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>🔒 Security Events</h3>
+                    <canvas id="security-events-chart" width="400" height="200"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>🔑 Auth Failures</h3>
+                    <canvas id="auth-failures-chart" width="400" height="200"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>📈 Request Latency</h3>
+                    <canvas id="latency-chart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </section>
     </main>
 
     <!-- Modals -->
@@ -222,6 +268,7 @@
     <!-- Toast notifications -->
     <div id="toast-container" class="toast-container"></div>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="{{.AdminURL}}/admin.js"></script>
 </body>
 </html>

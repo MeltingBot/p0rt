@@ -701,3 +701,46 @@ body {
         flex-wrap: wrap;
     }
 }
+/* Metrics styling */
+.metric-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.metric-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.metric-label {
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: capitalize;
+}
+
+.metric-label.error {
+    color: var(--danger);
+}
+
+.metric-value {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+/* Chart containers */
+.chart-card canvas {
+    width: 100% !important;
+    height: 250px !important;
+}
+
+.charts-grid .chart-card {
+    min-height: 300px;
+}
