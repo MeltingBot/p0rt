@@ -947,26 +947,21 @@ class P0rtAdmin {
             toggleButton.textContent = newTheme === 'dark' ? '☀️' : '🌙';
             toggleButton.title = newTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
         }
+        
+        // Refresh charts to update colors
+        this.refreshCharts();
     }
 
     // Get current theme colors for charts
     getChartColors() {
-        const style = getComputedStyle(document.documentElement);
-        const getValue = (property, fallback) => {
-            const value = style.getPropertyValue(property).trim();
-            return value || fallback;
-        };
+        // Check if we're in dark mode
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         
         return {
-            textPrimary: getValue('--text-primary', '#1e293b'),
-            textSecondary: getValue('--text-secondary', '#64748b'),
-            border: getValue('--border', '#e2e8f0'),
-            success: getValue('--success', '#10b981'),
-            warning: getValue('--warning', '#f59e0b'),
-            danger: getValue('--danger', '#ef4444'),
-            info: getValue('--info', '#06b6d4'),
-            primary: getValue('--primary', '#3b82f6'),
-            secondary: getValue('--secondary', '#64748b')
+            textPrimary: isDark ? '#f1f5f9' : '#1e293b',
+            textSecondary: isDark ? '#94a3b8' : '#64748b',
+            border: isDark ? '#475569' : '#e2e8f0',
+            gridColor: isDark ? 'rgba(148, 163, 184, 0.1)' : 'rgba(156, 163, 175, 0.1)'
         };
     }
 
@@ -975,6 +970,14 @@ class P0rtAdmin {
         try {
             const response = await this.apiCall('/api/v1/metrics/dashboard');
             
+            // Store data for theme refresh
+            this.lastMetricsData = {
+                status_codes: response.traffic.status_codes || {},
+                security_events: response.security.security_events || {},
+                auth_failures: response.connections.auth_failures || {},
+                traffic: response.traffic
+            };
+            
             // Update main stats
             this.updateElement('requests-rate', response.traffic.requests_rate.toFixed(2));
             this.updateElement('avg-latency', response.traffic.avg_latency_ms.toFixed(1));
@@ -982,10 +985,10 @@ class P0rtAdmin {
             this.updateElement('bandwidth-out', this.formatBytes(response.traffic.bytes_out));
             
             // Create Chart.js charts
-            this.createStatusCodesChart(response.traffic.status_codes || {});
-            this.createSecurityEventsChart(response.security.security_events || {});
-            this.createAuthFailuresChart(response.connections.auth_failures || {});
-            this.createLatencyChart(response.traffic);
+            this.createStatusCodesChart(this.lastMetricsData.status_codes);
+            this.createSecurityEventsChart(this.lastMetricsData.security_events);
+            this.createAuthFailuresChart(this.lastMetricsData.auth_failures);
+            this.createLatencyChart(this.lastMetricsData.traffic);
             
         } catch (error) {
             console.error('Error loading metrics:', error);
@@ -1034,12 +1037,12 @@ class P0rtAdmin {
                 scales: {
                     y: {
                         beginAtZero: true,
-                        grid: { color: 'rgba(156, 163, 175, 0.1)' },
-                        ticks: { color: 'var(--text-secondary)' }
+                        grid: { color: this.getChartColors().gridColor },
+                        ticks: { color: this.getChartColors().textSecondary }
                     },
                     x: {
                         grid: { display: false },
-                        ticks: { color: 'var(--text-secondary)' }
+                        ticks: { color: this.getChartColors().textSecondary }
                     }
                 }
             }
@@ -1079,7 +1082,7 @@ class P0rtAdmin {
                 plugins: {
                     legend: {
                         position: 'bottom',
-                        labels: { color: 'var(--text-secondary)', font: { size: 11 } }
+                        labels: { color: this.getChartColors().textSecondary, font: { size: 11 } }
                     }
                 }
             }
@@ -1121,12 +1124,12 @@ class P0rtAdmin {
                 scales: {
                     x: {
                         beginAtZero: true,
-                        grid: { color: 'rgba(156, 163, 175, 0.1)' },
-                        ticks: { color: 'var(--text-secondary)' }
+                        grid: { color: this.getChartColors().gridColor },
+                        ticks: { color: this.getChartColors().textSecondary }
                     },
                     y: {
                         grid: { display: false },
-                        ticks: { color: 'var(--text-secondary)' }
+                        ticks: { color: this.getChartColors().textSecondary }
                     }
                 }
             }
@@ -1171,9 +1174,9 @@ class P0rtAdmin {
                 scales: {
                     y: {
                         beginAtZero: true,
-                        grid: { color: 'rgba(156, 163, 175, 0.1)' },
+                        grid: { color: this.getChartColors().gridColor },
                         ticks: { 
-                            color: 'var(--text-secondary)',
+                            color: this.getChartColors().textSecondary,
                             callback: function(value) {
                                 return value + 'ms';
                             }
@@ -1181,7 +1184,7 @@ class P0rtAdmin {
                     },
                     x: {
                         grid: { display: false },
-                        ticks: { color: 'var(--text-secondary)' }
+                        ticks: { color: this.getChartColors().textSecondary }
                     }
                 }
             }
@@ -1198,6 +1201,26 @@ class P0rtAdmin {
         if (toggleButton) {
             toggleButton.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
             toggleButton.title = savedTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+        }
+    }
+
+    // Refresh all charts with current theme colors
+    refreshCharts() {
+        // Only refresh if we're on the metrics section and have charts data
+        if (this.currentSection === 'metrics' && this.lastMetricsData) {
+            // Recreate all charts with new theme colors
+            if (this.lastMetricsData.status_codes) {
+                this.createStatusCodesChart(this.lastMetricsData.status_codes);
+            }
+            if (this.lastMetricsData.security_events) {
+                this.createSecurityEventsChart(this.lastMetricsData.security_events);
+            }
+            if (this.lastMetricsData.auth_failures) {
+                this.createAuthFailuresChart(this.lastMetricsData.auth_failures);
+            }
+            if (this.lastMetricsData.traffic) {
+                this.createLatencyChart(this.lastMetricsData.traffic);
+            }
         }
     }
 }
