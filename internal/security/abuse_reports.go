@@ -33,6 +33,7 @@ type SSHServerInterface interface {
 	UnbanIP(ip string)
 	UnbanIPFromTracker(ip string)
 	NotifyDomainBanned(domain string)
+	NotifyDomain(domain, message string)
 }
 
 // globalIPUnbanService is a global service for IP unbanning
