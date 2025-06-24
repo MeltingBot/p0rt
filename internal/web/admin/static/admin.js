@@ -952,16 +952,21 @@ class P0rtAdmin {
     // Get current theme colors for charts
     getChartColors() {
         const style = getComputedStyle(document.documentElement);
+        const getValue = (property, fallback) => {
+            const value = style.getPropertyValue(property).trim();
+            return value || fallback;
+        };
+        
         return {
-            textPrimary: style.getPropertyValue('--text-primary').trim(),
-            textSecondary: style.getPropertyValue('--text-secondary').trim(),
-            border: style.getPropertyValue('--border').trim(),
-            success: style.getPropertyValue('--success').trim(),
-            warning: style.getPropertyValue('--warning').trim(),
-            danger: style.getPropertyValue('--danger').trim(),
-            info: style.getPropertyValue('--info').trim(),
-            primary: style.getPropertyValue('--primary').trim(),
-            secondary: style.getPropertyValue('--secondary').trim()
+            textPrimary: getValue('--text-primary', '#1e293b'),
+            textSecondary: getValue('--text-secondary', '#64748b'),
+            border: getValue('--border', '#e2e8f0'),
+            success: getValue('--success', '#10b981'),
+            warning: getValue('--warning', '#f59e0b'),
+            danger: getValue('--danger', '#ef4444'),
+            info: getValue('--info', '#06b6d4'),
+            primary: getValue('--primary', '#3b82f6'),
+            secondary: getValue('--secondary', '#64748b')
         };
     }
 
