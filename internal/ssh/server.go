@@ -681,6 +681,9 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 				// Démarrer le monitoring des connexions
 				go s.monitorConnections(client, channel)
 
+				// Démarrer le heartbeat pour maintenir la connexion active
+				go s.keepConnectionAlive(client, domain)
+
 				// Garder le canal ouvert et détecter la fermeture
 				go func() {
 					io.Copy(io.Discard, channel)
@@ -1057,6 +1060,28 @@ func (s *Server) RecordHTTPRequest(domain string, bytesIn, bytesOut int64) {
 // RecordWebSocketUpgrade records WebSocket upgrade statistics
 func (s *Server) RecordWebSocketUpgrade(domain string) {
 	s.statsManager.WebSocketUpgrade(domain)
+}
+
+// keepConnectionAlive sends periodic heartbeats to keep the connection marked as active
+func (s *Server) keepConnectionAlive(client *Client, domain string) {
+	ticker := time.NewTicker(5 * time.Minute) // Send heartbeat every 5 minutes
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// Check if client is still connected
+			if client.Conn == nil {
+				return
+			}
+			// Update last activity time to prevent cleanup
+			s.statsManager.KeepConnectionAlive(domain)
+			log.Printf("Heartbeat sent for connection: %s", domain)
+		case <-client.LogChannel:
+			// Channel closed, client disconnected
+			return
+		}
+	}
 }
 
 // Protection anti-bruteforce

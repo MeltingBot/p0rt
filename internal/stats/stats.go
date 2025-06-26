@@ -168,6 +168,11 @@ func (m *Manager) ConnectionClosed(domain string) {
 	}
 }
 
+// KeepConnectionAlive updates the last activity time for a connection
+func (m *Manager) KeepConnectionAlive(domain string) {
+	m.connectionHistory.KeepAlive(domain)
+}
+
 // GetGlobalStats returns overall system statistics
 func (m *Manager) GetGlobalStats() *GlobalStats {
 	m.mu.RLock()

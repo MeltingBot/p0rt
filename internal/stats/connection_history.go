@@ -27,6 +27,7 @@ type ConnectionRecord struct {
 	BytesOut       int64      `json:"bytes_out"`
 	RequestCount   int64      `json:"request_count"`
 	Active         bool       `json:"active"`
+	LastActivity   time.Time  `json:"last_activity"` // Track last activity time
 }
 
 // ConnectionHistory manages historical connection data
@@ -145,14 +146,16 @@ func (ch *ConnectionHistory) RecordConnection(domain, clientIP, fingerprint stri
 	// Extract trigram (first 3 chars of subdomain)
 	trigram := extractTrigram(domain)
 
+	now := time.Now()
 	record := &ConnectionRecord{
-		ID:          fmt.Sprintf("%s-%d", domain, time.Now().UnixNano()),
-		Domain:      domain,
-		Trigram:     trigram,
-		ClientIP:    clientIP,
-		Fingerprint: fingerprint,
-		ConnectedAt: time.Now(),
-		Active:      true,
+		ID:           fmt.Sprintf("%s-%d", domain, now.UnixNano()),
+		Domain:       domain,
+		Trigram:      trigram,
+		ClientIP:     clientIP,
+		Fingerprint:  fingerprint,
+		ConnectedAt:  now,
+		Active:       true,
+		LastActivity: now,
 	}
 
 	ch.connections[domain] = record
@@ -197,6 +200,22 @@ func (ch *ConnectionHistory) UpdateTraffic(domain string, bytesIn, bytesOut int6
 		record.BytesIn += bytesIn
 		record.BytesOut += bytesOut
 		record.RequestCount++
+		record.LastActivity = time.Now() // Update last activity time
+
+		// Update in Redis if available
+		if ch.useRedis {
+			ch.saveRecordToRedis(record)
+		}
+	}
+}
+
+// KeepAlive updates the last activity time for a connection to prevent cleanup
+func (ch *ConnectionHistory) KeepAlive(domain string) {
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+
+	if record, exists := ch.connections[domain]; exists {
+		record.LastActivity = time.Now()
 
 		// Update in Redis if available
 		if ch.useRedis {
@@ -544,7 +563,7 @@ func (ch *ConnectionHistory) CleanupStaleConnections(timeout time.Duration) {
 	staleConnections := make([]string, 0)
 
 	for domain, record := range ch.connections {
-		if record.DisconnectedAt == nil && now.Sub(record.ConnectedAt) > timeout {
+		if record.DisconnectedAt == nil && now.Sub(record.LastActivity) > timeout {
 			// Mark as disconnected
 			record.DisconnectedAt = &now
 			record.Duration = now.Sub(record.ConnectedAt).String()
@@ -552,8 +571,8 @@ func (ch *ConnectionHistory) CleanupStaleConnections(timeout time.Duration) {
 
 			staleConnections = append(staleConnections, domain)
 
-			log.Printf("ConnectionHistory: Marked stale connection as disconnected: %s (age: %v)",
-				domain, now.Sub(record.ConnectedAt))
+			log.Printf("ConnectionHistory: Marked stale connection as disconnected: %s (last activity: %v ago)",
+				domain, now.Sub(record.LastActivity))
 		}
 	}
 
