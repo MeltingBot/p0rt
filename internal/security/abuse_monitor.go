@@ -311,13 +311,13 @@ func (am *AbuseMonitor) GetBannedIPCount() int {
 	if am.reportManager == nil {
 		return 0
 	}
-	
+
 	// Get stats from the abuse report manager's underlying systems
 	stats := am.reportManager.GetStats()
 	if bannedIPs, ok := stats["banned_ips"].(int); ok {
 		return bannedIPs
 	}
-	
+
 	return 0
 }
 
@@ -326,12 +326,12 @@ func (am *AbuseMonitor) GetBannedDomainCount() int {
 	if am.reportManager == nil {
 		return 0
 	}
-	
+
 	// Get stats from the abuse report manager
 	stats := am.reportManager.GetStats()
 	if bannedReports, ok := stats["banned_reports"].(int); ok {
 		return bannedReports
 	}
-	
+
 	return 0
 }

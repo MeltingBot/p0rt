@@ -559,18 +559,18 @@ func (c *Client) UnbanIP(ip string) error {
 
 // KeyInfo represents SSH key information
 type KeyInfo struct {
-	Fingerprint string    `json:"fingerprint"`
-	Tier        string    `json:"tier"`
-	Active      bool      `json:"active"`
-	Comment     string    `json:"comment"`
-	AddedAt     time.Time `json:"added_at"`
+	Fingerprint string     `json:"fingerprint"`
+	Tier        string     `json:"tier"`
+	Active      bool       `json:"active"`
+	Comment     string     `json:"comment"`
+	AddedAt     time.Time  `json:"added_at"`
 	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
 }
 
 // ListKeys lists all SSH keys via the API
 func (c *Client) ListKeys() ([]KeyInfo, error) {
 	path := "/api/v1/keys"
-	
+
 	respBody, err := c.makeRequest("GET", path, nil)
 	if err != nil {
 		return nil, err
@@ -594,13 +594,13 @@ func (c *Client) AddKey(fingerprint, publicKey, comment, tier string, expiresAt 
 		"comment": comment,
 		"tier":    tier,
 	}
-	
+
 	if publicKey != "" {
 		body["public_key"] = publicKey
 	} else {
 		body["fingerprint"] = fingerprint
 	}
-	
+
 	if expiresAt != nil {
 		body["expires_at"] = expiresAt
 	}
@@ -622,7 +622,7 @@ func (c *Client) ActivateKey(fingerprint string) error {
 	body := map[string]bool{
 		"active": true,
 	}
-	
+
 	_, err := c.makeRequest("PATCH", path, body)
 	return err
 }
@@ -633,7 +633,7 @@ func (c *Client) DeactivateKey(fingerprint string) error {
 	body := map[string]bool{
 		"active": false,
 	}
-	
+
 	_, err := c.makeRequest("PATCH", path, body)
 	return err
 }
@@ -655,7 +655,7 @@ type ServerStatus struct {
 // GetServerStatus gets detailed server status via API
 func (c *Client) GetServerStatus() (*ServerStatus, error) {
 	path := "/api/v1/server/status"
-	
+
 	respBody, err := c.makeRequest("GET", path, nil)
 	if err != nil {
 		return nil, err
@@ -675,7 +675,7 @@ func (c *Client) GetServerStatus() (*ServerStatus, error) {
 // ReloadServer reloads the server configuration via API
 func (c *Client) ReloadServer() (map[string]interface{}, error) {
 	path := "/api/v1/server/reload"
-	
+
 	respBody, err := c.makeRequest("POST", path, nil)
 	if err != nil {
 		return nil, err
@@ -710,7 +710,7 @@ func (c *Client) TestNotification(message string) (*NotificationResponse, error)
 	if message != "" {
 		body["message"] = message
 	}
-	
+
 	respBody, err := c.makeRequest("POST", path, body)
 	if err != nil {
 		return nil, err
@@ -738,7 +738,7 @@ func (c *Client) BanDomainNotification(domain, reason string) (*NotificationResp
 	if reason != "" {
 		body["reason"] = reason
 	}
-	
+
 	respBody, err := c.makeRequest("POST", path, body)
 	if err != nil {
 		return nil, err
@@ -756,4 +756,21 @@ func (c *Client) BanDomainNotification(domain, reason string) (*NotificationResp
 	}
 
 	return response.Notification, nil
+}
+
+// GetDomains retrieves paginated domain information
+func (c *Client) GetDomains(page, perPage int) (*DomainsResponse, error) {
+	endpoint := fmt.Sprintf("/api/v1/domains?page=%d&per_page=%d", page, perPage)
+
+	respBody, err := c.makeRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get domains: %w", err)
+	}
+
+	var response DomainsResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse domains response: %w", err)
+	}
+
+	return &response, nil
 }

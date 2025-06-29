@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/p0rt/p0rt/internal/metrics"
+	"github.com/redis/go-redis/v9"
 )
 
 // AbuseReport represents a single abuse report
@@ -272,11 +272,11 @@ func (arm *AbuseReportManager) SubmitReport(domain, reporterIP, reason, details 
 	}
 
 	log.Printf("Abuse report submitted: %s from %s (ID: %s)", domain, reporterIP, report.ID)
-	
+
 	// Record abuse report metrics
 	metrics.RecordAbuseReport(reason, "pending")
 	metrics.RecordSecurityEvent("abuse_report", "info")
-	
+
 	return report, nil
 }
 
@@ -414,12 +414,12 @@ func (arm *AbuseReportManager) processReportRedis(reportID, action, processedBy 
 	}
 
 	log.Printf("Abuse report %s processed: %s by %s", reportID, action, processedBy)
-	
+
 	// Record abuse report processing metrics
 	if action == "ban" {
 		metrics.RecordAbuseReport(report.Reason, "banned")
 		metrics.RecordSecurityEvent("domain_ban", "high")
-		
+
 		// Notify active SSH clients if their domain is being banned
 		if arm.sshServer != nil {
 			log.Printf("🚨 Notifying active SSH clients that domain %s is being banned", report.Domain)
@@ -428,28 +428,28 @@ func (arm *AbuseReportManager) processReportRedis(reportID, action, processedBy 
 	} else {
 		metrics.RecordAbuseReport(report.Reason, "accepted")
 		metrics.RecordSecurityEvent("report_accepted", "info")
-		
+
 		// Notify active SSH clients that their abuse report was accepted/dismissed
 		if arm.sshServer != nil {
 			acceptMessage := fmt.Sprintf(
 				"============================================================\n"+
-				"✅ NOTIFICATION - ABUSE REPORT RESOLVED\n"+
-				"============================================================\n"+
-				"Domain: %s\n"+
-				"Status: Report reviewed and dismissed\n"+
-				"Action: No action required - your tunnel remains active\n"+
-				"\n"+
-				"The abuse report against your domain has been reviewed\n"+
-				"and found to be without merit. Your service continues\n"+
-				"normally. Thank you for using P0rt responsibly!\n"+
-				"============================================================",
+					"✅ NOTIFICATION - ABUSE REPORT RESOLVED\n"+
+					"============================================================\n"+
+					"Domain: %s\n"+
+					"Status: Report reviewed and dismissed\n"+
+					"Action: No action required - your tunnel remains active\n"+
+					"\n"+
+					"The abuse report against your domain has been reviewed\n"+
+					"and found to be without merit. Your service continues\n"+
+					"normally. Thank you for using P0rt responsibly!\n"+
+					"============================================================",
 				report.Domain)
-			
+
 			log.Printf("✅ Notifying domain %s that abuse report was accepted", report.Domain)
 			arm.sshServer.NotifyDomain(extractSubdomain(report.Domain), acceptMessage)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -502,12 +502,12 @@ func (arm *AbuseReportManager) processReportJSON(reportID, action, processedBy s
 	}
 
 	log.Printf("Abuse report %s processed: %s by %s", reportID, action, processedBy)
-	
+
 	// Record abuse report processing metrics
 	if action == "ban" {
 		metrics.RecordAbuseReport(report.Reason, "banned")
 		metrics.RecordSecurityEvent("domain_ban", "high")
-		
+
 		// Notify active SSH clients if their domain is being banned
 		if arm.sshServer != nil {
 			log.Printf("🚨 Notifying active SSH clients that domain %s is being banned", report.Domain)
@@ -516,28 +516,28 @@ func (arm *AbuseReportManager) processReportJSON(reportID, action, processedBy s
 	} else {
 		metrics.RecordAbuseReport(report.Reason, "accepted")
 		metrics.RecordSecurityEvent("report_accepted", "info")
-		
+
 		// Notify active SSH clients that their abuse report was accepted/dismissed
 		if arm.sshServer != nil {
 			acceptMessage := fmt.Sprintf(
 				"============================================================\n"+
-				"✅ NOTIFICATION - ABUSE REPORT RESOLVED\n"+
-				"============================================================\n"+
-				"Domain: %s\n"+
-				"Status: Report reviewed and dismissed\n"+
-				"Action: No action required - your tunnel remains active\n"+
-				"\n"+
-				"The abuse report against your domain has been reviewed\n"+
-				"and found to be without merit. Your service continues\n"+
-				"normally. Thank you for using P0rt responsibly!\n"+
-				"============================================================",
+					"✅ NOTIFICATION - ABUSE REPORT RESOLVED\n"+
+					"============================================================\n"+
+					"Domain: %s\n"+
+					"Status: Report reviewed and dismissed\n"+
+					"Action: No action required - your tunnel remains active\n"+
+					"\n"+
+					"The abuse report against your domain has been reviewed\n"+
+					"and found to be without merit. Your service continues\n"+
+					"normally. Thank you for using P0rt responsibly!\n"+
+					"============================================================",
 				report.Domain)
-			
+
 			log.Printf("✅ Notifying domain %s that abuse report was accepted", report.Domain)
 			arm.sshServer.NotifyDomain(extractSubdomain(report.Domain), acceptMessage)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -700,7 +700,7 @@ func (arm *AbuseReportManager) performCleanupActions(report *AbuseReport, archiv
 	// If the report was banned, unban the domain and IP
 	if report.Status == "banned" {
 		log.Printf("🔄 Archiving banned report - performing cleanup for domain %s and IP %s", report.Domain, report.ReporterIP)
-		
+
 		// Unban IP from SSH server
 		var unbanService SSHServerInterface
 		if arm.sshServer != nil {

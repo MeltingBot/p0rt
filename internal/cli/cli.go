@@ -288,6 +288,8 @@ func (c *CLI) processCommand(line string) error {
 		return c.handleHistoryCommand(args)
 	case "connections":
 		return c.showActiveConnections()
+	case "domains":
+		return c.handleDomainsCommand(args)
 	case "access":
 		return c.handleAccessCommand(args)
 	case "abuse":
@@ -314,6 +316,7 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("  stats [domain]     - Show system statistics")
 		fmt.Println("  history [n]        - Show connection history")
 		fmt.Println("  connections        - Show active connections")
+		fmt.Println("  domains            - List all domains with SSH keys and usage")
 		fmt.Println("  access             - Manage server access mode")
 		fmt.Println("  abuse              - Manage abuse reports")
 		fmt.Println("  notify             - Send notifications to SSH clients")
@@ -420,6 +423,22 @@ func (c *CLI) showHelp(args []string) error {
 		fmt.Println("  - Connection duration")
 		fmt.Println("  - Real-time bandwidth usage")
 		fmt.Println("  - HTTP request count")
+	case "domains", "domain":
+		fmt.Println("domains - List all domains with SSH keys and usage information")
+		fmt.Println()
+		fmt.Println("Shows paginated list of all domains with comprehensive information:")
+		fmt.Println("  - Domain name and SSH key hash")
+		fmt.Println("  - SSH key fingerprint")
+		fmt.Println("  - First and last seen dates")
+		fmt.Println("  - Last connection IP address")
+		fmt.Println("  - Usage statistics (requests, traffic)")
+		fmt.Println("  - Active status")
+		fmt.Println()
+		fmt.Println("Usage:")
+		fmt.Println("  domains             - Show first page (20 items)")
+		fmt.Println("  domains [page]      - Show specific page number")
+		fmt.Println("  domains --page=N    - Show specific page")
+		fmt.Println("  domains --per-page=N - Set items per page (max: 100)")
 	case "access", "mode":
 		fmt.Println("access - Manage server access mode")
 		fmt.Println()
@@ -1114,7 +1133,7 @@ func (c *CLI) reloadServer() error {
 		if !c.jsonOutput {
 			fmt.Println("🔄 Reloading server configuration via API...")
 		}
-		
+
 		details, err := c.apiClient.ReloadServer()
 		if err != nil {
 			if c.jsonOutput {
@@ -1124,12 +1143,12 @@ func (c *CLI) reloadServer() error {
 			}
 			return err
 		}
-		
+
 		if c.jsonOutput {
 			c.outputSuccess(details, "Server configuration reloaded")
 		} else {
 			fmt.Printf("✅ Server configuration reloaded successfully!\n")
-			
+
 			if operations, ok := details["operations"].([]interface{}); ok {
 				fmt.Println("\n📋 Operations performed:")
 				for i, op := range operations {
@@ -1137,12 +1156,12 @@ func (c *CLI) reloadServer() error {
 						operation := opMap["operation"].(string)
 						success := opMap["success"].(bool)
 						message := opMap["message"].(string)
-						
+
 						status := "✅"
 						if !success {
 							status = "❌"
 						}
-						
+
 						fmt.Printf("  %d. %s %s: %s\n", i+1, status, operation, message)
 					}
 				}
@@ -1159,7 +1178,7 @@ func (c *CLI) reloadServer() error {
 			fmt.Printf("  p0rt --remote http://localhost:%s cli\n", c.config.GetHTTPPort())
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1171,14 +1190,14 @@ func (c *CLI) serverStatus() error {
 		if err != nil {
 			return fmt.Errorf("failed to get server status: %v", err)
 		}
-		
+
 		if c.jsonOutput {
 			c.outputSuccess(status, "Remote server status")
 		} else {
 			fmt.Printf("✅ Remote P0rt Server Status:\n")
 			fmt.Printf("  Status: %s\n", status.Status)
 			fmt.Printf("  Version: %s\n", status.Version)
-			
+
 			if sshPort, ok := status.SSH["port"].(string); ok {
 				fmt.Printf("  SSH Port: %s", sshPort)
 				if available, ok := status.SSH["available"].(bool); ok {
@@ -1191,7 +1210,7 @@ func (c *CLI) serverStatus() error {
 					fmt.Println()
 				}
 			}
-			
+
 			if httpPort, ok := status.HTTP["port"].(string); ok {
 				fmt.Printf("  HTTP Port: %s", httpPort)
 				if available, ok := status.HTTP["available"].(bool); ok {
@@ -1204,7 +1223,7 @@ func (c *CLI) serverStatus() error {
 					fmt.Println()
 				}
 			}
-			
+
 			if storageType, ok := status.Storage["type"].(string); ok {
 				fmt.Printf("  Storage Type: %s", storageType)
 				if connected, ok := status.Storage["connected"].(bool); ok {
@@ -1217,20 +1236,20 @@ func (c *CLI) serverStatus() error {
 					fmt.Println()
 				}
 			}
-			
+
 			if accessMode, ok := status.Security["access_mode"].(string); ok {
 				fmt.Printf("  Access Mode: %s\n", accessMode)
 			}
-			
+
 			if bannedIPs, ok := status.Security["banned_ips"].(float64); ok {
 				fmt.Printf("  Banned IPs: %.0f\n", bannedIPs)
 			}
-			
+
 			fmt.Printf("  Last Update: %s\n", status.Timestamp)
 		}
 		return nil
 	}
-	
+
 	// Local mode
 	fmt.Println("Server Status:")
 	fmt.Printf("  Configuration loaded: ✓\n")
@@ -1256,12 +1275,12 @@ func (c *CLI) getStorageType() string {
 	if host := os.Getenv("REDIS_HOST"); host != "" {
 		return "redis"
 	}
-	
+
 	// Check config file for Redis
 	if c.config.Storage.Type == "redis" || c.config.Storage.RedisURL != "" {
 		return "redis"
 	}
-	
+
 	// Default to JSON
 	return "json"
 }
@@ -1351,7 +1370,7 @@ func (c *CLI) removeKey(args []string) error {
 	}
 
 	fingerprint := args[0]
-	
+
 	// Use API client if in remote mode
 	if c.useRemoteAPI && c.apiClient != nil {
 		err := c.apiClient.RemoveKey(fingerprint)
@@ -1377,7 +1396,7 @@ func (c *CLI) listKeys() error {
 		if err != nil {
 			return fmt.Errorf("failed to list keys: %v", err)
 		}
-		
+
 		if len(keys) == 0 {
 			if c.jsonOutput {
 				c.outputSuccess([]interface{}{}, "No authorized SSH keys found")
@@ -1389,7 +1408,7 @@ func (c *CLI) listKeys() error {
 			}
 			return nil
 		}
-		
+
 		// Convert API response to match local format
 		if c.jsonOutput {
 			c.outputSuccess(keys, fmt.Sprintf("Found %d authorized SSH key(s)", len(keys)))
@@ -1397,7 +1416,7 @@ func (c *CLI) listKeys() error {
 			fmt.Printf("Found %d authorized SSH key(s):\n\n", len(keys))
 			fmt.Printf("%-55s %-10s %-11s %-20s %s\n", "Fingerprint", "Tier", "Status", "Added", "Comment")
 			fmt.Println(strings.Repeat("-", 120))
-			
+
 			for _, key := range keys {
 				status := "✅ Active"
 				if !key.Active {
@@ -1406,12 +1425,12 @@ func (c *CLI) listKeys() error {
 				if key.ExpiresAt != nil && time.Now().After(*key.ExpiresAt) {
 					status = "⏰ Expired"
 				}
-				
+
 				fingerprint := key.Fingerprint
 				if len(fingerprint) > 50 {
 					fingerprint = fingerprint[:47] + "..."
 				}
-				
+
 				fmt.Printf("%-55s %-10s %-11s %-20s %s\n",
 					fingerprint,
 					key.Tier,
@@ -1421,10 +1440,10 @@ func (c *CLI) listKeys() error {
 				)
 			}
 		}
-		
+
 		return nil
 	}
-	
+
 	// Local mode - use keyStore
 	keys := c.keyStore.ListKeys()
 
@@ -1538,7 +1557,7 @@ func (c *CLI) activateKey(args []string) error {
 	}
 
 	fingerprint := args[0]
-	
+
 	// Use API client if in remote mode
 	if c.useRemoteAPI && c.apiClient != nil {
 		err := c.apiClient.ActivateKey(fingerprint)
@@ -1563,7 +1582,7 @@ func (c *CLI) deactivateKey(args []string) error {
 	}
 
 	fingerprint := args[0]
-	
+
 	// Use API client if in remote mode
 	if c.useRemoteAPI && c.apiClient != nil {
 		err := c.apiClient.DeactivateKey(fingerprint)
@@ -1968,7 +1987,7 @@ func (c *CLI) handleAbuseList(args []string) error {
 		} else {
 			reportManager = security.NewAbuseReportManager()
 		}
-		
+
 		localReports, err := reportManager.ListReports(status)
 		if err != nil {
 			c.outputError(fmt.Sprintf("Failed to get abuse reports: %v", err))
@@ -2089,10 +2108,10 @@ func (c *CLI) handleAbuseReport(args []string) error {
 			reportManager = security.NewAbuseReportManager()
 		}
 	}
-	
+
 	// Use current client IP or a default testing IP
 	reporterIP := "127.0.0.1" // Default for local testing
-	
+
 	report, err := reportManager.SubmitReport(domain, reporterIP, reason, "Submitted via CLI for testing")
 	if err != nil {
 		c.outputError(fmt.Sprintf("Failed to submit abuse report: %v", err))
@@ -2131,7 +2150,7 @@ func (c *CLI) handleAbuseDelete(args []string) error {
 
 	// Get report details first
 	var report map[string]interface{}
-	
+
 	if c.useRemoteAPI {
 		// Get report via API first
 		reports, err := c.apiClient.GetAbuseReports("", true)
@@ -2139,7 +2158,7 @@ func (c *CLI) handleAbuseDelete(args []string) error {
 			c.outputError(fmt.Sprintf("Failed to get abuse reports: %v", err))
 			return nil
 		}
-		
+
 		// Find the report
 		var found bool
 		if reportsList, ok := reports.([]interface{}); ok {
@@ -2153,12 +2172,12 @@ func (c *CLI) handleAbuseDelete(args []string) error {
 				}
 			}
 		}
-		
+
 		if !found {
 			c.outputError(fmt.Sprintf("Report not found: %s", reportID))
 			return nil
 		}
-		
+
 		// Delete via API
 		err = c.apiClient.DeleteAbuseReport(reportID)
 		if err != nil {
@@ -2174,13 +2193,13 @@ func (c *CLI) handleAbuseDelete(args []string) error {
 		} else {
 			reportManager = security.NewAbuseReportManager()
 		}
-		
+
 		actualReport, err := reportManager.GetReport(reportID)
 		if err != nil {
 			c.outputError(fmt.Sprintf("Report not found: %v", err))
 			return nil
 		}
-		
+
 		// Convert to map for consistent display
 		report = map[string]interface{}{
 			"domain":      actualReport.Domain,
@@ -2208,14 +2227,14 @@ func (c *CLI) handleAbuseDelete(args []string) error {
 		fmt.Printf("✅ Report %s has been archived\n", reportID)
 		fmt.Printf("   Domain: %s\n", getString(report, "domain"))
 		fmt.Printf("   Previous Status: %s\n", getString(report, "status"))
-		
+
 		if getString(report, "status") == "banned" {
 			fmt.Printf("   🔄 Cleanup performed:\n")
 			fmt.Printf("     - IP %s has been unbanned\n", getString(report, "reporter_ip"))
 			fmt.Printf("     - Domain %s is no longer banned\n", getString(report, "domain"))
 			fmt.Printf("     - Redis ban keys cleared\n")
 		}
-		
+
 		fmt.Printf("   📁 Report marked as 'archived' for record keeping\n")
 	}
 
@@ -2526,7 +2545,7 @@ func (c *CLI) handleNotifyDomain(args []string) error {
 	}
 
 	domain := args[0]
-	
+
 	// Parse simple flags from remaining args
 	var notifyType, message, reason string
 	for i := 1; i < len(args); i++ {
@@ -2576,7 +2595,7 @@ func (c *CLI) handleNotifyDomain(args []string) error {
 		if message == "" {
 			message = fmt.Sprintf("Notification for domain %s", domain)
 		}
-		
+
 		// Use BanDomainNotification API which actually sends to SSH clients
 		notification, err := c.apiClient.BanDomainNotification(domain, message)
 		if err != nil {
@@ -2596,4 +2615,163 @@ func (c *CLI) handleNotifyDomain(args []string) error {
 	}
 
 	return nil
+}
+
+// handleDomainsCommand handles the domains command
+func (c *CLI) handleDomainsCommand(args []string) error {
+	page := 1
+	perPage := 20
+
+	// Parse arguments
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--page=") {
+			if p, err := strconv.Atoi(strings.TrimPrefix(arg, "--page=")); err == nil && p > 0 {
+				page = p
+			}
+		} else if strings.HasPrefix(arg, "--per-page=") {
+			if pp, err := strconv.Atoi(strings.TrimPrefix(arg, "--per-page=")); err == nil && pp > 0 && pp <= 100 {
+				perPage = pp
+			}
+		} else if arg != "" {
+			// Try to parse as page number
+			if p, err := strconv.Atoi(arg); err == nil && p > 0 {
+				page = p
+			}
+		}
+	}
+
+	// Check if we should use remote API
+	if !c.useRemoteAPI || c.apiClient == nil {
+		return fmt.Errorf("domains command requires remote API access. Use --remote flag")
+	}
+
+	// Make request using apiClient
+	response, err := c.apiClient.GetDomains(page, perPage)
+	if err != nil {
+		return fmt.Errorf("failed to fetch domains: %v", err)
+	}
+
+	if c.jsonOutput {
+		c.outputSuccess(response, "Domains listed")
+		return nil
+	}
+
+	// Display results
+	fmt.Printf("🌐 Domains (Page %d/%d, Total: %d)\n", response.Page, response.TotalPages, response.Total)
+	fmt.Println()
+
+	if len(response.Domains) == 0 {
+		fmt.Println("No domains found.")
+		return nil
+	}
+
+	// Table header
+	fmt.Printf("%-25s %-12s %-15s %-6s %-8s %-10s %s\n",
+		"DOMAIN", "TRIGRAM", "LAST IP", "ACTIVE", "REQUESTS", "TRAFFIC", "LAST SEEN")
+	fmt.Println(strings.Repeat("-", 120))
+
+	// Display each domain
+	for _, domain := range response.Domains {
+		trigram := domain.Domain[:3]
+		if len(domain.Domain) < 3 {
+			trigram = domain.Domain
+		}
+
+		active := "❌"
+		if domain.IsActive {
+			active = "✅"
+		}
+
+		traffic := formatBytes(domain.BytesTransferred)
+		lastSeen := formatTimeAgoFromTime(domain.LastSeen)
+
+		lastIP := domain.LastConnectionIP
+		if lastIP == "" {
+			lastIP = "N/A"
+		}
+
+		fmt.Printf("%-25s %-12s %-15s %-6s %-8d %-10s %s\n",
+			domain.Domain, trigram, lastIP, active, domain.RequestCount, traffic, lastSeen)
+
+		// Show SSH key fingerprint on second line
+		fingerprint := domain.SSHKeyFingerprint
+		if fingerprint == "" {
+			fingerprint = "Key: " + domain.SSHKeyHash[:12] + "..."
+		} else {
+			fingerprint = "Key: " + fingerprint
+		}
+		fmt.Printf("  %s (used %d times)\n", fingerprint, domain.UseCount)
+		fmt.Println()
+	}
+
+	// Pagination info
+	if response.TotalPages > 1 {
+		fmt.Printf("Page %d of %d", response.Page, response.TotalPages)
+		if response.HasPrev {
+			fmt.Printf(" | Previous: domains %d", response.Page-1)
+		}
+		if response.HasNext {
+			fmt.Printf(" | Next: domains %d", response.Page+1)
+		}
+		fmt.Println()
+	}
+
+	return nil
+}
+
+// formatBytes formats bytes into human readable format
+func formatBytes(bytes int64) string {
+	if bytes == 0 {
+		return "0 B"
+	}
+
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// formatTimeAgo formats a time string into relative time
+func formatTimeAgo(timeStr string) string {
+	t, err := time.Parse(time.RFC3339, timeStr)
+	if err != nil {
+		return timeStr
+	}
+
+	duration := time.Since(t)
+	if duration < time.Minute {
+		return "just now"
+	} else if duration < time.Hour {
+		return fmt.Sprintf("%dm ago", int(duration.Minutes()))
+	} else if duration < 24*time.Hour {
+		return fmt.Sprintf("%dh ago", int(duration.Hours()))
+	} else {
+		return fmt.Sprintf("%dd ago", int(duration.Hours()/24))
+	}
+}
+
+// formatTimeAgoFromTime formats a time.Time into relative time
+func formatTimeAgoFromTime(t time.Time) string {
+	if t.IsZero() {
+		return "never"
+	}
+
+	duration := time.Since(t)
+	if duration < time.Minute {
+		return "just now"
+	} else if duration < time.Hour {
+		return fmt.Sprintf("%dm ago", int(duration.Minutes()))
+	} else if duration < 24*time.Hour {
+		return fmt.Sprintf("%dh ago", int(duration.Hours()))
+	} else {
+		return fmt.Sprintf("%dd ago", int(duration.Hours()/24))
+	}
 }

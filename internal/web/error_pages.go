@@ -85,7 +85,7 @@ func (h *ErrorPageHandler) ServeConnectionError(w http.ResponseWriter, subdomain
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("X-Error-Type", "backend-connection")
 	w.Header().Set("X-P0rt-Error", "local-service-down")
-	
+
 	// Use 200 OK to ensure Cloudflare passes through our custom error page
 	// The page content will indicate the error to users
 	w.WriteHeader(http.StatusOK)
@@ -130,7 +130,7 @@ func (h *ErrorPageHandler) ServeBannedDomain(w http.ResponseWriter, subdomain st
 // ServeCSSFile serves CSS files
 func (h *ErrorPageHandler) ServeCSSFile(w http.ResponseWriter, filename string) {
 	var cssContent []byte
-	
+
 	switch filename {
 	case "base.css":
 		cssContent = baseCSSFile

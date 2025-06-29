@@ -96,22 +96,25 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/abuse/stats", h.handleAbuseStats)
 	mux.HandleFunc("/api/v1/access", h.handleAccess)
 	mux.HandleFunc("/api/v1/status", h.handleStatus)
-	
+
 	// SSH key management endpoints
 	mux.HandleFunc("/api/v1/keys", h.handleKeys)
 	mux.HandleFunc("/api/v1/keys/", h.handleKey)
-	
+
 	// Server management endpoints
 	mux.HandleFunc("/api/v1/server/status", h.handleServerStatus)
 	mux.HandleFunc("/api/v1/server/reload", h.handleServerReload)
-	
+
 	// Notification endpoints
 	mux.HandleFunc("/api/v1/notifications/test", h.handleNotificationTest)
 	mux.HandleFunc("/api/v1/notifications/domain", h.handleNotificationBanDomain)
 	mux.HandleFunc("/api/v1/notifications/ban-domain", h.handleNotificationBanDomain)
-	
+
 	// Metrics endpoint for admin dashboard
 	mux.HandleFunc("/api/v1/metrics/dashboard", h.handleDashboardMetrics)
+
+	// Domain management endpoints
+	mux.HandleFunc("/api/v1/domains", h.handleDomains)
 }
 
 // authenticateRequest checks if the request is authenticated
@@ -425,13 +428,13 @@ func (h *Handler) handleSecurityBans(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	limit := 50 // Default limit
 	offset := 0
-	
+
 	if limitStr := query.Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 1000 {
 			limit = l
 		}
 	}
-	
+
 	if offsetStr := query.Get("offset"); offsetStr != "" {
 		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
 			offset = o
@@ -446,11 +449,11 @@ func (h *Handler) handleSecurityBans(w http.ResponseWriter, r *http.Request) {
 		// Get real ban data from the SSH server
 		allBans := h.securityProvider.GetBannedIPs()
 		totalCount = len(allBans)
-		
+
 		// Apply pagination
 		start := offset
 		end := offset + limit
-		
+
 		if start < totalCount {
 			if end > totalCount {
 				end = totalCount
@@ -459,7 +462,7 @@ func (h *Handler) handleSecurityBans(w http.ResponseWriter, r *http.Request) {
 		} else {
 			bannedIPs = []security.BannedIP{}
 		}
-		
+
 		note = "Real-time ban data from SSH server"
 	} else {
 		// Fallback to empty list
@@ -471,7 +474,7 @@ func (h *Handler) handleSecurityBans(w http.ResponseWriter, r *http.Request) {
 	// Calculate pagination metadata
 	hasNext := offset+limit < totalCount
 	hasPrev := offset > 0
-	
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":    true,
 		"banned_ips": bannedIPs,
@@ -850,4 +853,139 @@ func (h *Handler) handleSecurityUnban(w http.ResponseWriter, r *http.Request) {
 		"ip":        req.IP,
 		"timestamp": time.Now().Format(time.RFC3339),
 	})
+}
+
+// DomainInfo represents information about a domain and its usage
+type DomainInfo struct {
+	Domain            string     `json:"domain"`
+	SSHKeyHash        string     `json:"ssh_key_hash"`
+	SSHKeyFingerprint string     `json:"ssh_key_fingerprint,omitempty"`
+	FirstSeen         time.Time  `json:"first_seen"`
+	LastSeen          time.Time  `json:"last_seen"`
+	LastConnectionIP  string     `json:"last_connection_ip"`
+	LastActivity      *time.Time `json:"last_activity,omitempty"`
+	UseCount          int        `json:"use_count"`
+	IsActive          bool       `json:"is_active"`
+	BytesTransferred  int64      `json:"bytes_transferred"`
+	RequestCount      int64      `json:"request_count"`
+}
+
+// DomainsResponse represents the paginated response for domains
+type DomainsResponse struct {
+	Domains    []DomainInfo `json:"domains"`
+	Total      int          `json:"total"`
+	Page       int          `json:"page"`
+	PerPage    int          `json:"per_page"`
+	TotalPages int          `json:"total_pages"`
+	HasNext    bool         `json:"has_next"`
+	HasPrev    bool         `json:"has_prev"`
+}
+
+// handleDomains returns a paginated list of all domains with their SSH keys and usage information
+func (h *Handler) handleDomains(w http.ResponseWriter, r *http.Request) {
+	if !h.authenticateRequest(r) {
+		writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Parse pagination parameters
+	page := 1
+	perPage := 50 // Default per page
+
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	if perPageStr := r.URL.Query().Get("per_page"); perPageStr != "" {
+		if pp, err := strconv.Atoi(perPageStr); err == nil && pp > 0 && pp <= 500 {
+			perPage = pp
+		}
+	}
+
+	// Get domain information from connection history
+	allDomains := []DomainInfo{}
+
+	if h.statsManager != nil {
+		// Get connection history to build domain list
+		connectionHistory := h.statsManager.GetConnectionHistory(1000) // Get more records to have complete domain list
+
+		// Build domain info from connection history
+		domainMap := make(map[string]*DomainInfo)
+
+		for _, record := range connectionHistory {
+			if existingDomain, exists := domainMap[record.Domain]; exists {
+				// Update existing domain info with latest connection data
+				existingDomain.UseCount++
+				if record.LastActivity.After(existingDomain.LastSeen) {
+					existingDomain.LastSeen = record.LastActivity
+					existingDomain.LastConnectionIP = record.ClientIP
+					existingDomain.SSHKeyFingerprint = record.Fingerprint
+					if record.DisconnectedAt == nil {
+						existingDomain.LastActivity = &record.LastActivity
+						existingDomain.IsActive = record.Active
+					}
+				}
+				existingDomain.BytesTransferred += record.BytesIn + record.BytesOut
+				existingDomain.RequestCount += record.RequestCount
+			} else {
+				// Create new domain info
+				lastActivity := record.LastActivity
+				domainInfo := &DomainInfo{
+					Domain:            record.Domain,
+					SSHKeyFingerprint: record.Fingerprint,
+					FirstSeen:         record.ConnectedAt,
+					LastSeen:          record.LastActivity,
+					LastConnectionIP:  record.ClientIP,
+					UseCount:          1,
+					IsActive:          record.Active && record.DisconnectedAt == nil,
+					BytesTransferred:  record.BytesIn + record.BytesOut,
+					RequestCount:      record.RequestCount,
+				}
+				if record.DisconnectedAt == nil {
+					domainInfo.LastActivity = &lastActivity
+				}
+				domainMap[record.Domain] = domainInfo
+			}
+		}
+
+		// Convert map to slice
+		for _, domainInfo := range domainMap {
+			allDomains = append(allDomains, *domainInfo)
+		}
+	}
+
+	// Calculate pagination
+	total := len(allDomains)
+	totalPages := (total + perPage - 1) / perPage
+
+	// Apply pagination
+	start := (page - 1) * perPage
+	end := start + perPage
+	if end > total {
+		end = total
+	}
+
+	paginatedDomains := []DomainInfo{}
+	if start < total {
+		paginatedDomains = allDomains[start:end]
+	}
+
+	response := DomainsResponse{
+		Domains:    paginatedDomains,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+		HasNext:    page < totalPages,
+		HasPrev:    page > 1,
+	}
+
+	writeJSON(w, http.StatusOK, response)
 }

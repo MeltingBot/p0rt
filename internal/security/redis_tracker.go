@@ -411,7 +411,7 @@ func (rst *RedisSecurityTracker) checkForBan(ip string, eventType EventType) {
 	if eventType == EventAuthFailure {
 		effectiveThreshold = rst.banThreshold * 2 // Double threshold for auth failures
 	}
-	
+
 	if eventCount >= effectiveThreshold {
 		reason := "repeated_violations"
 		if eventType == EventAuthFailure {

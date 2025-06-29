@@ -11,16 +11,16 @@ import (
 
 // ServerStatusDetailed represents detailed server status information
 type ServerStatusDetailed struct {
-	Status       string            `json:"status"`
-	Uptime       string            `json:"uptime,omitempty"`
-	Version      string            `json:"version"`
-	SSH          ServiceStatus     `json:"ssh"`
-	HTTP         ServiceStatus     `json:"http"`
-	Storage      StorageStatus     `json:"storage"`
-	Security     SecurityStatus    `json:"security"`
-	System       SystemStatus      `json:"system"`
-	Environment  map[string]string `json:"environment"`
-	Timestamp    string            `json:"timestamp"`
+	Status      string            `json:"status"`
+	Uptime      string            `json:"uptime,omitempty"`
+	Version     string            `json:"version"`
+	SSH         ServiceStatus     `json:"ssh"`
+	HTTP        ServiceStatus     `json:"http"`
+	Storage     StorageStatus     `json:"storage"`
+	Security    SecurityStatus    `json:"security"`
+	System      SystemStatus      `json:"system"`
+	Environment map[string]string `json:"environment"`
+	Timestamp   string            `json:"timestamp"`
 }
 
 type ServiceStatus struct {
@@ -41,10 +41,10 @@ type SecurityStatus struct {
 }
 
 type SystemStatus struct {
-	OS       string `json:"os"`
-	Arch     string `json:"arch"`
+	OS        string `json:"os"`
+	Arch      string `json:"arch"`
 	GoVersion string `json:"go_version"`
-	Memory   string `json:"memory,omitempty"`
+	Memory    string `json:"memory,omitempty"`
 }
 
 // handleServerStatus handles GET /api/v1/server/status
@@ -64,7 +64,7 @@ func (h *Handler) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 	if sshPort == "" {
 		sshPort = "22"
 	}
-	
+
 	httpPort := os.Getenv("HTTP_SERVER_PORT")
 	if httpPort == "" {
 		httpPort = "80"
@@ -121,7 +121,7 @@ func (h *Handler) handleServerReload(w http.ResponseWriter, r *http.Request) {
 
 	// Perform reload operations
 	reloadResults := h.performReload()
-	
+
 	if reloadResults["success"].(bool) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"success":   true,
@@ -175,12 +175,12 @@ func (h *Handler) getBannedIPCount() int {
 
 func (h *Handler) getEnvironmentInfo() map[string]string {
 	return map[string]string{
-		"ssh_port":      os.Getenv("SSH_SERVER_PORT"),
-		"http_port":     os.Getenv("HTTP_SERVER_PORT"),
-		"domain_base":   os.Getenv("DOMAIN_BASE"),
-		"redis_url":     h.maskSensitive(os.Getenv("REDIS_URL")),
-		"open_access":   os.Getenv("P0RT_OPEN_ACCESS"),
-		"api_key_set":   fmt.Sprintf("%t", os.Getenv("API_KEY") != ""),
+		"ssh_port":    os.Getenv("SSH_SERVER_PORT"),
+		"http_port":   os.Getenv("HTTP_SERVER_PORT"),
+		"domain_base": os.Getenv("DOMAIN_BASE"),
+		"redis_url":   h.maskSensitive(os.Getenv("REDIS_URL")),
+		"open_access": os.Getenv("P0RT_OPEN_ACCESS"),
+		"api_key_set": fmt.Sprintf("%t", os.Getenv("API_KEY") != ""),
 	}
 }
 
@@ -197,40 +197,40 @@ func (h *Handler) maskSensitive(value string) string {
 // performReload performs the actual reload operations
 func (h *Handler) performReload() map[string]interface{} {
 	results := map[string]interface{}{
-		"success": true,
+		"success":    true,
 		"operations": []map[string]interface{}{},
 	}
-	
+
 	var operations []map[string]interface{}
-	
+
 	// 1. Reload configuration
 	configResult := h.reloadConfiguration()
 	operations = append(operations, configResult)
 	if !configResult["success"].(bool) {
 		results["success"] = false
 	}
-	
+
 	// 2. Reload key store (refresh SSH keys from storage)
 	keyResult := h.reloadKeyStore()
 	operations = append(operations, keyResult)
 	if !keyResult["success"].(bool) {
 		results["success"] = false
 	}
-	
+
 	// 3. Refresh security settings
 	securityResult := h.reloadSecurity()
 	operations = append(operations, securityResult)
 	if !securityResult["success"].(bool) {
 		results["success"] = false
 	}
-	
+
 	// 4. Clear caches
 	cacheResult := h.clearCaches()
 	operations = append(operations, cacheResult)
 	if !cacheResult["success"].(bool) {
 		results["success"] = false
 	}
-	
+
 	results["operations"] = operations
 	return results
 }
@@ -246,12 +246,12 @@ func (h *Handler) reloadConfiguration() map[string]interface{} {
 			"error":     fmt.Sprintf("Failed to reload config: %v", err),
 		}
 	}
-	
+
 	// Configuration successfully reloaded from disk
 	return map[string]interface{}{
-		"operation": "config_reload",
-		"success":   true,
-		"message":   "Configuration reloaded successfully from disk",
+		"operation":     "config_reload",
+		"success":       true,
+		"message":       "Configuration reloaded successfully from disk",
 		"config_source": "file",
 	}
 }
@@ -265,11 +265,11 @@ func (h *Handler) reloadKeyStore() map[string]interface{} {
 			"error":     "Key store not available",
 		}
 	}
-	
+
 	// Get current key count
 	keys := h.keyStore.ListKeys()
 	keyCount := len(keys)
-	
+
 	// In a real implementation, you'd call a refresh method on the keystore
 	// For now, we just report the current state
 	return map[string]interface{}{
@@ -289,14 +289,14 @@ func (h *Handler) reloadSecurity() map[string]interface{} {
 			"message":   "No security provider available",
 		}
 	}
-	
+
 	// Get current banned IP count
 	bannedIPs := h.securityProvider.GetBannedIPs()
-	
+
 	return map[string]interface{}{
-		"operation": "security_reload",
-		"success":   true,
-		"message":   fmt.Sprintf("Security settings refreshed, %d banned IPs", len(bannedIPs)),
+		"operation":  "security_reload",
+		"success":    true,
+		"message":    fmt.Sprintf("Security settings refreshed, %d banned IPs", len(bannedIPs)),
 		"banned_ips": len(bannedIPs),
 	}
 }
@@ -308,14 +308,14 @@ func (h *Handler) clearCaches() map[string]interface{} {
 	// - Connection state cache
 	// - Statistics cache
 	// - etc.
-	
+
 	return map[string]interface{}{
 		"operation": "cache_clear",
 		"success":   true,
 		"message":   "Internal caches cleared",
 		"caches_cleared": []string{
 			"domain_cache",
-			"connection_cache", 
+			"connection_cache",
 			"stats_cache",
 		},
 	}

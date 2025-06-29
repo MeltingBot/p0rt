@@ -22,60 +22,60 @@ type MetricData struct {
 
 // DashboardMetrics represents metrics formatted for the admin dashboard
 type DashboardMetrics struct {
-	Timestamp   time.Time               `json:"timestamp"`
-	Connections ConnectionMetrics       `json:"connections"`
-	Traffic     TrafficMetrics          `json:"traffic"`
-	Security    SecurityMetrics         `json:"security"`
-	Domains     DomainMetrics           `json:"domains"`
-	System      SystemMetrics           `json:"system"`
+	Timestamp   time.Time         `json:"timestamp"`
+	Connections ConnectionMetrics `json:"connections"`
+	Traffic     TrafficMetrics    `json:"traffic"`
+	Security    SecurityMetrics   `json:"security"`
+	Domains     DomainMetrics     `json:"domains"`
+	System      SystemMetrics     `json:"system"`
 }
 
 // ConnectionMetrics holds SSH connection related metrics
 type ConnectionMetrics struct {
-	ActiveSSH       int64              `json:"active_ssh"`
-	ActiveTunnels   int64              `json:"active_tunnels"`
-	TotalSuccess    int64              `json:"total_success"`
-	TotalFailed     int64              `json:"total_failed"`
-	AuthFailures    map[string]int64   `json:"auth_failures"`
-	TopConnections  []DomainConnection `json:"top_connections"`
+	ActiveSSH      int64              `json:"active_ssh"`
+	ActiveTunnels  int64              `json:"active_tunnels"`
+	TotalSuccess   int64              `json:"total_success"`
+	TotalFailed    int64              `json:"total_failed"`
+	AuthFailures   map[string]int64   `json:"auth_failures"`
+	TopConnections []DomainConnection `json:"top_connections"`
 }
 
 // TrafficMetrics holds HTTP traffic related metrics
 type TrafficMetrics struct {
-	RequestsTotal    int64                `json:"requests_total"`
-	RequestsRate     float64              `json:"requests_rate"`
-	BytesIn          int64                `json:"bytes_in"`
-	BytesOut         int64                `json:"bytes_out"`
-	AverageLatency   float64              `json:"avg_latency_ms"`
-	P95Latency       float64              `json:"p95_latency_ms"`
-	P99Latency       float64              `json:"p99_latency_ms"`
-	StatusCodes      map[string]int64     `json:"status_codes"`
-	TopDomains       []DomainTraffic      `json:"top_domains"`
-	WebsocketActive  int64                `json:"websocket_active"`
+	RequestsTotal   int64            `json:"requests_total"`
+	RequestsRate    float64          `json:"requests_rate"`
+	BytesIn         int64            `json:"bytes_in"`
+	BytesOut        int64            `json:"bytes_out"`
+	AverageLatency  float64          `json:"avg_latency_ms"`
+	P95Latency      float64          `json:"p95_latency_ms"`
+	P99Latency      float64          `json:"p99_latency_ms"`
+	StatusCodes     map[string]int64 `json:"status_codes"`
+	TopDomains      []DomainTraffic  `json:"top_domains"`
+	WebsocketActive int64            `json:"websocket_active"`
 }
 
 // SecurityMetrics holds security related metrics
 type SecurityMetrics struct {
-	BannedIPs       int64             `json:"banned_ips"`
-	BannedDomains   int64             `json:"banned_domains"`
-	SecurityEvents  map[string]int64  `json:"security_events"`
-	AbuseReports    map[string]int64  `json:"abuse_reports"`
-	RateLimitHits   int64             `json:"rate_limit_hits"`
+	BannedIPs      int64            `json:"banned_ips"`
+	BannedDomains  int64            `json:"banned_domains"`
+	SecurityEvents map[string]int64 `json:"security_events"`
+	AbuseReports   map[string]int64 `json:"abuse_reports"`
+	RateLimitHits  int64            `json:"rate_limit_hits"`
 }
 
 // DomainMetrics holds domain related metrics
 type DomainMetrics struct {
-	TotalGenerated  int64  `json:"total_generated"`
-	TotalReserved   int64  `json:"total_reserved"`
-	GenerationRate  float64 `json:"generation_rate"`
+	TotalGenerated int64   `json:"total_generated"`
+	TotalReserved  int64   `json:"total_reserved"`
+	GenerationRate float64 `json:"generation_rate"`
 }
 
 // SystemMetrics holds system related metrics
 type SystemMetrics struct {
-	UptimeSeconds   float64  `json:"uptime_seconds"`
-	Version         string   `json:"version"`
-	RedisConnected  bool     `json:"redis_connected"`
-	RedisOps        int64    `json:"redis_operations"`
+	UptimeSeconds  float64 `json:"uptime_seconds"`
+	Version        string  `json:"version"`
+	RedisConnected bool    `json:"redis_connected"`
+	RedisOps       int64   `json:"redis_operations"`
 }
 
 // DomainConnection represents a domain with connection count
@@ -86,17 +86,17 @@ type DomainConnection struct {
 
 // DomainTraffic represents a domain with traffic statistics
 type DomainTraffic struct {
-	Domain   string  `json:"domain"`
-	Requests int64   `json:"requests"`
-	BytesIn  int64   `json:"bytes_in"`
-	BytesOut int64   `json:"bytes_out"`
+	Domain   string `json:"domain"`
+	Requests int64  `json:"requests"`
+	BytesIn  int64  `json:"bytes_in"`
+	BytesOut int64  `json:"bytes_out"`
 }
 
 // CollectDashboardMetrics collects and formats metrics for the admin dashboard
 func CollectDashboardMetrics(ctx context.Context) (*DashboardMetrics, error) {
 	// Create a custom registry to gather specific metrics
 	registry := prometheus.NewRegistry()
-	
+
 	// Register all our custom metrics
 	collectors := []prometheus.Collector{
 		SSHConnectionsTotal,
@@ -250,11 +250,11 @@ func parseAuthFailures(mf *dto.MetricFamily, conn *ConnectionMetrics) {
 func parseHTTPRequests(mf *dto.MetricFamily, traffic *TrafficMetrics) {
 	statusCodes := make(map[string]int64)
 	total := int64(0)
-	
+
 	for _, m := range mf.Metric {
 		count := int64(m.Counter.GetValue())
 		total += count
-		
+
 		for _, label := range m.Label {
 			if label.GetName() == "status_code" {
 				code := label.GetValue()
@@ -262,7 +262,7 @@ func parseHTTPRequests(mf *dto.MetricFamily, traffic *TrafficMetrics) {
 			}
 		}
 	}
-	
+
 	traffic.RequestsTotal = total
 	traffic.StatusCodes = statusCodes
 }
@@ -271,13 +271,13 @@ func parseHTTPLatency(mf *dto.MetricFamily, traffic *TrafficMetrics) {
 	if len(mf.Metric) == 0 || mf.Metric[0].Histogram == nil {
 		return
 	}
-	
+
 	hist := mf.Metric[0].Histogram
 	if hist.SampleSum != nil && hist.SampleCount != nil && *hist.SampleCount > 0 {
 		// Convert seconds to milliseconds
 		traffic.AverageLatency = (*hist.SampleSum / float64(*hist.SampleCount)) * 1000
 	}
-	
+
 	// Extract percentiles from buckets if available
 	// This is a simplified version - real percentile calculation would be more complex
 	for _, bucket := range hist.Bucket {
@@ -301,7 +301,7 @@ func parseHTTPBytes(mf *dto.MetricFamily, traffic *TrafficMetrics) {
 				break
 			}
 		}
-		
+
 		value := int64(m.Counter.GetValue())
 		switch direction {
 		case "in":
@@ -362,7 +362,7 @@ func calculateRates(dashboard *DashboardMetrics) {
 	if dashboard.System.UptimeSeconds > 60 {
 		dashboard.Traffic.RequestsRate = float64(dashboard.Traffic.RequestsTotal) / dashboard.System.UptimeSeconds
 	}
-	
+
 	// Calculate domain generation rate
 	if dashboard.System.UptimeSeconds > 0 {
 		dashboard.Domains.GenerationRate = float64(dashboard.Domains.TotalGenerated) / dashboard.System.UptimeSeconds

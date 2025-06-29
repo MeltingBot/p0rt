@@ -590,11 +590,11 @@ func (ch *ConnectionHistory) CleanupStaleConnections(timeout time.Duration) {
 
 // periodicCleanup runs periodic cleanup of stale connections
 func (ch *ConnectionHistory) periodicCleanup() {
-	ticker := time.NewTicker(5 * time.Minute)  // Nettoyage plus fréquent
+	ticker := time.NewTicker(5 * time.Minute) // Nettoyage plus fréquent
 	defer ticker.Stop()
 
 	for range ticker.C {
 		// Mark connections as disconnected if they're older than 15 minutes without activity
-		ch.CleanupStaleConnections(15 * time.Minute)  // Timeout réduit
+		ch.CleanupStaleConnections(15 * time.Minute) // Timeout réduit
 	}
 }

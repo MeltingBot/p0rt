@@ -223,24 +223,24 @@ func SetUptime(seconds float64) {
 // InitializeMetrics initializes metrics with current values
 func InitializeMetrics(version, buildTime, gitCommit string) {
 	SetSystemInfo(version, buildTime, gitCommit)
-	
+
 	// Initialize counters to 0 to ensure they appear in metrics
 	SSHConnectionsTotal.WithLabelValues("success").Add(0)
-	SSHConnectionsTotal.WithLabelValues("failed").Add(0) 
+	SSHConnectionsTotal.WithLabelValues("failed").Add(0)
 	SSHConnectionsTotal.WithLabelValues("banned").Add(0)
-	
+
 	HTTPRequestsTotal.WithLabelValues("GET", "200", "tunnel").Add(0)
 	HTTPRequestsTotal.WithLabelValues("GET", "200", "homepage").Add(0)
 	HTTPRequestsTotal.WithLabelValues("GET", "200", "health").Add(0)
-	
+
 	SecurityEventsTotal.WithLabelValues("auth_failure", "medium").Add(0)
 	SecurityEventsTotal.WithLabelValues("abuse_report", "info").Add(0)
-	
+
 	AbuseReportsTotal.WithLabelValues("phishing", "pending").Add(0)
 	AbuseReportsTotal.WithLabelValues("spam", "pending").Add(0)
-	
+
 	DomainsGeneratedTotal.Add(0)
-	
+
 	// Set initial gauge values
 	UpdateActiveConnections(0, 0, 0)
 	UpdateBannedCounts(0, 0)

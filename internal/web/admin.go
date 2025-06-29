@@ -19,9 +19,9 @@ var adminJS []byte
 
 // AdminHandler handles the web admin interface
 type AdminHandler struct {
-	apiKey    string // Optional API key for authentication
-	adminURL  string // Admin URL from environment
-	template  *template.Template
+	apiKey   string // Optional API key for authentication
+	adminURL string // Admin URL from environment
+	template *template.Template
 }
 
 // AdminData contains data for the admin template
@@ -60,7 +60,7 @@ func (h *AdminHandler) RegisterRoutes(mux *http.ServeMux) {
 	// Admin assets (CSS, JS)
 	mux.HandleFunc(h.adminURL+"/admin.css", h.handleAdminCSS)
 	mux.HandleFunc(h.adminURL+"/admin.js", h.handleAdminJS)
-	
+
 	log.Printf("🌐 Web admin interface available at %s", h.adminURL)
 }
 
@@ -71,20 +71,20 @@ func (h *AdminHandler) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-XSS-Protection", "1; mode=block")
 	w.Header().Set("Content-Security-Policy", "default-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net")
-	
+
 	// Anti-cache headers to prevent Cloudflare and browser caching
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
-	
+
 	// Set content type and serve HTML with template data
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	
+
 	data := AdminData{
 		AdminURL: h.adminURL,
 	}
-	
+
 	if err := h.template.Execute(w, data); err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}

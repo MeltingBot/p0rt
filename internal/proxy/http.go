@@ -13,13 +13,13 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/p0rt/p0rt/internal/api"
 	"github.com/p0rt/p0rt/internal/domain"
 	"github.com/p0rt/p0rt/internal/metrics"
 	"github.com/p0rt/p0rt/internal/security"
 	"github.com/p0rt/p0rt/internal/stats"
 	"github.com/p0rt/p0rt/internal/web"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type HTTPProxy struct {
@@ -208,19 +208,19 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 	// Ajouter des headers pour CloudFlare
 	w.Header().Set("Server", "P0rt")
 	w.Header().Set("X-Powered-By", "P0rt")
-	
+
 	// Track request completion for metrics
 	defer func() {
 		duration := time.Since(start).Seconds()
 		statusCode := "200" // Default, will be overridden if different
 		domainType := "tunnel"
-		
+
 		if host == "p0rt.xyz" || host == "www.p0rt.xyz" {
 			domainType = "homepage"
 		} else if r.URL.Path == "/health" {
 			domainType = "health"
 		}
-		
+
 		metrics.RecordHTTPRequest(r.Method, statusCode, domainType, duration)
 	}()
 
@@ -326,14 +326,14 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 	// Comprehensive error handling for tunnel vs backend issues
 	proxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
 		logStructured(req, "Proxy error for %s: %v", host, err)
-		
+
 		// Check if response was already started (headers sent)
 		if headers := rw.Header(); headers.Get("Content-Type") != "" {
 			// Headers already sent, can't change status code
 			log.Printf("Response already started for %s, cannot send error page", host)
 			return
 		}
-		
+
 		// All proxy errors get 502 Bad Gateway with our custom page
 		p.serveConnectionErrorPage(rw, req, host, err)
 	}
@@ -361,7 +361,7 @@ func (p *HTTPProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Record HTTP request statistics
 	p.sshServer.RecordHTTPRequest(domain, bytesIn, statsWriter.bytesWritten)
-	
+
 	// Record bytes transferred for Prometheus
 	if bytesIn > 0 {
 		metrics.RecordBytesTransferred("in", domain, bytesIn)
@@ -408,7 +408,7 @@ func (p *HTTPProxy) handleWebSocket(w http.ResponseWriter, r *http.Request, targ
 		return
 	}
 	defer targetConn.Close()
-	
+
 	// Record successful WebSocket connection
 	metrics.RecordSecurityEvent("websocket_connection_success", "info")
 
@@ -468,7 +468,7 @@ func (p *HTTPProxy) serveConnectionErrorPage(w http.ResponseWriter, _ *http.Requ
 
 	var errorMsg string
 	errStr := err.Error()
-	
+
 	if strings.Contains(errStr, "connection refused") || strings.Contains(errStr, "connect: connection refused") {
 		errorMsg = "The local service is not running or not accepting connections on the specified port."
 	} else if strings.Contains(errStr, "connection reset by peer") {
@@ -486,7 +486,7 @@ func (p *HTTPProxy) serveConnectionErrorPage(w http.ResponseWriter, _ *http.Requ
 	}
 
 	log.Printf("Serving connection error page for %s: %s", host, errorMsg)
-	
+
 	// Use error page handler to return proper 502 status
 	if p.errorPageHandler != nil {
 		p.errorPageHandler.ServeConnectionError(w, subdomain, errorMsg)

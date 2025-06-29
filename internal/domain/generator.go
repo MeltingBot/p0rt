@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"math/rand"
 	"time"
-	
+
 	"github.com/p0rt/p0rt/internal/metrics"
 )
 
@@ -147,20 +147,20 @@ func (g *Generator) GenerateWithFingerprint(key, fingerprint string) string {
 
 		// Domain is available, store it and return
 		g.store.SetDomain(keyHash, domain)
-		
+
 		// Record domain generation metric
 		metrics.RecordDomainGenerated()
-		
+
 		return domain
 	}
 
 	// Fallback: use random domain if all attempts fail
 	domain = g.GenerateRandom()
 	g.store.SetDomain(keyHash, domain)
-	
+
 	// Record domain generation metric
 	metrics.RecordDomainGenerated()
-	
+
 	return domain
 }
 

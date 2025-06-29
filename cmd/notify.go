@@ -24,14 +24,14 @@ This can be used for various purposes like warnings, bans, maintenance notices, 
 	Run: func(cmd *cobra.Command, args []string) {
 		domain := args[0]
 		_, remoteURL, apiKey, _, _, useJSON := GetGlobalFlags()
-		
+
 		if remoteURL != "" {
 			// Use remote API
 			client := api.NewClient(remoteURL, apiKey)
 			reason, _ := cmd.Flags().GetString("reason")
 			message, _ := cmd.Flags().GetString("message")
 			notificationType, _ := cmd.Flags().GetString("type")
-			
+
 			if notificationType == "ban" || (notificationType == "" && reason != "") {
 				// Send ban notification
 				fmt.Printf("🚫 Sending ban notification via API for domain: %s\n", domain)
@@ -40,7 +40,7 @@ This can be used for various purposes like warnings, bans, maintenance notices, 
 					fmt.Printf("❌ Error: %v\n", err)
 					return
 				}
-				
+
 				if useJSON {
 					fmt.Printf("{\"success\": true, \"notification\": %+v}\n", notification)
 				} else {
@@ -59,7 +59,7 @@ This can be used for various purposes like warnings, bans, maintenance notices, 
 					fmt.Printf("❌ Error: %v\n", err)
 					return
 				}
-				
+
 				if useJSON {
 					fmt.Printf("{\"success\": true, \"notification\": %+v}\n", notification)
 				} else {
@@ -76,7 +76,7 @@ This can be used for various purposes like warnings, bans, maintenance notices, 
 			reason, _ := cmd.Flags().GetString("reason")
 			message, _ := cmd.Flags().GetString("message")
 			notificationType, _ := cmd.Flags().GetString("type")
-			
+
 			if notificationType == "ban" || (notificationType == "" && reason != "") {
 				fmt.Printf("🚫 Testing ban notification for domain: %s\n", domain)
 				if reason != "" {
@@ -88,7 +88,7 @@ This can be used for various purposes like warnings, bans, maintenance notices, 
 					fmt.Printf("💬 Message: %s\n", message)
 				}
 			}
-			
+
 			fmt.Printf("\n⚠️  This is a placeholder command for testing.\n")
 			fmt.Printf("To actually test notifications:\n")
 			fmt.Printf("1. Start P0rt server: ./p0rt server start\n")
@@ -96,7 +96,7 @@ This can be used for various purposes like warnings, bans, maintenance notices, 
 			fmt.Printf("3. Note your assigned domain (e.g., happy-cat-123)\n")
 			fmt.Printf("4. Use remote API: ./p0rt --remote http://server notify domain <domain>\n")
 		}
-		
+
 		log.Printf("Domain notification test command completed for domain: %s", domain)
 	},
 }
@@ -107,20 +107,20 @@ var notifyTestCmd = &cobra.Command{
 	Long:  `Test the notification system to ensure messages are properly delivered to SSH clients.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		_, remoteURL, apiKey, _, _, useJSON := GetGlobalFlags()
-		
+
 		if remoteURL != "" {
 			// Use remote API
 			fmt.Println("🌐 Testing notification system via API...")
-			
+
 			client := api.NewClient(remoteURL, apiKey)
 			message, _ := cmd.Flags().GetString("message")
-			
+
 			notification, err := client.TestNotification(message)
 			if err != nil {
 				fmt.Printf("❌ Error: %v\n", err)
 				return
 			}
-			
+
 			if useJSON {
 				fmt.Printf("{\"success\": true, \"notification\": %+v}\n", notification)
 			} else {
@@ -155,12 +155,12 @@ func init() {
 	rootCmd.AddCommand(notifyCmd)
 	notifyCmd.AddCommand(notifyDomainCmd)
 	notifyCmd.AddCommand(notifyTestCmd)
-	
+
 	// Add flags for domain notifications
 	notifyDomainCmd.Flags().StringP("type", "t", "", "notification type (ban, warning, info)")
 	notifyDomainCmd.Flags().StringP("reason", "r", "", "reason for the notification (used for ban type)")
 	notifyDomainCmd.Flags().StringP("message", "m", "", "custom notification message")
-	
+
 	// Add flags for test notifications
 	notifyTestCmd.Flags().StringP("message", "m", "", "custom test message")
 }

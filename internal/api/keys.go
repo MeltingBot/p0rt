@@ -23,7 +23,7 @@ func (h *Handler) handleKeys(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// List all keys
 		keys := h.keyStore.ListKeys()
-		
+
 		// Convert to a slice for JSON output
 		var keyList []map[string]interface{}
 		for fingerprint, access := range keys {
@@ -39,7 +39,7 @@ func (h *Handler) handleKeys(w http.ResponseWriter, r *http.Request) {
 			}
 			keyList = append(keyList, keyInfo)
 		}
-		
+
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"success":   true,
 			"keys":      keyList,

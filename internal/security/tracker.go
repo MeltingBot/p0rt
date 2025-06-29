@@ -10,7 +10,7 @@ import (
 	"sort"
 	"sync"
 	"time"
-	
+
 	"github.com/p0rt/p0rt/internal/metrics"
 )
 
@@ -150,7 +150,7 @@ func (st *SecurityTracker) RecordEvent(eventType EventType, ip string, details m
 	// Add to events list
 	st.events = append(st.events, event)
 	st.ipEventCounts[ip]++
-	
+
 	// Record security event metric
 	severityString := "low"
 	if event.Severity >= 8 {
@@ -222,7 +222,7 @@ func (st *SecurityTracker) BanIP(ip, reason string, duration time.Duration) {
 
 	go st.save()
 	log.Printf("IP %s banned: %s (expires: %v)", ip, reason, time.Now().Add(duration))
-	
+
 	// Update banned IPs metric
 	st.updateBannedCountsMetric()
 }
@@ -235,7 +235,7 @@ func (st *SecurityTracker) UnbanIP(ip string) {
 	delete(st.bannedIPs, ip)
 	go st.save()
 	log.Printf("IP %s unbanned", ip)
-	
+
 	// Update banned IPs metric
 	st.updateBannedCountsMetric()
 }
@@ -345,13 +345,13 @@ func (st *SecurityTracker) checkForBan(ip string, eventType EventType) {
 
 	eventCount := st.ipEventCounts[ip]
 
-	// Ban based on total event count threshold  
+	// Ban based on total event count threshold
 	// Be more lenient with auth failures from SSH clients trying multiple keys
 	effectiveThreshold := st.banThreshold
 	if eventType == EventAuthFailure {
 		effectiveThreshold = st.banThreshold * 2 // Double threshold for auth failures
 	}
-	
+
 	if eventCount >= effectiveThreshold {
 		reason := "repeated_violations"
 		if eventType == EventAuthFailure {
@@ -538,7 +538,7 @@ func (st *SecurityTracker) updateBannedCountsMetric() {
 			bannedIPCount++
 		}
 	}
-	
+
 	// Domain bans are handled by abuse report manager, so we pass 0 here
 	metrics.UpdateBannedCounts(bannedIPCount, 0)
 }

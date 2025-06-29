@@ -56,12 +56,12 @@ Supports pagination for large ban lists:
   --page: Page number to show (alternative to offset)`,
 	Run: func(cmd *cobra.Command, args []string) {
 		_, remoteURL, apiKey, _, _, _ := GetGlobalFlags()
-		
+
 		// Get pagination flags
 		limit, _ := cmd.Flags().GetInt("limit")
-		offset, _ := cmd.Flags().GetInt("offset") 
+		offset, _ := cmd.Flags().GetInt("offset")
 		page, _ := cmd.Flags().GetInt("page")
-		
+
 		// Convert page to offset if page is specified
 		if page > 0 {
 			offset = (page - 1) * limit
@@ -94,9 +94,9 @@ that were blocked due to authentication failures.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ip := args[0]
 		_, remoteURL, apiKey, _, _, _ := GetGlobalFlags()
-		
+
 		fmt.Printf("🔓 Unbanning IP address: %s\n", ip)
-		
+
 		if remoteURL != "" {
 			unbanRemoteIP(remoteURL, apiKey, ip)
 		} else {
@@ -114,7 +114,7 @@ func init() {
 	securityCmd.AddCommand(securityStatsCmd)
 	securityCmd.AddCommand(securityBansCmd)
 	securityCmd.AddCommand(securityUnbanCmd)
-	
+
 	// Add pagination flags to bans command
 	securityBansCmd.Flags().Int("limit", 50, "Maximum number of banned IPs to show (1-1000)")
 	securityBansCmd.Flags().Int("offset", 0, "Number of banned IPs to skip")
@@ -208,7 +208,7 @@ func showRemoteBanInfo(serverURL, apiKey string, limit, offset int) {
 	// Show pagination info
 	currentPage := (offset / limit) + 1
 	totalPages := (result.TotalBans + limit - 1) / limit // Ceiling division
-	
+
 	if result.TotalBans == 0 {
 		fmt.Println("Banned IPs: None currently banned")
 		fmt.Println()
@@ -237,7 +237,7 @@ func showRemoteBanInfo(serverURL, apiKey string, limit, offset int) {
 				fmt.Println()
 			}
 		}
-		
+
 		// Show navigation hints
 		if totalPages > 1 {
 			fmt.Println()

@@ -25,15 +25,15 @@ import (
 )
 
 type Client struct {
-	Domain      string
-	Port        int
-	Conn        ssh.Conn
-	Channels    <-chan ssh.NewChannel
-	Requests    <-chan *ssh.Request
-	Key         string
-	LogChannel  chan string
-	KeyAccess   *auth.KeyAccess // Store key access info
-	SSHChannel  ssh.Channel     // Reference to the SSH channel for direct messaging
+	Domain     string
+	Port       int
+	Conn       ssh.Conn
+	Channels   <-chan ssh.NewChannel
+	Requests   <-chan *ssh.Request
+	Key        string
+	LogChannel chan string
+	KeyAccess  *auth.KeyAccess // Store key access info
+	SSHChannel ssh.Channel     // Reference to the SSH channel for direct messaging
 }
 
 type Server struct {
@@ -133,13 +133,13 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 			allowed, keyAccess := server.keyStore.IsKeyAllowed(key)
 			if !allowed {
 				fingerprint := ssh.FingerprintSHA256(key)
-				
+
 				// Create session ID from IP + username + session start time pattern
 				// This helps identify multiple key attempts from the same SSH session
 				sessionID := fmt.Sprintf("%s-%s", clientIP, conn.User())
-				
+
 				log.Printf("Unauthorized key attempted connection: %s from %s (session: %s)", fingerprint, clientIP, sessionID)
-				
+
 				if !server.isPrivateIP(clientIP) {
 					// Only record IP-based tracking if no valid connections from this IP exist
 					if !server.hasValidConnectionsFromIP(clientIP) {
@@ -151,7 +151,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 							server.failedSessions[sessionID] = time.Now()
 						}
 						server.sessionMutex.Unlock()
-						
+
 						if shouldRecord {
 							server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
 								"reason":      "unauthorized_key",
@@ -194,7 +194,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 			if os.Getenv("P0RT_VERBOSE") == "true" {
 				log.Printf("Successful SSH authentication from %s (key: %s, tier: %s)", clientIP, keyHash[:8], tierInfo)
 			}
-			
+
 			// Record successful SSH connection
 			metrics.RecordSSHConnection("success")
 
@@ -223,7 +223,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 				if !server.hasValidConnectionsFromIP(clientIP) {
 					// Apply session-based tracking for no-auth attempts too
 					sessionID := fmt.Sprintf("%s-%s", clientIP, conn.User())
-					
+
 					server.sessionMutex.Lock()
 					lastFailure, sessionExists := server.failedSessions[sessionID]
 					shouldRecord := !sessionExists || time.Since(lastFailure) > 30*time.Second
@@ -231,7 +231,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 						server.failedSessions[sessionID] = time.Now()
 					}
 					server.sessionMutex.Unlock()
-					
+
 					if shouldRecord {
 						server.securityTracker.RecordEvent(security.EventAuthFailure, clientIP, map[string]string{
 							"reason":     "no_public_key",
@@ -273,7 +273,7 @@ func NewServer(port string, hostKey string, domainGen DomainGenerator, tcpManage
 
 	// Démarrer le nettoyage périodique des IPs bannies
 	go server.cleanupBannedIPs()
-	
+
 	// Démarrer le nettoyage périodique des sessions d'authentification échouées
 	go server.cleanupFailedSessions()
 
@@ -364,7 +364,7 @@ func (s *Server) handleConnection(netConn net.Conn) {
 		if !s.isPrivateIP(clientIP) {
 			// Incrémenter les tentatives échouées
 			s.recordFailedAttempt(clientIP)
-			
+
 			// Record failed connection metric
 			metrics.RecordSSHConnection("failed")
 
@@ -439,18 +439,18 @@ func (s *Server) handleConnection(netConn net.Conn) {
 	// S'assurer que le client est supprimé à la déconnexion
 	defer func() {
 		log.Printf("Cleaning up connection for domain: %s", client.Domain)
-		
+
 		// Fermer la connexion SSH
 		if sshConn != nil {
 			sshConn.Close()
 		}
-		
+
 		// Nettoyer le client
 		if client.Domain != "" {
 			s.removeClient(client.Domain)
 			log.Printf("Removed client for domain: %s", client.Domain)
 		}
-		
+
 		// Backup: nettoyer le port TCP
 		if client.Port > 0 {
 			err := s.tcpManager.Close(client.Port)
@@ -458,7 +458,7 @@ func (s *Server) handleConnection(netConn net.Conn) {
 				log.Printf("Error closing TCP port %d: %v", client.Port, err)
 			}
 		}
-		
+
 		// Update active connections metric
 		s.updateActiveConnectionsMetric()
 		log.Printf("Connection cleanup completed for: %s", client.Domain)
@@ -539,7 +539,6 @@ func (s *Server) handleTCPForward(client *Client, req *ssh.Request) {
 
 	client.Port = localPort
 
-
 	type forwardResponse struct {
 		BoundPort uint32
 	}
@@ -599,7 +598,7 @@ func (s *Server) handleSession(client *Client, newChannel ssh.NewChannel) {
 				if client.Domain == "" {
 					// Store SSH channel reference for direct messaging
 					client.SSHChannel = channel
-					
+
 					// Use reserved domain if provided, otherwise generate new one
 					if reservedDomain != "" {
 						domain = reservedDomain
@@ -825,7 +824,7 @@ func (s *Server) updateActiveConnectionsMetric() {
 
 	sshConnections := <-countChan
 	tunnels := <-tunnelsChan
-	
+
 	// Update Prometheus metrics
 	metrics.UpdateActiveConnections(sshConnections, tunnels, 0) // WebSocket count handled separately
 }
@@ -833,18 +832,18 @@ func (s *Server) updateActiveConnectionsMetric() {
 // GetActiveConnectionCount returns the number of active SSH connections
 func (s *Server) GetActiveConnectionCount() int {
 	countChan := make(chan int)
-	
+
 	s.clientOps <- func() {
 		countChan <- len(s.clients)
 	}
-	
+
 	return <-countChan
 }
 
 // GetActiveTunnelCount returns the number of active tunnels
 func (s *Server) GetActiveTunnelCount() int {
 	countChan := make(chan int)
-	
+
 	s.clientOps <- func() {
 		activeTunnels := 0
 		for _, client := range s.clients {
@@ -854,14 +853,14 @@ func (s *Server) GetActiveTunnelCount() int {
 		}
 		countChan <- activeTunnels
 	}
-	
+
 	return <-countChan
 }
 
 // NotifyDomain sends a general notification to SSH clients for their domain
 func (s *Server) NotifyDomain(domain, message string) {
 	done := make(chan bool)
-	
+
 	s.clientOps <- func() {
 		if client, exists := s.clients[domain]; exists {
 			// Send simple notification via LogChannel
@@ -874,29 +873,29 @@ func (s *Server) NotifyDomain(domain, message string) {
 		}
 		done <- true
 	}
-	
+
 	<-done
 }
 
 // NotifyDomainBanned notifies SSH clients if their domain has been banned
 // TODO: Rename to NotifyDomain and accept message/type parameters
 func (s *Server) NotifyDomainBanned(domain string) {
-	
+
 	done := make(chan bool)
-	
+
 	s.clientOps <- func() {
 		// Debug: List all current clients
 		log.Printf("📋 Current connected clients:")
 		clientsFound := 0
 		for clientDomain, client := range s.clients {
 			clientsFound++
-			log.Printf("  - Domain: '%s', Port: %d, HasSSHChannel: %t, HasLogChannel: %t", 
+			log.Printf("  - Domain: '%s', Port: %d, HasSSHChannel: %t, HasLogChannel: %t",
 				clientDomain, client.Port, client.SSHChannel != nil, client.LogChannel != nil)
 		}
-		
+
 		if clientsFound == 0 {
 		}
-		
+
 		if client, exists := s.clients[domain]; exists {
 			// Create notification messages for LogChannel
 			// These will be displayed with timestamp by monitorConnections
@@ -914,10 +913,10 @@ func (s *Server) NotifyDomainBanned(domain string) {
 				"- Include details about legitimate use",
 				strings.Repeat("=", 60),
 			}
-			
+
 			// For other delivery methods, create formatted message
 			banMessage := "\r\n" + strings.Join(notifications, "\r\n") + "\r\n"
-			
+
 			// Try to send via SSH channel directly first (more reliable)
 			if client.SSHChannel != nil {
 				_, err := client.SSHChannel.Write([]byte(banMessage))
@@ -929,7 +928,7 @@ func (s *Server) NotifyDomainBanned(domain string) {
 			} else {
 				log.Printf("⚠️ No SSH channel available for client %s (client may not have requested a shell)", domain)
 			}
-			
+
 			// Try to send global request as alternative notification method
 			if client.Conn != nil {
 				// Send a global request that the client can handle
@@ -940,14 +939,14 @@ func (s *Server) NotifyDomainBanned(domain string) {
 					log.Printf("❌ Failed to send global request notification: %v", err)
 				}
 			}
-			
+
 			// Try to open a new channel for notification if no shell channel exists
 			if client.SSHChannel == nil && client.Conn != nil {
 				// Try to open a session channel for notification
 				channel, _, err := client.Conn.OpenChannel("session", nil)
 				if err == nil {
 					defer channel.Close()
-					
+
 					// Send the notification message
 					_, writeErr := channel.Write([]byte(banMessage))
 					if writeErr == nil {
@@ -959,7 +958,7 @@ func (s *Server) NotifyDomainBanned(domain string) {
 					log.Printf("❌ Failed to open session channel for notification: %v", err)
 				}
 			}
-			
+
 			// Send via LogChannel - this works since logs are displayed to the user
 			// Send each line separately so they appear properly formatted
 			sentCount := 0
@@ -975,7 +974,7 @@ func (s *Server) NotifyDomainBanned(domain string) {
 			if sentCount > 0 {
 				log.Printf("📝 Sent %d lines of notification to LogChannel for client %s", sentCount, domain)
 			}
-			
+
 			// Close the connection after notification
 			go func() {
 				time.Sleep(5 * time.Second) // Give time for message to be sent
@@ -990,7 +989,7 @@ func (s *Server) NotifyDomainBanned(domain string) {
 		}
 		done <- true
 	}
-	
+
 	<-done
 }
 
@@ -1083,7 +1082,7 @@ func (s *Server) keepConnectionAlive(client *Client, domain string) {
 
 	// Canal pour détecter la déconnexion SSH
 	done := make(chan struct{})
-	
+
 	// Goroutine pour surveiller la déconnexion SSH
 	go func() {
 		defer close(done)
@@ -1101,18 +1100,18 @@ func (s *Server) keepConnectionAlive(client *Client, domain string) {
 				log.Printf("Client connection is nil for %s, stopping heartbeat", domain)
 				return
 			}
-			
+
 			// Test de ping SSH pour vérifier la connectivité
 			_, _, err := client.Conn.SendRequest("keepalive@openssh.com", true, nil)
 			if err != nil {
 				log.Printf("SSH keepalive failed for %s: %v", domain, err)
 				return
 			}
-			
+
 			// Update last activity time to prevent cleanup
 			s.statsManager.KeepConnectionAlive(domain)
 			log.Printf("Heartbeat sent for connection: %s", domain)
-			
+
 		case <-done:
 			// Connexion SSH fermée
 			log.Printf("SSH connection closed for %s, stopping heartbeat", domain)
@@ -1145,7 +1144,7 @@ func (s *Server) isIPBanned(ip string) bool {
 func (s *Server) hasValidConnectionsFromIP(ip string) bool {
 	hasValid := false
 	done := make(chan bool)
-	
+
 	s.clientOps <- func() {
 		for _, client := range s.clients {
 			if client.Conn != nil {
@@ -1158,7 +1157,7 @@ func (s *Server) hasValidConnectionsFromIP(ip string) bool {
 		}
 		done <- true
 	}
-	
+
 	<-done
 	return hasValid
 }

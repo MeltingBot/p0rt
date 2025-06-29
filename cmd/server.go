@@ -72,7 +72,7 @@ var serverStatusCmd = &cobra.Command{
 	Long:  `Display the current configuration and status of the P0rt server.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		_, remoteURL, apiKey, _, _, useJSON := GetGlobalFlags()
-		
+
 		if remoteURL != "" {
 			// Use remote API
 			if useJSON {
@@ -80,21 +80,21 @@ var serverStatusCmd = &cobra.Command{
 			} else {
 				fmt.Println("🌐 Getting server status via API...")
 			}
-			
+
 			client := api.NewClient(remoteURL, apiKey)
 			status, err := client.GetServerStatus()
 			if err != nil {
 				fmt.Printf("❌ Error: %v\n", err)
 				return
 			}
-			
+
 			if useJSON {
 				fmt.Printf("{\"success\": true, \"status\": %+v}\n", status)
 			} else {
 				fmt.Printf("✅ Remote P0rt Server Status:\n")
 				fmt.Printf("  Status: %s\n", status.Status)
 				fmt.Printf("  Version: %s\n", status.Version)
-				
+
 				if sshPort, ok := status.SSH["port"].(string); ok {
 					fmt.Printf("  SSH Port: %s", sshPort)
 					if available, ok := status.SSH["available"].(bool); ok {
@@ -107,7 +107,7 @@ var serverStatusCmd = &cobra.Command{
 						fmt.Println()
 					}
 				}
-				
+
 				if httpPort, ok := status.HTTP["port"].(string); ok {
 					fmt.Printf("  HTTP Port: %s", httpPort)
 					if available, ok := status.HTTP["available"].(bool); ok {
@@ -120,7 +120,7 @@ var serverStatusCmd = &cobra.Command{
 						fmt.Println()
 					}
 				}
-				
+
 				if storageType, ok := status.Storage["type"].(string); ok {
 					fmt.Printf("  Storage Type: %s", storageType)
 					if connected, ok := status.Storage["connected"].(bool); ok {
@@ -133,15 +133,15 @@ var serverStatusCmd = &cobra.Command{
 						fmt.Println()
 					}
 				}
-				
+
 				if accessMode, ok := status.Security["access_mode"].(string); ok {
 					fmt.Printf("  Access Mode: %s\n", accessMode)
 				}
-				
+
 				if bannedIPs, ok := status.Security["banned_ips"].(float64); ok {
 					fmt.Printf("  Banned IPs: %.0f\n", bannedIPs)
 				}
-				
+
 				fmt.Printf("  Last Update: %s\n", status.Timestamp)
 			}
 		} else {
@@ -190,25 +190,25 @@ This performs the following operations:
 The server process continues running without interruption.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		_, remoteURL, apiKey, _, _, useJSON := GetGlobalFlags()
-		
+
 		if remoteURL != "" {
 			// Use remote API
 			if !useJSON {
 				fmt.Println("🔄 Reloading server configuration via API...")
 			}
-			
+
 			client := api.NewClient(remoteURL, apiKey)
 			details, err := client.ReloadServer()
 			if err != nil {
 				fmt.Printf("❌ Error: %v\n", err)
 				return
 			}
-			
+
 			if useJSON {
 				fmt.Printf("{\"success\": true, \"details\": %+v}\n", details)
 			} else {
 				fmt.Printf("✅ Server configuration reloaded successfully!\n")
-				
+
 				if operations, ok := details["operations"].([]interface{}); ok {
 					fmt.Println("\n📋 Operations performed:")
 					for i, op := range operations {
@@ -216,12 +216,12 @@ The server process continues running without interruption.`,
 							operation := opMap["operation"].(string)
 							success := opMap["success"].(bool)
 							message := opMap["message"].(string)
-							
+
 							status := "✅"
 							if !success {
 								status = "❌"
 							}
-							
+
 							fmt.Printf("  %d. %s %s: %s\n", i+1, status, operation, message)
 						}
 					}
@@ -267,12 +267,12 @@ func getStorageType(cfg *config.Config) string {
 	if host := os.Getenv("REDIS_HOST"); host != "" {
 		return "redis"
 	}
-	
+
 	// Check config file for Redis
 	if cfg.Storage.Type == "redis" || cfg.Storage.RedisURL != "" {
 		return "redis"
 	}
-	
+
 	// Default to JSON
 	return "json"
 }
@@ -432,7 +432,7 @@ func startServer(cfg *config.Config) error {
 	if !quiet {
 		log.Printf("📊 Prometheus metrics initialized")
 	}
-	
+
 	// Start uptime tracking goroutine
 	go func() {
 		ticker := time.NewTicker(10 * time.Second)
@@ -484,7 +484,7 @@ func startServer(cfg *config.Config) error {
 		metricsUpdater := metrics.NewMetricsUpdater(sshServer, abuseMonitor)
 		metricsUpdater.Start()
 		defer metricsUpdater.Stop()
-		
+
 		if !quiet {
 			log.Printf("📊 Metrics updater started")
 		}

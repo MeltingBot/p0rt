@@ -6,10 +6,10 @@ import (
 
 // MetricsUpdater handles periodic updates of gauge metrics
 type MetricsUpdater struct {
-	sshServer     SSHServerInterface
-	abuseMonitor  AbuseMonitorInterface
-	stopChan      chan struct{}
-	updateTicker  *time.Ticker
+	sshServer    SSHServerInterface
+	abuseMonitor AbuseMonitorInterface
+	stopChan     chan struct{}
+	updateTicker *time.Ticker
 }
 
 // SSHServerInterface defines methods needed for SSH metrics
@@ -62,7 +62,7 @@ func (mu *MetricsUpdater) updateMetrics() {
 		activeTunnels := mu.sshServer.GetActiveTunnelCount()
 		UpdateActiveConnections(activeConnections, activeTunnels, 0) // WebSocket count handled separately
 	}
-	
+
 	// Update security metrics
 	if mu.abuseMonitor != nil {
 		bannedIPs := mu.abuseMonitor.GetBannedIPCount()
