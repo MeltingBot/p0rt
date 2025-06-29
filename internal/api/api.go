@@ -915,6 +915,8 @@ func (h *Handler) handleDomains(w http.ResponseWriter, r *http.Request) {
 	if h.statsManager != nil {
 		// Get connection history to build domain list
 		connectionHistory := h.statsManager.GetConnectionHistory(1000) // Get more records to have complete domain list
+		// Get ONLY currently active connections to determine IsActive status
+		activeConnections := h.statsManager.GetActiveConnections()
 
 		// Build domain info from connection history
 		domainMap := make(map[string]*DomainInfo)
@@ -955,19 +957,35 @@ func (h *Handler) handleDomains(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Second pass: determine IsActive status based on ONLY currently active connections
-		for _, record := range connectionHistory {
-			if domainInfo, exists := domainMap[record.Domain]; exists {
-				// A domain is active ONLY if there's at least one record that is:
-				// 1. Not disconnected (DisconnectedAt == nil)
-				// 2. Marked as active (Active == true)
-				if record.DisconnectedAt == nil && record.Active {
-					domainInfo.IsActive = true
-				}
-			}
+		activeDomains := make(map[string]bool)
+		for _, activeRecord := range activeConnections {
+			activeDomains[activeRecord.Domain] = true
+			log.Printf("DEBUG: Found ACTIVE connection for domain: %s", activeRecord.Domain)
+		}
+		
+		// Set IsActive based on active connections only
+		for _, domainInfo := range domainMap {
+			domainInfo.IsActive = activeDomains[domainInfo.Domain]
 		}
 
-		// Convert map to slice
+		// Convert map to slice and add debug logging
 		for _, domainInfo := range domainMap {
+			// Debug: Check for problematic dates
+			if domainInfo.LastSeen.Unix() < 1600000000 { // Before Sept 2020 (clearly wrong)
+				log.Printf("DEBUG: Domain %s has corrupted LastSeen: %v (Unix: %d)", 
+					domainInfo.Domain, domainInfo.LastSeen, domainInfo.LastSeen.Unix())
+				// Fix the corrupted date
+				domainInfo.LastSeen = time.Now().Add(-24 * time.Hour) // Default to yesterday
+			}
+			if domainInfo.FirstSeen.Unix() < 1600000000 {
+				log.Printf("DEBUG: Domain %s has corrupted FirstSeen: %v (Unix: %d)", 
+					domainInfo.Domain, domainInfo.FirstSeen, domainInfo.FirstSeen.Unix())
+				domainInfo.FirstSeen = time.Now().Add(-24 * time.Hour)
+			}
+			// Debug: Check active status
+			if domainInfo.IsActive {
+				log.Printf("DEBUG: Domain %s is marked as ACTIVE", domainInfo.Domain)
+			}
 			allDomains = append(allDomains, *domainInfo)
 		}
 	}
