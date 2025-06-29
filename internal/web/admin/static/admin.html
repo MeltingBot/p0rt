@@ -15,7 +15,8 @@
         <div class="nav-links">
             <a href="#dashboard" class="nav-link active" data-section="dashboard">Dashboard</a>
             <a href="#connections" class="nav-link" data-section="connections">Connections</a>
-            <a href="#domains" class="nav-link" data-section="domains">Domains</a>
+            <a href="#all-domains" class="nav-link" data-section="all-domains">All Domains</a>
+            <a href="#domains" class="nav-link" data-section="domains">Reservations</a>
             <a href="#security" class="nav-link" data-section="security">Security</a>
             <a href="#abuse" class="nav-link" data-section="abuse">Abuse</a>
             <a href="#keys" class="nav-link" data-section="keys">SSH Keys</a>
@@ -89,7 +90,52 @@
             </div>
         </section>
 
-        <!-- Domains Section -->
+        <!-- All Domains Section -->
+        <section id="all-domains" class="section">
+            <div class="section-header">
+                <h2>All Domains</h2>
+                <div class="section-actions">
+                    <button class="btn btn-refresh" onclick="loadAllDomains()">↻ Refresh</button>
+                    <select id="domains-per-page" onchange="loadAllDomains()">
+                        <option value="25">25 per page</option>
+                        <option value="50" selected>50 per page</option>
+                        <option value="100">100 per page</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="pagination-info">
+                <span id="domains-pagination-info">Loading...</span>
+            </div>
+            
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Domain</th>
+                            <th>SSH Key</th>
+                            <th>Last IP</th>
+                            <th>Status</th>
+                            <th>Requests</th>
+                            <th>Traffic</th>
+                            <th>Last Seen</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="all-domains-table">
+                        <tr><td colspan="8" class="loading">Loading domains...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="pagination-controls">
+                <button id="domains-prev-btn" class="btn btn-secondary" onclick="loadDomainsPage(p0rtAdmin.state.domains.currentPage - 1)" disabled>← Previous</button>
+                <span id="domains-page-info">Page 1 of 1</span>
+                <button id="domains-next-btn" class="btn btn-secondary" onclick="loadDomainsPage(p0rtAdmin.state.domains.currentPage + 1)" disabled>Next →</button>
+            </div>
+        </section>
+
+        <!-- Domain Reservations Section -->
         <section id="domains" class="section">
             <div class="section-header">
                 <h2>Domain Reservations</h2>

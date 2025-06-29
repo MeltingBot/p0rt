@@ -7,6 +7,16 @@ class P0rtAdmin {
         this.currentSection = 'dashboard';
         this.currentAbuseFilter = 'pending';
         
+        // State management for pagination
+        this.state = {
+            domains: {
+                currentPage: 1,
+                perPage: 50,
+                totalPages: 1,
+                total: 0
+            }
+        };
+        
         this.init();
     }
 
@@ -162,6 +172,9 @@ class P0rtAdmin {
                 break;
             case 'connections':
                 this.loadConnections();
+                break;
+            case 'all-domains':
+                this.loadAllDomains();
                 break;
             case 'domains':
                 this.loadDomains();
@@ -373,6 +386,110 @@ class P0rtAdmin {
         } catch (error) {
             // Error already handled by apiCall
         }
+    }
+
+    // All Domains (with statistics and usage)
+    async loadAllDomains() {
+        const perPage = parseInt(document.getElementById('domains-per-page').value) || 50;
+        const page = this.state.domains.currentPage;
+        
+        try {
+            const response = await this.apiCall(`/api/v1/domains?page=${page}&per_page=${perPage}`);
+            const tbody = document.getElementById('all-domains-table');
+            
+            // Update state
+            this.state.domains = {
+                currentPage: response.page || 1,
+                perPage: response.per_page || perPage,
+                totalPages: response.total_pages || 1,
+                total: response.total || 0
+            };
+            
+            // Update pagination info
+            this.updateDomainsPagination();
+            
+            if (!response.domains || response.domains.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No domains found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = response.domains.map(domain => {
+                const shortFingerprint = domain.ssh_key_fingerprint ? 
+                    domain.ssh_key_fingerprint.substring(0, 16) + '...' : 
+                    (domain.ssh_key_hash ? domain.ssh_key_hash.substring(0, 12) + '...' : 'N/A');
+                
+                const statusBadge = domain.is_active ? 
+                    '<span class="status-badge status-online">Active</span>' :
+                    '<span class="status-badge status-offline">Inactive</span>';
+                
+                const lastSeen = domain.last_activity ? 
+                    this.formatTimeAgo(domain.last_activity) : 
+                    this.formatTimeAgo(domain.last_seen);
+                
+                return `
+                    <tr>
+                        <td><strong>${domain.domain}</strong></td>
+                        <td><code title="${domain.ssh_key_fingerprint || domain.ssh_key_hash}">${shortFingerprint}</code></td>
+                        <td>${domain.last_connection_ip || 'N/A'}</td>
+                        <td>${statusBadge}</td>
+                        <td>${domain.request_count || 0}</td>
+                        <td>${this.formatBytes(domain.bytes_transferred || 0)}</td>
+                        <td>${lastSeen}</td>
+                        <td>
+                            <button class="btn btn-small btn-primary" onclick="p0rtAdmin.showDomainDetails('${domain.domain}')" title="View details">👁️</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        } catch (error) {
+            document.getElementById('all-domains-table').innerHTML = 
+                '<tr><td colspan="8" class="text-center text-danger">Loading error</td></tr>';
+        }
+    }
+    
+    loadDomainsPage(page) {
+        if (page < 1 || page > this.state.domains.totalPages) return;
+        this.state.domains.currentPage = page;
+        this.loadAllDomains();
+    }
+    
+    updateDomainsPagination() {
+        const { currentPage, totalPages, total, perPage } = this.state.domains;
+        
+        // Update pagination info
+        const startItem = ((currentPage - 1) * perPage) + 1;
+        const endItem = Math.min(currentPage * perPage, total);
+        document.getElementById('domains-pagination-info').textContent = 
+            `Showing ${startItem}-${endItem} of ${total} domains`;
+        
+        // Update page info
+        document.getElementById('domains-page-info').textContent = 
+            `Page ${currentPage} of ${totalPages}`;
+        
+        // Update button states
+        document.getElementById('domains-prev-btn').disabled = currentPage <= 1;
+        document.getElementById('domains-next-btn').disabled = currentPage >= totalPages;
+    }
+    
+    showDomainDetails(domain) {
+        // This could open a modal with detailed domain information
+        this.showToast(`Domain details for ${domain} - Feature coming soon!`, 'info');
+    }
+    
+    formatTimeAgo(dateString) {
+        if (!dateString) return 'Never';
+        
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+        
+        if (diffMins < 1) return 'just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        return `${diffDays}d ago`;
     }
 
     // Security
@@ -1293,6 +1410,18 @@ window.loadConnections = () => {
 window.loadSecurity = () => {
     if (window.p0rtAdmin) {
         window.p0rtAdmin.loadSecurity();
+    }
+};
+
+window.loadAllDomains = () => {
+    if (window.p0rtAdmin) {
+        window.p0rtAdmin.loadAllDomains();
+    }
+};
+
+window.loadDomainsPage = (page) => {
+    if (window.p0rtAdmin) {
+        window.p0rtAdmin.loadDomainsPage(page);
     }
 };
 

@@ -2642,7 +2642,9 @@ func (c *CLI) handleDomainsCommand(args []string) error {
 
 	// Check if we should use remote API
 	if !c.useRemoteAPI || c.apiClient == nil {
-		return fmt.Errorf("domains command requires remote API access. Use --remote flag")
+		c.outputError("Domains command requires remote API access. Use remote mode:")
+		fmt.Printf("  p0rt --remote http://localhost:%s domains\n", c.config.GetHTTPPort())
+		return nil
 	}
 
 	// Make request using apiClient
