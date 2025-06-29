@@ -491,7 +491,7 @@ class P0rtAdmin {
                     <strong>Actions available:</strong>
                 </div>
                 
-                <div class="action-buttons">
+                <div class="action-buttons" style="grid-template-columns: 1fr 1fr 1fr;">
                     <button class="btn btn-danger" onclick="p0rtAdmin.banDomainConfirm('${domain}')">
                         🚫 Ban Domain
                     </button>
@@ -501,23 +501,28 @@ class P0rtAdmin {
                     <button class="btn btn-secondary" onclick="p0rtAdmin.reportAbuseForm('${domain}')">
                         📢 Report Abuse
                     </button>
-                    <button class="btn btn-info" onclick="p0rtAdmin.viewConnectionHistory('${domain}')">
-                        📊 View History
-                    </button>
                 </div>
                 
                 <div class="action-info">
                     <small>
                         <strong>Ban:</strong> Permanently blocks this domain and disconnects all sessions<br>
                         <strong>Disconnect:</strong> Terminates active connections but allows reconnection<br>
-                        <strong>Report:</strong> Submit an abuse report for review<br>
-                        <strong>History:</strong> View connection logs and statistics
+                        <strong>Report:</strong> Submit an abuse report for review
                     </small>
                 </div>
             </div>
         `;
         
         modal.style.display = 'flex';
+        
+        // Add escape key support
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                this.closeModal();
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
     }
     
     banDomainConfirm(domain) {
@@ -672,13 +677,11 @@ class P0rtAdmin {
     
     closeModal() {
         const modal = document.getElementById('modal-overlay');
-        modal.style.display = 'none';
+        if (modal) {
+            modal.style.display = 'none';
+        }
     }
     
-    viewConnectionHistory(domain) {
-        this.showToast(`Connection history for ${domain} - check server logs or use CLI: p0rt history`, 'info');
-        this.closeModal();
-    }
     
     formatTimeAgo(dateString) {
         if (!dateString) return 'Never';
@@ -1631,9 +1634,14 @@ window.loadDomainsPage = (page) => {
 
 // Global modal functions
 window.closeModal = () => {
-    const modal = document.getElementById('modal-overlay');
-    if (modal) {
-        modal.style.display = 'none';
+    if (window.p0rtAdmin) {
+        window.p0rtAdmin.closeModal();
+    } else {
+        // Fallback if p0rtAdmin not available
+        const modal = document.getElementById('modal-overlay');
+        if (modal) {
+            modal.style.display = 'none';
+        }
     }
 };
 
