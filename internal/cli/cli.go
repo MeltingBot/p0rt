@@ -547,9 +547,18 @@ func (c *CLI) addReservation(args []string) error {
 		comment = strings.Trim(comment, "\"'")
 	}
 
-	err := c.reservationManager.AddReservation(domain, fingerprint, comment)
-	if err != nil {
-		return fmt.Errorf("failed to add reservation: %v", err)
+	if c.useRemoteAPI && c.apiClient != nil {
+		// Use remote API
+		err := c.apiClient.AddReservation(domain, fingerprint, comment)
+		if err != nil {
+			return fmt.Errorf("failed to add reservation via remote API: %v", err)
+		}
+	} else {
+		// Use local reservation manager
+		err := c.reservationManager.AddReservation(domain, fingerprint, comment)
+		if err != nil {
+			return fmt.Errorf("failed to add reservation: %v", err)
+		}
 	}
 
 	fmt.Printf("✓ Successfully reserved domain '%s' for SSH key fingerprint '%s'\n", domain, fingerprint)
@@ -567,9 +576,18 @@ func (c *CLI) removeReservation(args []string) error {
 	}
 
 	domain := args[0]
-	err := c.reservationManager.RemoveReservation(domain)
-	if err != nil {
-		return fmt.Errorf("failed to remove reservation: %v", err)
+	if c.useRemoteAPI && c.apiClient != nil {
+		// Use remote API
+		err := c.apiClient.RemoveReservation(domain)
+		if err != nil {
+			return fmt.Errorf("failed to remove reservation via remote API: %v", err)
+		}
+	} else {
+		// Use local reservation manager
+		err := c.reservationManager.RemoveReservation(domain)
+		if err != nil {
+			return fmt.Errorf("failed to remove reservation: %v", err)
+		}
 	}
 
 	fmt.Printf("✓ Successfully removed reservation for domain '%s'\n", domain)
@@ -578,7 +596,20 @@ func (c *CLI) removeReservation(args []string) error {
 
 // listReservations lists all domain reservations
 func (c *CLI) listReservations() error {
-	reservations := c.reservationManager.ListReservations()
+	var reservations []domain.Reservation
+	var err error
+
+	if c.useRemoteAPI && c.apiClient != nil {
+		// Use remote API
+		reservations, err = c.apiClient.ListReservations()
+		if err != nil {
+			return fmt.Errorf("failed to list reservations via remote API: %v", err)
+		}
+	} else {
+		// Use local reservation manager
+		reservations = c.reservationManager.ListReservations()
+	}
+
 	if len(reservations) == 0 {
 		c.outputSuccess([]interface{}{}, "No reservations found")
 		return nil
@@ -605,14 +636,37 @@ func (c *CLI) listReservations() error {
 
 // showReservationStats shows reservation statistics
 func (c *CLI) showReservationStats() error {
-	stats := c.reservationManager.GetStats()
+	if c.useRemoteAPI && c.apiClient != nil {
+		// For remote API, we can generate basic stats from the reservation list
+		reservations, err := c.apiClient.ListReservations()
+		if err != nil {
+			return fmt.Errorf("failed to get reservations from remote API: %v", err)
+		}
 
-	if c.jsonOutput {
-		c.outputSuccess(stats, "Reservation statistics")
+		// Generate basic stats
+		stats := map[string]interface{}{
+			"total_reservations": len(reservations),
+		}
+
+		if c.jsonOutput {
+			c.outputSuccess(stats, "Reservation statistics")
+		} else {
+			fmt.Println("Reservation Statistics:")
+			for key, value := range stats {
+				fmt.Printf("  %s: %v\n", strings.ReplaceAll(key, "_", " "), value)
+			}
+		}
 	} else {
-		fmt.Println("Reservation Statistics:")
-		for key, value := range stats {
-			fmt.Printf("  %s: %v\n", strings.ReplaceAll(key, "_", " "), value)
+		// Use local reservation manager
+		stats := c.reservationManager.GetStats()
+
+		if c.jsonOutput {
+			c.outputSuccess(stats, "Reservation statistics")
+		} else {
+			fmt.Println("Reservation Statistics:")
+			for key, value := range stats {
+				fmt.Printf("  %s: %v\n", strings.ReplaceAll(key, "_", " "), value)
+			}
 		}
 	}
 	return nil
@@ -1851,9 +1905,21 @@ func (c *CLI) handleAccessCommand(args []string) error {
 
 // showAccessStatus shows the current access mode
 func (c *CLI) showAccessStatus() error {
-	currentMode := "restricted"
-	if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
-		currentMode = "open"
+	var currentMode string
+	var err error
+
+	if c.useRemoteAPI && c.apiClient != nil {
+		// Use remote API
+		currentMode, err = c.apiClient.GetAccessMode()
+		if err != nil {
+			return fmt.Errorf("failed to get access mode from remote API: %v", err)
+		}
+	} else {
+		// Use local environment variable
+		currentMode = "restricted"
+		if os.Getenv("P0RT_OPEN_ACCESS") == "true" {
+			currentMode = "open"
+		}
 	}
 
 	if c.jsonOutput {
