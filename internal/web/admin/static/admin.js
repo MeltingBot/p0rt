@@ -472,100 +472,212 @@ class P0rtAdmin {
     }
     
     showDomainDetails(domain) {
-        // Show domain action menu
-        const actions = [
-            'Ban Domain',
-            'Disconnect Active Sessions',
-            'Report Abuse',
-            'View Connection History'
-        ];
+        // Show professional domain action modal
+        this.showDomainActionModal(domain);
+    }
+    
+    showDomainActionModal(domain) {
+        const modal = document.getElementById('modal-overlay');
+        const title = document.getElementById('modal-title');
+        const body = document.getElementById('modal-body');
         
-        const action = prompt(`Domain: ${domain}\n\nSelect action:\n${actions.map((a, i) => `${i+1}. ${a}`).join('\n')}\n\nEnter number (1-${actions.length}) or cancel:`);
+        title.textContent = `Domain Actions: ${domain}`;
         
-        if (action && action.match(/^[1-4]$/)) {
-            const selectedAction = actions[parseInt(action) - 1];
-            
-            switch(parseInt(action)) {
-                case 1:
-                    this.banDomain(domain);
-                    break;
-                case 2:
-                    this.disconnectDomain(domain);
-                    break;
-                case 3:
-                    this.reportAbuse(domain);
-                    break;
-                case 4:
-                    this.viewConnectionHistory(domain);
-                    break;
-            }
-        }
+        body.innerHTML = `
+            <div class="domain-actions">
+                <div class="domain-info">
+                    <strong>Domain:</strong> ${domain}
+                    <br>
+                    <strong>Actions available:</strong>
+                </div>
+                
+                <div class="action-buttons">
+                    <button class="btn btn-danger" onclick="p0rtAdmin.banDomainConfirm('${domain}')">
+                        🚫 Ban Domain
+                    </button>
+                    <button class="btn btn-warning" onclick="p0rtAdmin.disconnectDomainConfirm('${domain}')">
+                        ⚡ Disconnect Sessions
+                    </button>
+                    <button class="btn btn-secondary" onclick="p0rtAdmin.reportAbuseForm('${domain}')">
+                        📢 Report Abuse
+                    </button>
+                    <button class="btn btn-info" onclick="p0rtAdmin.viewConnectionHistory('${domain}')">
+                        📊 View History
+                    </button>
+                </div>
+                
+                <div class="action-info">
+                    <small>
+                        <strong>Ban:</strong> Permanently blocks this domain and disconnects all sessions<br>
+                        <strong>Disconnect:</strong> Terminates active connections but allows reconnection<br>
+                        <strong>Report:</strong> Submit an abuse report for review<br>
+                        <strong>History:</strong> View connection logs and statistics
+                    </small>
+                </div>
+            </div>
+        `;
+        
+        modal.style.display = 'flex';
+    }
+    
+    banDomainConfirm(domain) {
+        const body = document.getElementById('modal-body');
+        body.innerHTML = `
+            <div class="confirmation-dialog">
+                <div class="warning-icon">⚠️</div>
+                <h4>Confirm Domain Ban</h4>
+                <p>Are you sure you want to <strong>permanently ban</strong> the domain <code>${domain}</code>?</p>
+                <div class="warning-text">
+                    This action will:
+                    <ul>
+                        <li>Immediately disconnect all active sessions</li>
+                        <li>Prevent future connections from this domain</li>
+                        <li>Submit an abuse report</li>
+                    </ul>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-danger" onclick="p0rtAdmin.banDomain('${domain}')">
+                        🚫 Yes, Ban Domain
+                    </button>
+                    <button class="btn btn-secondary" onclick="p0rtAdmin.showDomainActionModal('${domain}')">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+    
+    disconnectDomainConfirm(domain) {
+        const body = document.getElementById('modal-body');
+        body.innerHTML = `
+            <div class="confirmation-dialog">
+                <div class="warning-icon">⚡</div>
+                <h4>Disconnect Domain Sessions</h4>
+                <p>Disconnect all active sessions for domain <code>${domain}</code>?</p>
+                <div class="info-text">
+                    This will terminate current connections but allow the domain to reconnect.
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-warning" onclick="p0rtAdmin.disconnectDomain('${domain}')">
+                        ⚡ Yes, Disconnect
+                    </button>
+                    <button class="btn btn-secondary" onclick="p0rtAdmin.showDomainActionModal('${domain}')">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+    
+    reportAbuseForm(domain) {
+        const body = document.getElementById('modal-body');
+        body.innerHTML = `
+            <div class="abuse-form">
+                <h4>Report Abuse for ${domain}</h4>
+                <form onsubmit="p0rtAdmin.submitAbuseReport('${domain}', event)">
+                    <div class="form-group">
+                        <label for="abuse-reason">Reason for report:</label>
+                        <select id="abuse-reason" required>
+                            <option value="">Select reason...</option>
+                            <option value="spam">Spam</option>
+                            <option value="malware">Malware</option>
+                            <option value="phishing">Phishing</option>
+                            <option value="illegal-content">Illegal Content</option>
+                            <option value="copyright">Copyright Violation</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="abuse-details">Additional details:</label>
+                        <textarea id="abuse-details" rows="4" placeholder="Describe the issue..."></textarea>
+                    </div>
+                    <div class="action-buttons">
+                        <button type="submit" class="btn btn-danger">
+                            📢 Submit Report
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="p0rtAdmin.showDomainActionModal('${domain}')">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `;
     }
     
     banDomain(domain) {
-        if (confirm(`Are you sure you want to ban domain "${domain}"? This will disconnect all sessions and prevent future connections.`)) {
-            fetch(`/api/v1/abuse/report`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    domain: domain,
-                    reason: 'Admin ban via web interface'
-                })
+        fetch(`/api/v1/abuse/report`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                domain: domain,
+                reason: 'Admin ban via web interface'
             })
-            .then(response => response.json())
-            .then(data => {
-                this.showToast(`Domain ${domain} has been banned`, 'success');
-                this.loadAllDomains(); // Refresh the list
+        })
+        .then(response => response.json())
+        .then(data => {
+            this.showToast(`Domain ${domain} has been banned`, 'success');
+            this.closeModal();
+            this.loadAllDomains(); // Refresh the list
+        })
+        .catch(error => {
+            this.showToast(`Failed to ban domain: ${error.message}`, 'error');
+        });
+    }
+    
+    submitAbuseReport(domain, event) {
+        event.preventDefault();
+        
+        const reason = document.getElementById('abuse-reason').value;
+        const details = document.getElementById('abuse-details').value;
+        
+        const fullReason = details ? `${reason}: ${details}` : reason;
+        
+        fetch(`/api/v1/abuse/report`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                domain: domain,
+                reason: fullReason
             })
-            .catch(error => {
-                this.showToast(`Failed to ban domain: ${error.message}`, 'error');
-            });
-        }
+        })
+        .then(response => response.json())
+        .then(data => {
+            this.showToast(`Abuse report submitted for ${domain}`, 'success');
+            this.closeModal();
+        })
+        .catch(error => {
+            this.showToast(`Failed to report abuse: ${error.message}`, 'error');
+        });
     }
     
     disconnectDomain(domain) {
-        if (confirm(`Disconnect all active sessions for domain "${domain}"?`)) {
-            fetch(`/api/v1/notify/domain/${domain}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type: 'warning',
-                    message: 'Session terminated by administrator'
-                })
+        fetch(`/api/v1/notify/domain/${domain}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'warning',
+                message: 'Session terminated by administrator'
             })
-            .then(response => response.json())
-            .then(data => {
-                this.showToast(`Disconnected sessions for ${domain}`, 'success');
-            })
-            .catch(error => {
-                this.showToast(`Failed to disconnect: ${error.message}`, 'error');
-            });
-        }
+        })
+        .then(response => response.json())
+        .then(data => {
+            this.showToast(`Disconnected sessions for ${domain}`, 'success');
+            this.closeModal();
+            this.loadAllDomains(); // Refresh the list
+        })
+        .catch(error => {
+            this.showToast(`Failed to disconnect: ${error.message}`, 'error');
+        });
     }
     
-    reportAbuse(domain) {
-        const reason = prompt(`Report abuse for domain "${domain}".\n\nEnter reason:`);
-        if (reason && reason.trim()) {
-            fetch(`/api/v1/abuse/report`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    domain: domain,
-                    reason: reason.trim()
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                this.showToast(`Abuse report submitted for ${domain}`, 'success');
-            })
-            .catch(error => {
-                this.showToast(`Failed to report abuse: ${error.message}`, 'error');
-            });
-        }
+    closeModal() {
+        const modal = document.getElementById('modal-overlay');
+        modal.style.display = 'none';
     }
     
     viewConnectionHistory(domain) {
         this.showToast(`Connection history for ${domain} - check server logs or use CLI: p0rt history`, 'info');
+        this.closeModal();
     }
     
     formatTimeAgo(dateString) {
@@ -1514,6 +1626,14 @@ window.loadAllDomains = () => {
 window.loadDomainsPage = (page) => {
     if (window.p0rtAdmin) {
         window.p0rtAdmin.loadDomainsPage(page);
+    }
+};
+
+// Global modal functions
+window.closeModal = () => {
+    const modal = document.getElementById('modal-overlay');
+    if (modal) {
+        modal.style.display = 'none';
     }
 };
 

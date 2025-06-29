@@ -931,12 +931,6 @@ func (h *Handler) handleDomains(w http.ResponseWriter, r *http.Request) {
 						existingDomain.LastActivity = &record.LastActivity
 					}
 				}
-				// Always update IsActive based on current connection state
-				if record.DisconnectedAt == nil && record.Active {
-					existingDomain.IsActive = true
-				} else if record.DisconnectedAt != nil {
-					existingDomain.IsActive = false
-				}
 				existingDomain.BytesTransferred += record.BytesIn + record.BytesOut
 				existingDomain.RequestCount += record.RequestCount
 			} else {
@@ -949,7 +943,7 @@ func (h *Handler) handleDomains(w http.ResponseWriter, r *http.Request) {
 					LastSeen:          record.LastActivity,
 					LastConnectionIP:  record.ClientIP,
 					UseCount:          1,
-					IsActive:          record.Active && record.DisconnectedAt == nil,
+					IsActive:          false, // Will be determined later
 					BytesTransferred:  record.BytesIn + record.BytesOut,
 					RequestCount:      record.RequestCount,
 				}
@@ -957,6 +951,18 @@ func (h *Handler) handleDomains(w http.ResponseWriter, r *http.Request) {
 					domainInfo.LastActivity = &lastActivity
 				}
 				domainMap[record.Domain] = domainInfo
+			}
+		}
+
+		// Second pass: determine IsActive status based on ONLY currently active connections
+		for _, record := range connectionHistory {
+			if domainInfo, exists := domainMap[record.Domain]; exists {
+				// A domain is active ONLY if there's at least one record that is:
+				// 1. Not disconnected (DisconnectedAt == nil)
+				// 2. Marked as active (Active == true)
+				if record.DisconnectedAt == nil && record.Active {
+					domainInfo.IsActive = true
+				}
 			}
 		}
 
