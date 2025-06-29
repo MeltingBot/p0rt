@@ -843,12 +843,78 @@ func (c *CLI) showDomainStats(domain string) error {
 
 // showStatus shows system status
 func (c *CLI) showStatus() error {
-	fmt.Println("System Status:")
-	fmt.Printf("  SSH Port: %s\n", c.config.GetSSHPort())
-	fmt.Printf("  HTTP Port: %s\n", c.config.GetHTTPPort())
-	fmt.Printf("  Domain Base: %s\n", c.config.GetDomainBase())
-	fmt.Printf("  Reservations Enabled: %t\n", c.config.Domain.ReservationsEnabled)
-	fmt.Printf("  Storage Type: %s\n", c.config.Storage.Type)
+	if c.useRemoteAPI && c.apiClient != nil {
+		// Use remote API for status
+		status, err := c.apiClient.GetServerStatus()
+		if err != nil {
+			return fmt.Errorf("failed to get remote server status: %v", err)
+		}
+
+		if c.jsonOutput {
+			c.outputSuccess(status, "Remote server status")
+		} else {
+			fmt.Println("Remote Server Status:")
+			fmt.Printf("  Status: %s\n", status.Status)
+			fmt.Printf("  Version: %s\n", status.Version)
+
+			if sshPort, ok := status.SSH["port"].(string); ok {
+				fmt.Printf("  SSH Port: %s", sshPort)
+				if available, ok := status.SSH["available"].(bool); ok {
+					if available {
+						fmt.Printf(" ✓ Available\n")
+					} else {
+						fmt.Printf(" ✗ In use\n")
+					}
+				} else {
+					fmt.Println()
+				}
+			}
+
+			if httpPort, ok := status.HTTP["port"].(string); ok {
+				fmt.Printf("  HTTP Port: %s", httpPort)
+				if available, ok := status.HTTP["available"].(bool); ok {
+					if available {
+						fmt.Printf(" ✓ Available\n")
+					} else {
+						fmt.Printf(" ✗ In use\n")
+					}
+				} else {
+					fmt.Println()
+				}
+			}
+
+			if storageType, ok := status.Storage["type"].(string); ok {
+				fmt.Printf("  Storage Type: %s", storageType)
+				if connected, ok := status.Storage["connected"].(bool); ok {
+					if connected {
+						fmt.Printf(" ✓ Connected\n")
+					} else {
+						fmt.Printf(" ✗ Disconnected\n")
+					}
+				} else {
+					fmt.Println()
+				}
+			}
+
+			if accessMode, ok := status.Security["access_mode"].(string); ok {
+				fmt.Printf("  Access Mode: %s\n", accessMode)
+			}
+
+			if bannedIPs, ok := status.Security["banned_ips"].(float64); ok {
+				fmt.Printf("  Banned IPs: %.0f\n", bannedIPs)
+			}
+
+			fmt.Printf("  Last Update: %s\n", status.Timestamp)
+		}
+	} else {
+		// Use local configuration
+		fmt.Println("Local Configuration:")
+		fmt.Printf("  SSH Port: %s\n", c.config.GetSSHPort())
+		fmt.Printf("  HTTP Port: %s\n", c.config.GetHTTPPort())
+		fmt.Printf("  Domain Base: %s\n", c.config.GetDomainBase())
+		fmt.Printf("  Reservations Enabled: %t\n", c.config.Domain.ReservationsEnabled)
+		fmt.Printf("  Storage Type: %s\n", c.config.Storage.Type)
+	}
 	return nil
 }
 
