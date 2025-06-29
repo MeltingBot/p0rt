@@ -438,25 +438,39 @@ func (s *Server) handleConnection(netConn net.Conn) {
 
 	// S'assurer que le client est supprimé à la déconnexion
 	defer func() {
-		sshConn.Close()
-		// Utiliser le domaine stocké dans le client
+		log.Printf("Cleaning up connection for domain: %s", client.Domain)
+		
+		// Fermer la connexion SSH
+		if sshConn != nil {
+			sshConn.Close()
+		}
+		
+		// Nettoyer le client
 		if client.Domain != "" {
 			s.removeClient(client.Domain)
+			log.Printf("Removed client for domain: %s", client.Domain)
 		}
-		// Nettoyer le port TCP si assigné (backup au cas où removeClient échoue)
+		
+		// Backup: nettoyer le port TCP
 		if client.Port > 0 {
-			s.tcpManager.Close(client.Port)
+			err := s.tcpManager.Close(client.Port)
+			if err != nil {
+				log.Printf("Error closing TCP port %d: %v", client.Port, err)
+			}
 		}
 		
 		// Update active connections metric
 		s.updateActiveConnectionsMetric()
+		log.Printf("Connection cleanup completed for: %s", client.Domain)
 	}()
 
 	// Détecter la déconnexion via Wait()
 	go func() {
 		err := sshConn.Wait()
 		if err != nil {
-			log.Printf("SSH connection closed: %v", err)
+			log.Printf("SSH connection closed for domain %s: %v", client.Domain, err)
+		} else {
+			log.Printf("SSH connection gracefully closed for domain: %s", client.Domain)
 		}
 	}()
 
@@ -1067,18 +1081,41 @@ func (s *Server) keepConnectionAlive(client *Client, domain string) {
 	ticker := time.NewTicker(5 * time.Minute) // Send heartbeat every 5 minutes
 	defer ticker.Stop()
 
+	// Canal pour détecter la déconnexion SSH
+	done := make(chan struct{})
+	
+	// Goroutine pour surveiller la déconnexion SSH
+	go func() {
+		defer close(done)
+		err := client.Conn.Wait()
+		if err != nil {
+			log.Printf("SSH connection closed for %s: %v", domain, err)
+		}
+	}()
+
 	for {
 		select {
 		case <-ticker.C:
 			// Check if client is still connected
 			if client.Conn == nil {
+				log.Printf("Client connection is nil for %s, stopping heartbeat", domain)
 				return
 			}
+			
+			// Test de ping SSH pour vérifier la connectivité
+			_, _, err := client.Conn.SendRequest("keepalive@openssh.com", true, nil)
+			if err != nil {
+				log.Printf("SSH keepalive failed for %s: %v", domain, err)
+				return
+			}
+			
 			// Update last activity time to prevent cleanup
 			s.statsManager.KeepConnectionAlive(domain)
 			log.Printf("Heartbeat sent for connection: %s", domain)
-		case <-client.LogChannel:
-			// Channel closed, client disconnected
+			
+		case <-done:
+			// Connexion SSH fermée
+			log.Printf("SSH connection closed for %s, stopping heartbeat", domain)
 			return
 		}
 	}
