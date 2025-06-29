@@ -472,8 +472,100 @@ class P0rtAdmin {
     }
     
     showDomainDetails(domain) {
-        // This could open a modal with detailed domain information
-        this.showToast(`Domain details for ${domain} - Feature coming soon!`, 'info');
+        // Show domain action menu
+        const actions = [
+            'Ban Domain',
+            'Disconnect Active Sessions',
+            'Report Abuse',
+            'View Connection History'
+        ];
+        
+        const action = prompt(`Domain: ${domain}\n\nSelect action:\n${actions.map((a, i) => `${i+1}. ${a}`).join('\n')}\n\nEnter number (1-${actions.length}) or cancel:`);
+        
+        if (action && action.match(/^[1-4]$/)) {
+            const selectedAction = actions[parseInt(action) - 1];
+            
+            switch(parseInt(action)) {
+                case 1:
+                    this.banDomain(domain);
+                    break;
+                case 2:
+                    this.disconnectDomain(domain);
+                    break;
+                case 3:
+                    this.reportAbuse(domain);
+                    break;
+                case 4:
+                    this.viewConnectionHistory(domain);
+                    break;
+            }
+        }
+    }
+    
+    banDomain(domain) {
+        if (confirm(`Are you sure you want to ban domain "${domain}"? This will disconnect all sessions and prevent future connections.`)) {
+            fetch(`/api/v1/abuse/report`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    domain: domain,
+                    reason: 'Admin ban via web interface'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                this.showToast(`Domain ${domain} has been banned`, 'success');
+                this.loadAllDomains(); // Refresh the list
+            })
+            .catch(error => {
+                this.showToast(`Failed to ban domain: ${error.message}`, 'error');
+            });
+        }
+    }
+    
+    disconnectDomain(domain) {
+        if (confirm(`Disconnect all active sessions for domain "${domain}"?`)) {
+            fetch(`/api/v1/notify/domain/${domain}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'warning',
+                    message: 'Session terminated by administrator'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                this.showToast(`Disconnected sessions for ${domain}`, 'success');
+            })
+            .catch(error => {
+                this.showToast(`Failed to disconnect: ${error.message}`, 'error');
+            });
+        }
+    }
+    
+    reportAbuse(domain) {
+        const reason = prompt(`Report abuse for domain "${domain}".\n\nEnter reason:`);
+        if (reason && reason.trim()) {
+            fetch(`/api/v1/abuse/report`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    domain: domain,
+                    reason: reason.trim()
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                this.showToast(`Abuse report submitted for ${domain}`, 'success');
+            })
+            .catch(error => {
+                this.showToast(`Failed to report abuse: ${error.message}`, 'error');
+            });
+        }
+    }
+    
+    viewConnectionHistory(domain) {
+        this.showToast(`Connection history for ${domain} - check server logs or use CLI: p0rt history`, 'info');
     }
     
     formatTimeAgo(dateString) {

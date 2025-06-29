@@ -466,6 +466,15 @@ func (ch *ConnectionHistory) loadFromRedis() {
 			continue
 		}
 
+		// Validate and fix dates if corrupted
+		now := time.Now()
+		if record.ConnectedAt.IsZero() || record.ConnectedAt.Unix() < 0 || record.ConnectedAt.After(now.Add(time.Hour)) {
+			record.ConnectedAt = now.Add(-time.Hour) // Default to 1 hour ago
+		}
+		if record.LastActivity.IsZero() || record.LastActivity.Unix() < 0 || record.LastActivity.After(now.Add(time.Hour)) {
+			record.LastActivity = record.ConnectedAt
+		}
+
 		ch.connections[record.Domain] = &record
 	}
 
@@ -518,6 +527,15 @@ func (ch *ConnectionHistory) refreshActiveFromRedis() {
 		var record ConnectionRecord
 		if err := json.Unmarshal([]byte(data), &record); err != nil {
 			continue
+		}
+
+		// Validate and fix dates if corrupted
+		now := time.Now()
+		if record.ConnectedAt.IsZero() || record.ConnectedAt.Unix() < 0 || record.ConnectedAt.After(now.Add(time.Hour)) {
+			record.ConnectedAt = now.Add(-time.Hour) // Default to 1 hour ago
+		}
+		if record.LastActivity.IsZero() || record.LastActivity.Unix() < 0 || record.LastActivity.After(now.Add(time.Hour)) {
+			record.LastActivity = record.ConnectedAt
 		}
 
 		ch.connections[record.Domain] = &record

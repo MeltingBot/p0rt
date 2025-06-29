@@ -929,8 +929,13 @@ func (h *Handler) handleDomains(w http.ResponseWriter, r *http.Request) {
 					existingDomain.SSHKeyFingerprint = record.Fingerprint
 					if record.DisconnectedAt == nil {
 						existingDomain.LastActivity = &record.LastActivity
-						existingDomain.IsActive = record.Active
 					}
+				}
+				// Always update IsActive based on current connection state
+				if record.DisconnectedAt == nil && record.Active {
+					existingDomain.IsActive = true
+				} else if record.DisconnectedAt != nil {
+					existingDomain.IsActive = false
 				}
 				existingDomain.BytesTransferred += record.BytesIn + record.BytesOut
 				existingDomain.RequestCount += record.RequestCount

@@ -984,6 +984,7 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 			readline.PcItem("abuse"),
 			readline.PcItem("history"),
 			readline.PcItem("connections"),
+			readline.PcItem("domains"),
 			readline.PcItem("stats"),
 			readline.PcItem("status"),
 		),
@@ -995,6 +996,7 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 			readline.PcItem("access"),
 			readline.PcItem("history"),
 			readline.PcItem("connections"),
+			readline.PcItem("domains"),
 			readline.PcItem("stats"),
 			readline.PcItem("status"),
 		),
@@ -1039,6 +1041,7 @@ func (c *CLI) createCompleter() readline.AutoCompleter {
 		),
 		readline.PcItem("history"),
 		readline.PcItem("connections"),
+		readline.PcItem("domains"),
 		readline.PcItem("stats"),
 		readline.PcItem("status"),
 		readline.PcItem("clear"),
@@ -2799,10 +2802,10 @@ func (c *CLI) handleDomainsCommand(args []string) error {
 		return nil
 	}
 
-	// Table header
-	fmt.Printf("%-25s %-12s %-15s %-6s %-8s %-10s %s\n",
-		"DOMAIN", "TRIGRAM", "LAST IP", "ACTIVE", "REQUESTS", "TRAFFIC", "LAST SEEN")
-	fmt.Println(strings.Repeat("-", 120))
+	// Table header with better spacing
+	fmt.Printf("%-22s %-3s %-20s %-6s %-8s %-10s %s\n",
+		"DOMAIN", "TRI", "LAST IP", "ACTIVE", "REQUESTS", "TRAFFIC", "LAST SEEN")
+	fmt.Println(strings.Repeat("-", 85))
 
 	// Display each domain
 	for _, domain := range response.Domains {
@@ -2822,19 +2825,33 @@ func (c *CLI) handleDomainsCommand(args []string) error {
 		lastIP := domain.LastConnectionIP
 		if lastIP == "" {
 			lastIP = "N/A"
+		} else {
+			// Truncate very long IPv6 addresses for better display
+			if len(lastIP) > 18 {
+				lastIP = lastIP[:15] + "..."
+			}
 		}
 
-		fmt.Printf("%-25s %-12s %-15s %-6s %-8d %-10s %s\n",
-			domain.Domain, trigram, lastIP, active, domain.RequestCount, traffic, lastSeen)
+		// Truncate domain name if too long
+		displayDomain := domain.Domain
+		if len(displayDomain) > 20 {
+			displayDomain = displayDomain[:17] + "..."
+		}
 
-		// Show SSH key fingerprint on second line
+		fmt.Printf("%-22s %-3s %-20s %-6s %-8d %-10s %s\n",
+			displayDomain, trigram, lastIP, active, domain.RequestCount, traffic, lastSeen)
+
+		// Show SSH key fingerprint on second line with better formatting
 		fingerprint := domain.SSHKeyFingerprint
 		if fingerprint == "" {
-			fingerprint = "Key: " + domain.SSHKeyHash[:12] + "..."
+			fingerprint = domain.SSHKeyHash[:12] + "..."
 		} else {
-			fingerprint = "Key: " + fingerprint
+			// Truncate long fingerprints
+			if len(fingerprint) > 50 {
+				fingerprint = fingerprint[:47] + "..."
+			}
 		}
-		fmt.Printf("  %s (used %d times)\n", fingerprint, domain.UseCount)
+		fmt.Printf("  🔑 %s (used %d times)\n", fingerprint, domain.UseCount)
 		fmt.Println()
 	}
 
@@ -2899,13 +2916,28 @@ func formatTimeAgoFromTime(t time.Time) string {
 	}
 
 	duration := time.Since(t)
+	
+	// Handle negative durations (future dates) or very large durations
+	if duration < 0 {
+		return "future"
+	}
+	
+	// Handle very old dates (more than 10 years ago)
+	if duration > 365*24*10*time.Hour {
+		return "very old"
+	}
+	
 	if duration < time.Minute {
 		return "just now"
 	} else if duration < time.Hour {
 		return fmt.Sprintf("%dm ago", int(duration.Minutes()))
 	} else if duration < 24*time.Hour {
 		return fmt.Sprintf("%dh ago", int(duration.Hours()))
-	} else {
+	} else if duration < 30*24*time.Hour {
 		return fmt.Sprintf("%dd ago", int(duration.Hours()/24))
+	} else if duration < 365*24*time.Hour {
+		return fmt.Sprintf("%d months ago", int(duration.Hours()/(24*30)))
+	} else {
+		return fmt.Sprintf("%d years ago", int(duration.Hours()/(24*365)))
 	}
 }
